@@ -1,3 +1,6 @@
 [submodule "PSO2-Aqua-Library"]
 	path = PSO2-Aqua-Library
 	url = https://github.com/Shadowth117/PSO2-Aqua-Library.git
+[submodule "pythonnet-stub-generator"]
+	path = pythonnet-stub-generator
+	url = https://github.com/Eswcvlad/pythonnet-stub-generator.git

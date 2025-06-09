@@ -9,7 +9,7 @@ T = TypeVar("T")
 
 def dict_get(d: "System.Collections.Generic.Dictionary_2[K, T]", key: K) -> T | None:
     try:
-        return d[key]  # type: ignore
+        return d[key]
     except System.Collections.Generic.KeyNotFoundException:  # type: ignore
         return None
 

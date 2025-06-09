@@ -201,9 +201,8 @@ def get_classic_color_map(object_type: ObjectType) -> ColorMapping | None:
 
 
 def split_int32(value: int):
-    uvalue = System.UInt32(value)  # type: ignore
-    lo = int(uvalue) & 0x0000FFFF  # type: ignore
-    hi = int(uvalue) >> 16  # type: ignore
+    lo = value & 0x0000FFFF
+    hi = value >> 16
     return lo, hi
 
 

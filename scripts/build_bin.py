@@ -26,6 +26,8 @@ BIN_PATH = ROOT / "pso2_tools/bin"
 AQUA_SLN = ROOT / "PSO2-Aqua-Library/AquaModelLibrary.sln"
 AQUA_CORE_PATH = ROOT / "PSO2-Aqua-Library/AquaModelLibrary.Core"
 
+STUB_GENERATOR_SLN = ROOT / "pythonnet-stub-generator/csharp/PythonNetStubGenerator.sln"
+
 PACKAGES_PATH = ROOT / "packages"
 PACKAGES = [
     ("AssimpNet", "5.0.0-beta1"),
@@ -139,6 +141,18 @@ def main():
     shutil.copytree(out_path, BIN_PATH, dirs_exist_ok=True, ignore=ignore)
 
     copy_package_dlls()
+
+    # Build pythonnet-stub-generator
+    call_msbuild(
+        [
+            STUB_GENERATOR_SLN,
+            "-p:RestorePackagesConfig=true",
+            "-p:Configuration=Release",
+            f"-t:{target}",
+            "-verbosity:minimal",
+            "-restore",
+        ]
+    )
 
 
 if __name__ == "__main__":

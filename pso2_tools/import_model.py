@@ -306,11 +306,9 @@ def _import_aqp(
 
     if aqn is not None:
         aqn_data = aqn.read_bytes() if isinstance(aqn, Path) else aqn.data
-        skeleton = AquaNode(aqn_data)  # type: ignore
+        skeleton = AquaNode(aqn_data)
     else:
         skeleton = AquaNode.GenerateBasicAQN()
-
-    _remove_invalid_bones(model, skeleton)
 
     if model.objc.type > 0xC32:
         model.splitVSETPerMesh()
@@ -359,12 +357,6 @@ def _import_aqp(
     ]
 
     return {"FINISHED"}, materials
-
-
-def _remove_invalid_bones(model: AquaPackage, skeleton: AquaNode):
-    # TODO
-    # model.bonePalette = model.bonePalette.Where(index => index < skeleton.nodeList.Count).ToList();
-    pass
 
 
 def _import_skin_textures(

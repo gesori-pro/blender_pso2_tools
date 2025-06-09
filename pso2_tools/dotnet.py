@@ -32,6 +32,6 @@ def load():
 
     from Assimp.Unmanaged import AssimpLibrary  # type: ignore
 
-    AssimpLibrary.Instance.Resolver.SetProbingPaths64(_PROBING_PATH_X64)
+    AssimpLibrary.Instance.Resolver.SetProbingPaths64([_PROBING_PATH_X64])
 
     _loaded = True

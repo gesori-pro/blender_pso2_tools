@@ -10,43 +10,38 @@ from pathlib import Path
 
 ROOT_PATH = Path(__file__).parent.parent
 TYPES_PATH = ROOT_PATH / "typings"
-EXTRA_STUBS_PATH = ROOT_PATH / "stubs"
 BIN_PATH = ROOT_PATH / "pso2_tools/bin"
 
 DLLS = [
-    BIN_PATH / "AssimpNet.dll",
-    BIN_PATH / "ZamboniLib.dll",
     BIN_PATH / "AquaModelLibrary.Core.dll",
     BIN_PATH / "AquaModelLibrary.Data.dll",
     BIN_PATH / "AquaModelLibrary.Helpers.dll",
     BIN_PATH / "AquaModelLibrary.Native.X64.dll",
+    BIN_PATH / "ArchiveLib.dll",
+    BIN_PATH / "AssimpNet.dll",
+    BIN_PATH / "NvTriStripDotNet.dll",
+    BIN_PATH / "Reloaded.Memory.dll",
+    BIN_PATH / "SoulsFormats.dll",
+    BIN_PATH / "UnluacNET.dll",
+    BIN_PATH / "VrSharp.dll",
+    BIN_PATH / "ZamboniLib.dll",
 ]
+
+STUB_GENERATOR = (
+    ROOT_PATH
+    / "pythonnet-stub-generator/csharp/PythonNetStubTool"
+    / "bin/Release/net6.0/PythonNetStubGenerator.Tool.exe"
+)
 
 
 def main():
-    if not shutil.which("GeneratePythonNetStubs"):
-        print("Run the following command to install GeneratePythonNetStubs:")
-        print("dotnet tool install --global pythonnetstubgenerator.tool")
-        return
+    shutil.rmtree(TYPES_PATH, ignore_errors=True)
 
-    shutil.rmtree(TYPES_PATH)
+    paths = ",".join(str(dll) for dll in DLLS)
 
-    for dll in DLLS:
-        subprocess.call(
-            ["GeneratePythonNetStubs", "--dest-path", TYPES_PATH, "--target-dlls", dll]
-        )
+    subprocess.call([STUB_GENERATOR, "--dest-path", TYPES_PATH, "--target-dlls", paths])
 
-    # Workaround for https://github.com/MHDante/pythonnet-stub-generator/issues/6
-    # Append manually written type stubs
-    for extra in EXTRA_STUBS_PATH.rglob("*.pyi"):
-        dest_path = TYPES_PATH / extra.relative_to(EXTRA_STUBS_PATH)
-
-        dest_path.parent.mkdir(parents=True, exist_ok=True)
-
-        if dest_path.is_file():
-            dest_path.write_text(dest_path.read_text() + "\n" + extra.read_text())
-        else:
-            shutil.copy(extra, dest_path)
+    print(f'--dest-path="{TYPES_PATH}" --target-dlls="{paths}"')
 
 
 if __name__ == "__main__":
