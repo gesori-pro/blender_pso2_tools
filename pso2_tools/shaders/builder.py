@@ -1,4 +1,4 @@
-from typing import Literal, LiteralString, Optional, Tuple, TypeVar, cast, overload
+from typing import Literal, Optional, Tuple, TypeVar, cast
 
 import bpy
 
@@ -9,7 +9,8 @@ GRID = 50
 
 Vec2 = Tuple[float, float]
 
-NODE = TypeVar("NODE")
+NODE = TypeVar("NODE", bound=bpy.types.Node)
+SOCKET = TypeVar("SOCKET", bound=bpy.types.NodeSocket)
 
 
 def add_driver(
@@ -71,26 +72,26 @@ class NodeTreeBuilder:
 
     def new_input(
         self,
-        socket_type: str,
+        socket_type: type[SOCKET],
         name: str,
         parent: Optional[bpy.types.NodeTreeInterfacePanel] = None,
     ):
         assert self.tree.interface is not None
 
         return self.tree.interface.new_socket(
-            name=name, in_out="INPUT", socket_type=socket_type, parent=parent
+            name=name, in_out="INPUT", socket_type=socket_type.__name__, parent=parent
         )
 
     def new_output(
         self,
-        socket_type: str,
+        socket_type: type[SOCKET],
         name: str,
         parent: Optional[bpy.types.NodeTreeInterfacePanel] = None,
     ):
         assert self.tree.interface is not None
 
         return self.tree.interface.new_socket(
-            name=name, in_out="OUTPUT", socket_type=socket_type, parent=parent
+            name=name, in_out="OUTPUT", socket_type=socket_type.__name__, parent=parent
         )
 
     def add_link(

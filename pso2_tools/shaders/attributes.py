@@ -32,9 +32,9 @@ class ShaderNodePso2ShowInnerwear(group.ShaderNodeCustomGroup):
         group_inputs = tree.add_node(bpy.types.NodeGroupInput)
         group_outputs = tree.add_node(bpy.types.NodeGroupOutput)
 
-        tree.new_input("NodeSocketFloat", "Value")
+        tree.new_input(bpy.types.NodeSocketFloat, "Value")
 
-        tree.new_output("NodeSocketFloat", "Value")
+        tree.new_output(bpy.types.NodeSocketFloat, "Value")
 
         in_hide = tree.add_node(bpy.types.ShaderNodeAttribute, name="Hide Innerwear")
         in_hide.attribute_type = "VIEW_LAYER"

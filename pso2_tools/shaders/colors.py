@@ -39,5 +39,5 @@ class ShaderNodePso2Colorchannels(group.ShaderNodeCustomGroup):
             color.attribute_type = "VIEW_LAYER"
             color.attribute_name = channel.custom_property_name
 
-            tree.new_output("NodeSocketColor", color.label, parent=panel)
+            tree.new_output(bpy.types.NodeSocketColor, color.label, parent=panel)
             tree.add_link(color.outputs[0], output.inputs[index])

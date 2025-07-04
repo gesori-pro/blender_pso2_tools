@@ -18,10 +18,10 @@ class ShaderNodePso2AlphaThreshold(group.ShaderNodeCustomGroup):
         group_inputs = tree.add_node(bpy.types.NodeGroupInput)
         group_outputs = tree.add_node(bpy.types.NodeGroupOutput)
 
-        tree.new_input("NodeSocketFloat", "Alpha")
-        tree.new_input("NodeSocketFloat", "Threshold")
+        tree.new_input(bpy.types.NodeSocketFloat, "Alpha")
+        tree.new_input(bpy.types.NodeSocketFloat, "Threshold")
 
-        tree.new_output("NodeSocketFloat", "Alpha")
+        tree.new_output(bpy.types.NodeSocketFloat, "Alpha")
 
         threshold = tree.add_node(bpy.types.ShaderNodeMath, name="Above Threshold")
         threshold.operation = "GREATER_THAN"
@@ -62,14 +62,14 @@ class ShaderNodePso2NgsBase(group.ShaderNodeCustomGroup):
         group_inputs = tree.add_node(bpy.types.NodeGroupInput)
         group_outputs = tree.add_node(bpy.types.NodeGroupOutput)
 
-        tree.new_input("NodeSocketColor", "Diffuse")
-        tree.new_input("NodeSocketFloat", "Alpha")
-        tree.new_input("NodeSocketFloat", "Alpha Threshold")
-        tree.new_input("NodeSocketColor", "Multi RGB")
-        tree.new_input("NodeSocketFloat", "Multi A")
-        tree.new_input("NodeSocketColor", "Normal")
+        tree.new_input(bpy.types.NodeSocketColor, "Diffuse")
+        tree.new_input(bpy.types.NodeSocketFloat, "Alpha")
+        tree.new_input(bpy.types.NodeSocketFloat, "Alpha Threshold")
+        tree.new_input(bpy.types.NodeSocketColor, "Multi RGB")
+        tree.new_input(bpy.types.NodeSocketFloat, "Multi A")
+        tree.new_input(bpy.types.NodeSocketColor, "Normal")
 
-        tree.new_output("NodeSocketShader", "BSDF")
+        tree.new_output(bpy.types.NodeSocketShader, "BSDF")
 
         bsdf = tree.add_node(bpy.types.ShaderNodeBsdfPrincipled)
         tree.add_link(bsdf.outputs["BSDF"], group_outputs.inputs["BSDF"])

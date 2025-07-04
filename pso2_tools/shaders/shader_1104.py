@@ -84,13 +84,13 @@ class ShaderNodePso2NgsEye(group.ShaderNodeCustomGroup):
         group_inputs = tree.add_node(bpy.types.NodeGroupInput)
         group_outputs = tree.add_node(bpy.types.NodeGroupOutput)
 
-        tree.new_input("NodeSocketColor", "Diffuse")
-        tree.new_input("NodeSocketFloat", "Alpha")
-        tree.new_input("NodeSocketColor", "Multi RGB")
-        tree.new_input("NodeSocketFloat", "Multi A")
-        tree.new_input("NodeSocketColor", "Normal")
+        tree.new_input(bpy.types.NodeSocketColor, "Diffuse")
+        tree.new_input(bpy.types.NodeSocketFloat, "Alpha")
+        tree.new_input(bpy.types.NodeSocketColor, "Multi RGB")
+        tree.new_input(bpy.types.NodeSocketFloat, "Multi A")
+        tree.new_input(bpy.types.NodeSocketColor, "Normal")
 
-        tree.new_output("NodeSocketShader", "BSDF")
+        tree.new_output(bpy.types.NodeSocketShader, "BSDF")
 
         bsdf = tree.add_node(bpy.types.ShaderNodeBsdfPrincipled)
         tree.add_link(bsdf.outputs["BSDF"], group_outputs.inputs["BSDF"])
