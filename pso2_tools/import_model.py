@@ -2,12 +2,11 @@ from contextlib import closing
 from dataclasses import dataclass, field
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Iterable, Optional
+from typing import Iterable, Optional, cast
 
 import bpy
 from AquaModelLibrary.Core.General import FbxExporterNative
-from AquaModelLibrary.Data.PSO2.Aqua import AquaPackage  # type: ignore
-from AquaModelLibrary.Data.PSO2.Aqua import AquaMotion, AquaNode
+from AquaModelLibrary.Data.PSO2.Aqua import AquaMotion, AquaNode, AquaPackage
 from AquaModelLibrary.Data.Utility import CoordSystem
 from io_scene_fbx import import_fbx
 from System.Collections.Generic import List
@@ -25,6 +24,7 @@ from . import (
 )
 from .debug import debug_pprint, debug_print
 from .preferences import get_preferences
+from .util import OperatorResult
 
 
 def import_object(
@@ -155,7 +155,7 @@ def _import_models(
     use_t2_skin=False,
     color_map: Optional[colors.ColorMapping] = None,
     uv_map: Optional[material.UVMapping] = None,
-):
+) -> OperatorResult:
     debug_print(f"Import options: {high_quality=} {use_t2_skin=} {color_map=}")
     debug_print(f"FBX options: {fbx_options=}")
 
@@ -252,7 +252,7 @@ def _get_ice_path(filename: objects.CmxFileName, data_path: Path, high_quality: 
 
 def _delete_empty_images():
     for image in bpy.data.images.values():
-        if image.size[0] == 0 and image.size[1] == 0:
+        if image and image.size[0] == 0 and image.size[1] == 0:
             bpy.data.images.remove(image)
 
 
@@ -270,14 +270,15 @@ def import_image(path: Path):
     image = bpy.data.images.load(str(path))
     image.pack()
 
-    if material.texture_has_parts(image.name, "d"):
-        # Diffuse texture
-        image.colorspace_settings.is_data = False
-        image.colorspace_settings.name = "sRGB"  # type: ignore
-    else:
-        # Data textures (normal map, etc.)
-        image.colorspace_settings.is_data = True
-        image.colorspace_settings.name = "Non-Color"  # type: ignore
+    if image.colorspace_settings:
+        if material.texture_has_parts(image.name, "d"):
+            # Diffuse texture
+            image.colorspace_settings.is_data = False
+            image.colorspace_settings.name = "sRGB"  # type: ignore
+        else:
+            # Data textures (normal map, etc.)
+            image.colorspace_settings.is_data = True
+            image.colorspace_settings.name = "Non-Color"  # type: ignore
 
     return image
 
@@ -288,7 +289,7 @@ def _import_aqp(
     aqp: Path | datafile.DataFile,
     aqn: Path | datafile.DataFile | None,
     fbx_options=None,
-) -> tuple[set[str], list[material.Material]]:
+) -> tuple[OperatorResult, list[material.Material]]:
     fbx_options = fbx_options or {}
 
     if isinstance(aqp, Path):
@@ -335,19 +336,25 @@ def _import_aqp(
             int(CoordSystem.OpenGL),
         )
 
-        result = import_fbx.load(
-            operator,
-            context,
-            filepath=str(fbxfile),
-            **fbx_options,
+        result = cast(
+            OperatorResult,
+            import_fbx.load(
+                operator,
+                context,
+                filepath=str(fbxfile),
+                **fbx_options,
+            ),
         )
         if result != {"FINISHED"}:
-            return result, []
+            return (result, [])
 
         if get_preferences(context).hide_armature:
             for obj in context.selected_objects:
                 if obj.type == "ARMATURE":
                     obj.hide_set(True)
+
+        for obj in context.selected_objects:
+            debug_print(obj.type, obj.name)
 
     mesh_mat_mapping = List[int]()
     generic_materials, _ = model.GetUniqueMaterials(mesh_mat_mapping)

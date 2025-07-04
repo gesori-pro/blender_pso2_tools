@@ -31,8 +31,8 @@ class ShaderNodePso2Colorize(group.ShaderNodeCustomGroup):
     def _build(self, node_tree):
         tree = builder.NodeTreeBuilder(node_tree)
 
-        group_inputs = tree.add_node("NodeGroupInput")
-        group_outputs = tree.add_node("NodeGroupOutput")
+        group_inputs = tree.add_node(bpy.types.NodeGroupInput)
+        group_outputs = tree.add_node(bpy.types.NodeGroupOutput)
 
         tree.new_input("NodeSocketColor", "Input")
         tree.new_input("NodeSocketColor", "Mask RGB")
@@ -48,19 +48,21 @@ class ShaderNodePso2Colorize(group.ShaderNodeCustomGroup):
 
         tree.new_output("NodeSocketColor", "Result")
 
-        mask_rgb = tree.add_node("ShaderNodeSeparateColor", name="Mask RGB")
+        mask_rgb = tree.add_node(bpy.types.ShaderNodeSeparateColor, name="Mask RGB")
         mask_rgb.mode = "RGB"
 
-        mask_rgb_used = tree.add_node("ShaderNodeCombineXYZ", name="Combine RGB Used")
+        mask_rgb_used = tree.add_node(
+            bpy.types.ShaderNodeCombineXYZ, name="Combine RGB Used"
+        )
 
         tree.add_link(group_inputs.outputs["Use Color 1"], mask_rgb_used.inputs["X"])
         tree.add_link(group_inputs.outputs["Use Color 2"], mask_rgb_used.inputs["Y"])
         tree.add_link(group_inputs.outputs["Use Color 3"], mask_rgb_used.inputs["Z"])
 
-        rgb_used = tree.add_node("ShaderNodeVectorMath", name="Mask RGB Used")
+        rgb_used = tree.add_node(bpy.types.ShaderNodeVectorMath, name="Mask RGB Used")
         rgb_used.operation = "MULTIPLY"
 
-        alpha_used = tree.add_node("ShaderNodeMath", name="Mask A Used")
+        alpha_used = tree.add_node(bpy.types.ShaderNodeMath, name="Mask A Used")
         alpha_used.operation = "MULTIPLY"
 
         tree.add_link(group_inputs.outputs["Mask RGB"], rgb_used.inputs[0])
@@ -71,22 +73,22 @@ class ShaderNodePso2Colorize(group.ShaderNodeCustomGroup):
 
         tree.add_link(rgb_used.outputs[0], mask_rgb.inputs["Color"])
 
-        color1 = tree.add_node("ShaderNodeMix", name="Color 1")
+        color1 = tree.add_node(bpy.types.ShaderNodeMix, name="Color 1")
         color1.data_type = "RGBA"
         color1.blend_type = "MIX"
         color1.clamp_factor = True
 
-        color2 = tree.add_node("ShaderNodeMix", name="Color 2")
+        color2 = tree.add_node(bpy.types.ShaderNodeMix, name="Color 2")
         color2.data_type = "RGBA"
         color2.blend_type = "MIX"
         color2.clamp_factor = True
 
-        color3 = tree.add_node("ShaderNodeMix", name="Color 3")
+        color3 = tree.add_node(bpy.types.ShaderNodeMix, name="Color 3")
         color3.data_type = "RGBA"
         color3.blend_type = "MIX"
         color3.clamp_factor = True
 
-        color4 = tree.add_node("ShaderNodeMix", name="Color 4")
+        color4 = tree.add_node(bpy.types.ShaderNodeMix, name="Color 4")
         color4.data_type = "RGBA"
         color4.blend_type = "MIX"
         color4.clamp_factor = True

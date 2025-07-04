@@ -13,6 +13,7 @@ from .colors import COLOR_CHANNELS, ColorId
 from .debug import debug_print
 from .objects import ObjectType
 from .preferences import get_preferences
+from .util import BlenderIcon, OperatorResult
 
 
 @dataclass
@@ -301,6 +302,8 @@ class PSO2_OT_ModelSearch(bpy.types.Operator, import_props.CommonImportProps):
         _populate_model_list(self.models, bpy.context)
 
     def draw(self, context):
+        assert self.layout is not None
+
         preferences = get_preferences(context)
         layout = self.layout
         split = layout.split(factor=0.75)
@@ -350,7 +353,7 @@ class PSO2_OT_ModelSearch(bpy.types.Operator, import_props.CommonImportProps):
 
         col.operator(PSO2_OT_UpdateModelList.bl_idname, text="Update Model List")
 
-    def execute(self, context):  # type: ignore
+    def execute(self, context) -> OperatorResult:
         if obj := self.get_selected_object():
             high_quality = self.model_file == "HQ"
             import_model.import_object(
@@ -367,6 +370,8 @@ class PSO2_OT_ModelSearch(bpy.types.Operator, import_props.CommonImportProps):
         return {"CANCELLED"}
 
     def invoke(self, context, event):
+        assert context.window_manager is not None
+
         return context.window_manager.invoke_props_dialog(
             self, width=800, confirm_text="Import"
         )
@@ -467,8 +472,8 @@ class PSO2_UL_ModelList(bpy.types.UIList):
         super().__init__(*args, **kwargs)
         self.use_filter_show = True
 
-    # pylint: disable-next=redefined-builtin
-    def filter_items(self, context, data, property):
+    # pylint: disable=redefined-builtin
+    def filter_items(self, context, data, property):  # type: ignore
         preferences = get_preferences(context)
         items: Sequence[ListItem] = getattr(data, property)
 
@@ -580,7 +585,7 @@ class PSO2_UL_ModelList(bpy.types.UIList):
 
             row = layout.split(factor=0.5)
 
-            row.label(text=item.item_name, icon=icon)  # type: ignore
+            row.label(text=item.item_name, icon=icon)
             row.label(text=item.description)
             row.label(text=str(item.object_id))
 
@@ -588,7 +593,7 @@ class PSO2_UL_ModelList(bpy.types.UIList):
             pass
 
 
-def _get_icon(object_type: ObjectType) -> str:
+def _get_icon(object_type: ObjectType) -> BlenderIcon:
     match object_type:
         case ObjectType.ACCESSORY:
             return "MESH_TORUS"
@@ -630,7 +635,7 @@ class PSO2_OT_SelectAllCategories(bpy.types.Operator):
     bl_idname = "pso2.select_all_categories"
     bl_options = {"INTERNAL"}
 
-    def execute(self, context):  # type: ignore
+    def execute(self, context) -> OperatorResult:
         preferences = get_preferences(context)
 
         preferences.model_search_categories = _get_all_enum_items(

@@ -29,24 +29,24 @@ class ShaderNodePso2ShowInnerwear(group.ShaderNodeCustomGroup):
     def _build(self, node_tree):
         tree = builder.NodeTreeBuilder(node_tree)
 
-        group_inputs = tree.add_node("NodeGroupInput")
-        group_outputs = tree.add_node("NodeGroupOutput")
+        group_inputs = tree.add_node(bpy.types.NodeGroupInput)
+        group_outputs = tree.add_node(bpy.types.NodeGroupOutput)
 
         tree.new_input("NodeSocketFloat", "Value")
 
         tree.new_output("NodeSocketFloat", "Value")
 
-        in_hide = tree.add_node("ShaderNodeAttribute", name="Hide Innerwear")
+        in_hide = tree.add_node(bpy.types.ShaderNodeAttribute, name="Hide Innerwear")
         in_hide.attribute_type = "VIEW_LAYER"
         in_hide.attribute_name = scene_props.HIDE_INNERWEAR
 
-        in_show = tree.add_node("ShaderNodeMath", name="Show Innerwear")
+        in_show = tree.add_node(bpy.types.ShaderNodeMath, name="Show Innerwear")
         in_show.operation = "SUBTRACT"
         in_show.inputs[0].default_value = 1  # type: ignore
 
         tree.add_link(in_hide.outputs["Fac"], in_show.inputs[1])
 
-        multiply = tree.add_node("ShaderNodeMath")
+        multiply = tree.add_node(bpy.types.ShaderNodeMath)
         multiply.operation = "MULTIPLY"
         multiply.use_clamp = True
 

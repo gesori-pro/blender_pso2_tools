@@ -62,7 +62,7 @@ class Material:
         cls,
         mat: AquaModelLibrary.Data.PSO2.Aqua.AquaObjectData.Intermediary.GenericMaterial,
     ):
-        return cls(  # type: ignore
+        return cls(
             textures=[str(x) for x in mat.texNames] if mat.texNames else [],
             uv_sets=[int(x) for x in mat.texUVSets] if mat.texUVSets else [],
             shaders=[str(x) for x in mat.shaderNames] if mat.shaderNames else [],

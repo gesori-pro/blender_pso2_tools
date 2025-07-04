@@ -1,7 +1,17 @@
 import re
-from typing import TypeVar
+from typing import TYPE_CHECKING, TypeVar
 
 import System.Collections.Generic
+
+if TYPE_CHECKING:
+    import bpy.stub_internal
+
+    OperatorResult = set[bpy.stub_internal.rna_enums.OperatorReturnItems]
+    BlenderIcon = bpy.stub_internal.rna_enums.IconItems
+else:
+    OperatorResult = set[str]
+    BlenderIcon = str
+
 
 K = TypeVar("K")
 T = TypeVar("T")

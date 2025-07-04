@@ -26,6 +26,8 @@ class PSO2OrnamentsPanel(bpy.types.Panel):
         )
 
     def draw(self, context):
+        assert self.layout is not None
+
         layout = self.layout
 
         draw_toggle(
@@ -116,6 +118,8 @@ def get_ornament_mesh_objects(mesh_id: str):
 
 
 def find_context_area():
+    assert bpy.context.screen is not None
+
     for area in bpy.context.screen.areas:
         if area.type == "VIEW_3D":
             return area
@@ -128,7 +132,7 @@ class PSO2_OT_ShowOrnament(bpy.types.Operator):
     bl_options = {"UNDO", "REGISTER", "INTERNAL"}
     mesh_id = "0"
 
-    def execute(self, context):  # type: ignore
+    def execute(self, context) -> util.OperatorResult:
         for mesh in get_ornament_mesh_objects(self.mesh_id):
             mesh.hide_set(False)
 
@@ -149,7 +153,7 @@ class PSO2_OT_HideOrnament(bpy.types.Operator):
     bl_options = {"UNDO", "REGISTER", "INTERNAL"}
     mesh_id = "0"
 
-    def execute(self, context):  # type: ignore
+    def execute(self, context) -> util.OperatorResult:
         for mesh in get_ornament_mesh_objects(self.mesh_id):
             mesh.hide_set(True)
 

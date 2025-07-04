@@ -30,7 +30,7 @@ def load():
         path = str(BIN_PATH / name)
         clr.AddReference(path)  # pylint: disable=no-member # type: ignore
 
-    from Assimp.Unmanaged import AssimpLibrary  # type: ignore
+    from Assimp.Unmanaged import AssimpLibrary
 
     AssimpLibrary.Instance.Resolver.SetProbingPaths64([_PROBING_PATH_X64])
 

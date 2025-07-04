@@ -1,3 +1,5 @@
+import bpy
+
 from .. import classes, colors
 from . import builder, group
 
@@ -13,13 +15,15 @@ class ShaderNodePso2Colorchannels(group.ShaderNodeCustomGroup):
     def _build(self, node_tree):
         tree = builder.NodeTreeBuilder(node_tree)
 
-        output = tree.add_node("NodeGroupOutput", (28, 0))
+        output = tree.add_node(bpy.types.NodeGroupOutput, (28, 0))
         panels = {}
 
         for i, channel in colors.COLOR_CHANNELS.items():
             try:
                 panel = panels[channel.group]
             except KeyError:
+                assert tree.tree.interface is not None
+
                 panel = tree.tree.interface.new_panel(
                     name=channel.group, default_closed=True
                 )
@@ -29,7 +33,9 @@ class ShaderNodePso2Colorchannels(group.ShaderNodeCustomGroup):
             x = (index % _COLOR_GROUP_COLS) * 4
             y = (index // _COLOR_GROUP_COLS) * -4
 
-            color = tree.add_node("ShaderNodeAttribute", (x, y), name=channel.name)
+            color = tree.add_node(
+                bpy.types.ShaderNodeAttribute, (x, y), name=channel.name
+            )
             color.attribute_type = "VIEW_LAYER"
             color.attribute_name = channel.custom_property_name
 

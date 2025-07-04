@@ -1,3 +1,5 @@
+import bpy
+
 from . import builder
 
 
@@ -9,7 +11,7 @@ class Shader1105(builder.ShaderBuilder):
         # For now, make it invisible.
         tree = self.init_tree()
 
-        output = tree.add_node("ShaderNodeOutputMaterial", (6, 0))
-        bsdf = tree.add_node("ShaderNodeBsdfTransparent", (0, 0))
+        output = tree.add_node(bpy.types.ShaderNodeOutputMaterial, (6, 0))
+        bsdf = tree.add_node(bpy.types.ShaderNodeBsdfTransparent, (0, 0))
 
         tree.add_link(bsdf.outputs["BSDF"], output.inputs["Surface"])

@@ -162,7 +162,7 @@ class Pso2ToolsPreferences(bpy.types.AddonPreferences):
             "cast_arms",
             "cast_body",
             "cast_legs",
-        },
+        },  # type: ignore
     )
 
     model_search_versions: bpy.props.EnumProperty(
@@ -173,7 +173,7 @@ class Pso2ToolsPreferences(bpy.types.AddonPreferences):
             ("CLASSIC", "Classic", "Classic", "", 1 << 1),
         ],
         description="Filter by game version",
-        default={"NGS"},
+        default={"NGS"},  # type: ignore
     )
 
     model_search_body_types: bpy.props.EnumProperty(
@@ -184,7 +184,7 @@ class Pso2ToolsPreferences(bpy.types.AddonPreferences):
             ("T2", "T2", "T2 (female)", "", 1 << 1),
             ("NONE", "None", "Genderless", "", 1 << 2),
         ],
-        default={"T1", "T2"},
+        default={"T1", "T2"},  # type: ignore
     )
 
     def draw(self, context: bpy.types.Context):
@@ -220,6 +220,9 @@ def get_preferences(context: bpy.types.Context | None) -> Pso2ToolsPreferences:
         raise RuntimeError("__package__ is unset")
 
     context = context or bpy.context
+
+    assert context.preferences is not None
+
     return cast(
         Pso2ToolsPreferences, context.preferences.addons[__package__].preferences
     )

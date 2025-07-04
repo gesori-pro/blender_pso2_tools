@@ -267,6 +267,9 @@ class PSO2_OT_ExportAqp(bpy.types.Operator, ExportHelper):
     )
 
     def draw(self, context):
+        assert self.layout is not None
+        assert context.space_data is not None
+
         layout = self.layout
         layout.use_property_split = True
         layout.use_property_decorate = False
@@ -280,7 +283,7 @@ class PSO2_OT_ExportAqp(bpy.types.Operator, ExportHelper):
         export_panel_armature(layout, self)
         export_panel_animation(layout, self)
 
-    def execute(self, context):  # type: ignore
+    def execute(self, context):
         if not self.filepath:  # pylint: disable=no-member # type: ignore
             raise ValueError("filepath not set")
 

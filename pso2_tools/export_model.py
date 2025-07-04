@@ -5,9 +5,10 @@ from typing import Any, Iterable, cast
 
 import bpy
 from AquaModelLibrary.Core.General import AssimpModelImporter
-from AquaModelLibrary.Data.PSO2.Aqua import AquaPackage  # type: ignore
-from AquaModelLibrary.Data.PSO2.Aqua import AquaNode, AquaObject
+from AquaModelLibrary.Data.PSO2.Aqua import AquaNode, AquaObject, AquaPackage
 from io_scene_fbx import export_fbx_bin
+
+from .util import OperatorResult
 
 
 def export(
@@ -17,7 +18,7 @@ def export(
     is_ngs=True,
     overwrite_aqn=False,
     fbx_options: dict[str, Any] | None = None,
-):
+) -> OperatorResult:
     fbx_options = fbx_options or {}
 
     with TemporaryDirectory() as tempdir:
@@ -66,6 +67,7 @@ def _include_parents(context: bpy.types.Context, fbx_options: dict[str, Any]):
     if use_selection:
         ctx_objects = context.selected_objects
     else:
+        assert context.view_layer is not None
         ctx_objects = context.view_layer.objects
 
     try:

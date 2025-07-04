@@ -11,8 +11,8 @@ class ShaderNodePso2Mix(group.ShaderNodeCustomGroup):
     def _build(self, node_tree):
         tree = builder.NodeTreeBuilder(node_tree)
 
-        group_inputs = tree.add_node("NodeGroupInput")
-        group_outputs = tree.add_node("NodeGroupOutput")
+        group_inputs = tree.add_node(bpy.types.NodeGroupInput)
+        group_outputs = tree.add_node(bpy.types.NodeGroupOutput)
 
         self._add_inputs(tree)
         tree.new_input("NodeSocketColor", "Color 1")
@@ -23,12 +23,12 @@ class ShaderNodePso2Mix(group.ShaderNodeCustomGroup):
         tree.new_output("NodeSocketColor", "Color")
         tree.new_output("NodeSocketFloat", "Alpha")
 
-        color = tree.add_node("ShaderNodeMix", name="Color")
+        color = tree.add_node(bpy.types.ShaderNodeMix, name="Color")
         color.data_type = "RGBA"
         color.blend_type = "MIX"
         color.clamp_factor = True
 
-        alpha = tree.add_node("ShaderNodeMix", name="Alpha")
+        alpha = tree.add_node(bpy.types.ShaderNodeMix, name="Alpha")
         alpha.data_type = "FLOAT"
         alpha.blend_type = "MIX"
         alpha.clamp_factor = True
@@ -113,7 +113,7 @@ class ShaderNodePso2MixTextureAttribute(ShaderNodePso2Mix):
         return cast(bpy.types.ShaderNodeAttribute, self.node_tree.nodes["Attribute"])
 
     def _add_nodes(self, tree: builder.NodeTreeBuilder):
-        attr = tree.add_node("ShaderNodeAttribute", name="Attribute")
+        attr = tree.add_node(bpy.types.ShaderNodeAttribute, name="Attribute")
         attr.attribute_type = self.attribute_type
         attr.attribute_name = self.attribute_name
 

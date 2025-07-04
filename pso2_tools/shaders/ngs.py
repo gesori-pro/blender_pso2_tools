@@ -15,23 +15,23 @@ class ShaderNodePso2AlphaThreshold(group.ShaderNodeCustomGroup):
     def _build(self, node_tree):
         tree = builder.NodeTreeBuilder(node_tree)
 
-        group_inputs = tree.add_node("NodeGroupInput")
-        group_outputs = tree.add_node("NodeGroupOutput")
+        group_inputs = tree.add_node(bpy.types.NodeGroupInput)
+        group_outputs = tree.add_node(bpy.types.NodeGroupOutput)
 
         tree.new_input("NodeSocketFloat", "Alpha")
         tree.new_input("NodeSocketFloat", "Threshold")
 
         tree.new_output("NodeSocketFloat", "Alpha")
 
-        threshold = tree.add_node("ShaderNodeMath", name="Above Threshold")
+        threshold = tree.add_node(bpy.types.ShaderNodeMath, name="Above Threshold")
         threshold.operation = "GREATER_THAN"
 
-        disabled = tree.add_node("ShaderNodeMath", name="Disabled")
+        disabled = tree.add_node(bpy.types.ShaderNodeMath, name="Disabled")
         disabled.operation = "COMPARE"
         disabled.inputs[1].default_value = 0  # type: ignore
         disabled.inputs[2].default_value = 0  # type: ignore
 
-        mix = tree.add_node("ShaderNodeMix", name="Mix")
+        mix = tree.add_node(bpy.types.ShaderNodeMix, name="Mix")
         mix.data_type = "FLOAT"
         mix.clamp_result = True
 
@@ -59,8 +59,8 @@ class ShaderNodePso2NgsBase(group.ShaderNodeCustomGroup):
     def _build(self, node_tree):
         tree = builder.NodeTreeBuilder(node_tree)
 
-        group_inputs = tree.add_node("NodeGroupInput")
-        group_outputs = tree.add_node("NodeGroupOutput")
+        group_inputs = tree.add_node(bpy.types.NodeGroupInput)
+        group_outputs = tree.add_node(bpy.types.NodeGroupOutput)
 
         tree.new_input("NodeSocketColor", "Diffuse")
         tree.new_input("NodeSocketFloat", "Alpha")
@@ -71,26 +71,30 @@ class ShaderNodePso2NgsBase(group.ShaderNodeCustomGroup):
 
         tree.new_output("NodeSocketShader", "BSDF")
 
-        bsdf = tree.add_node("ShaderNodeBsdfPrincipled")
+        bsdf = tree.add_node(bpy.types.ShaderNodeBsdfPrincipled)
         tree.add_link(bsdf.outputs["BSDF"], group_outputs.inputs["BSDF"])
 
         # ========== Normal Map ==========
 
-        normal_map = tree.add_node("ShaderNodeNormalMap")
+        normal_map = tree.add_node(bpy.types.ShaderNodeNormalMap)
 
         tree.add_link(group_inputs.outputs["Normal"], normal_map.inputs["Color"])
         tree.add_link(normal_map.outputs[0], bsdf.inputs["Normal"])
 
         # ========== Multi Map ==========
 
-        multi_rgb = tree.add_node("ShaderNodeSeparateColor", name="Multi Map RGB")
+        multi_rgb = tree.add_node(
+            bpy.types.ShaderNodeSeparateColor, name="Multi Map RGB"
+        )
         multi_rgb.mode = "RGB"
 
         tree.add_link(group_inputs.outputs["Multi RGB"], multi_rgb.inputs["Color"])
         tree.add_link(multi_rgb.outputs["Red"], bsdf.inputs["Metallic"])
 
         # Tone down the shininess a bit to better match in game visuals
-        roughness_map = tree.add_node("ShaderNodeMapRange", name="Roughness Rescale")
+        roughness_map = tree.add_node(
+            bpy.types.ShaderNodeMapRange, name="Roughness Rescale"
+        )
         roughness_map.data_type = "FLOAT"
         roughness_map.interpolation_type = "LINEAR"
         roughness_map.clamp = True
@@ -102,7 +106,7 @@ class ShaderNodePso2NgsBase(group.ShaderNodeCustomGroup):
 
         # Ambient Occlusion
         # (This should really only affect ambient light, but this looks good enough)
-        ao = tree.add_node("ShaderNodeMix", name="Ambient Occlusion")
+        ao = tree.add_node(bpy.types.ShaderNodeMix, name="Ambient Occlusion")
         ao.data_type = "RGBA"
         ao.blend_type = "MULTIPLY"
         ao.inputs["Factor"].default_value = 1  # type: ignore
@@ -120,9 +124,7 @@ class ShaderNodePso2NgsBase(group.ShaderNodeCustomGroup):
 
         # ========== Alpha ==========
 
-        alpha: ShaderNodePso2AlphaThreshold = tree.add_node(
-            "ShaderNodePso2AlphaThreshold", name="Alpha"
-        )  # type: ignore
+        alpha = tree.add_node(ShaderNodePso2AlphaThreshold, name="Alpha")
 
         tree.add_link(group_inputs.outputs["Alpha"], alpha.inputs["Alpha"])
         tree.add_link(

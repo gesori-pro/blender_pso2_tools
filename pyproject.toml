@@ -1,6 +1,43 @@
 [tool.isort]
 profile = "black"
 
+[tool.pylint.MAIN]
+extension-pkg-whitelist = '''
+  bpy,
+  bpy_extras,
+  AquaModelLibrary,
+  Assimp,
+  Zamboni,
+'''
+
+[tool.pylint."MESSAGES CONTROL"]
+disable = '''
+  import-error,
+  invalid-name,
+  missing-class-docstring,
+  missing-function-docstring,
+  missing-module-docstring,
+  too-few-public-methods,
+  too-many-arguments,
+  too-many-branches,
+  too-many-instance-attributes,
+  too-many-lines,
+  too-many-locals,
+  too-many-public-methods,
+  too-many-return-statements,
+  unused-argument,
+'''
+
+[tool.pylint.TYPECHECK]
+ignored-modules = '''
+  AquaModelLibrary,
+  Assimp,
+  Zamboni,
+'''
+
+[tool.pylint.FORMAT]
+good-names = "d,ex,f,i,id"
+
 [tool.pyright]
 reportAbstractUsage = false
 reportInvalidTypeForm = false

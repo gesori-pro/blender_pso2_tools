@@ -1,4 +1,4 @@
-from typing import Literal, LiteralString, Optional, Tuple, overload
+from typing import Literal, LiteralString, Optional, Tuple, TypeVar, cast, overload
 
 import bpy
 
@@ -8,6 +8,8 @@ from . import types
 GRID = 50
 
 Vec2 = Tuple[float, float]
+
+NODE = TypeVar("NODE")
 
 
 def add_driver(
@@ -20,6 +22,9 @@ def add_driver(
     expression=None,
 ):
     driver = target.driver_add(prop, index)
+
+    assert isinstance(driver, bpy.types.FCurve)
+    assert driver.driver is not None
 
     var = driver.driver.variables.new()
     var.name = data_path
@@ -70,6 +75,8 @@ class NodeTreeBuilder:
         name: str,
         parent: Optional[bpy.types.NodeTreeInterfacePanel] = None,
     ):
+        assert self.tree.interface is not None
+
         return self.tree.interface.new_socket(
             name=name, in_out="INPUT", socket_type=socket_type, parent=parent
         )
@@ -80,6 +87,8 @@ class NodeTreeBuilder:
         name: str,
         parent: Optional[bpy.types.NodeTreeInterfacePanel] = None,
     ):
+        assert self.tree.interface is not None
+
         return self.tree.interface.new_socket(
             name=name, in_out="OUTPUT", socket_type=socket_type, parent=parent
         )
@@ -100,197 +109,13 @@ class NodeTreeBuilder:
 
         return self.tree.links.new(colors.outputs[channel.value - 1], output)
 
-    @overload
     def add_node(
         self,
-        node_type: Literal["NodeFrame"],
+        node_type: type[NODE],
         location: Vec2 | None = None,
         name: str | None = None,
-    ) -> bpy.types.NodeFrame: ...
-
-    @overload
-    def add_node(
-        self,
-        node_type: Literal["NodeGroupInput"],
-        location: Vec2 | None = None,
-        name: str | None = None,
-    ) -> bpy.types.NodeGroupInput: ...
-
-    @overload
-    def add_node(
-        self,
-        node_type: Literal["NodeGroupOutput"],
-        location: Vec2 | None = None,
-        name: str | None = None,
-    ) -> bpy.types.NodeGroupOutput: ...
-
-    @overload
-    def add_node(
-        self,
-        node_type: Literal["NodeReroute"],
-        location: Vec2 | None = None,
-        name: str | None = None,
-    ) -> bpy.types.NodeReroute: ...
-
-    @overload
-    def add_node(
-        self,
-        node_type: Literal["ShaderNodeAttribute"],
-        location: Vec2 | None = None,
-        name: str | None = None,
-    ) -> bpy.types.ShaderNodeAttribute: ...
-
-    @overload
-    def add_node(
-        self,
-        node_type: Literal["ShaderNodeBsdfPrincipled"],
-        location: Vec2 | None = None,
-        name: str | None = None,
-    ) -> bpy.types.ShaderNodeBsdfPrincipled: ...
-
-    @overload
-    def add_node(
-        self,
-        node_type: Literal["ShaderNodeBsdfTransparent"],
-        location: Vec2 | None = None,
-        name: str | None = None,
-    ) -> bpy.types.ShaderNodeBsdfTransparent: ...
-
-    @overload
-    def add_node(
-        self,
-        node_type: Literal["ShaderNodeCombineXYZ"],
-        location: Vec2 | None = None,
-        name: str | None = None,
-    ) -> bpy.types.ShaderNodeCombineXYZ: ...
-
-    @overload
-    def add_node(
-        self,
-        node_type: Literal["ShaderNodeGroup"],
-        location: Vec2 | None = None,
-        name: str | None = None,
-    ) -> bpy.types.ShaderNodeGroup: ...
-
-    @overload
-    def add_node(
-        self,
-        node_type: Literal["ShaderNodeMath"],
-        location: Vec2 | None = None,
-        name: str | None = None,
-    ) -> bpy.types.ShaderNodeMath: ...
-
-    @overload
-    def add_node(
-        self,
-        node_type: Literal["ShaderNodeMapRange"],
-        location: Vec2 | None = None,
-        name: str | None = None,
-    ) -> bpy.types.ShaderNodeMapRange: ...
-
-    @overload
-    def add_node(
-        self,
-        node_type: Literal["ShaderNodeMix"],
-        location: Vec2 | None = None,
-        name: str | None = None,
-    ) -> bpy.types.ShaderNodeMix: ...
-
-    @overload
-    def add_node(
-        self,
-        node_type: Literal["ShaderNodeMixShader"],
-        location: Vec2 | None = None,
-        name: str | None = None,
-    ) -> bpy.types.ShaderNodeMixShader: ...
-
-    @overload
-    def add_node(
-        self,
-        node_type: Literal["ShaderNodeNormalMap"],
-        location: Vec2 | None = None,
-        name: str | None = None,
-    ) -> bpy.types.ShaderNodeNormalMap: ...
-
-    @overload
-    def add_node(
-        self,
-        node_type: Literal["ShaderNodeOutputMaterial"],
-        location: Vec2 | None = None,
-        name: str | None = None,
-    ) -> bpy.types.ShaderNodeOutputMaterial: ...
-
-    @overload
-    def add_node(
-        self,
-        node_type: Literal["ShaderNodeRGB"],
-        location: Vec2 | None = None,
-        name: str | None = None,
-    ) -> bpy.types.ShaderNodeRGB: ...
-
-    @overload
-    def add_node(
-        self,
-        node_type: Literal["ShaderNodeSeparateColor"],
-        location: Vec2 | None = None,
-        name: str | None = None,
-    ) -> bpy.types.ShaderNodeSeparateColor: ...
-
-    @overload
-    def add_node(
-        self,
-        node_type: Literal["ShaderNodeTexImage"],
-        location: Vec2 | None = None,
-        name: str | None = None,
-    ) -> bpy.types.ShaderNodeTexImage: ...
-
-    @overload
-    def add_node(
-        self,
-        node_type: Literal["ShaderNodeUVMap"],
-        location: Vec2 | None = None,
-        name: str | None = None,
-    ) -> bpy.types.ShaderNodeUVMap: ...
-
-    @overload
-    def add_node(
-        self,
-        node_type: Literal["ShaderNodeValue"],
-        location: Vec2 | None = None,
-        name: str | None = None,
-    ) -> bpy.types.ShaderNodeValue: ...
-
-    @overload
-    def add_node(
-        self,
-        node_type: Literal["ShaderNodeVectorMath"],
-        location: Vec2 | None = None,
-        name: str | None = None,
-    ) -> bpy.types.ShaderNodeVectorMath: ...
-
-    @overload
-    def add_node(
-        self,
-        node_type: Literal["ShaderNodeVertexColor"],
-        location: Vec2 | None = None,
-        name: str | None = None,
-    ) -> bpy.types.ShaderNodeVertexColor: ...
-
-    @overload
-    def add_node(
-        self,
-        node_type: LiteralString,
-        location: Vec2 | None = None,
-        name: str | None = None,
-    ) -> bpy.types.Node: ...
-
-    def add_node(
-        self,
-        node_type: LiteralString,
-        location: Vec2 | None = None,
-        name: str | None = None,
-    ) -> bpy.types.Node:
-        return self._add_node(node_type, location, name)
+    ) -> NODE:
+        return cast(node_type, self._add_node(node_type.__name__, location, name))
 
     def _add_node(self, node_type: str, location: Vec2 | None, name: str | None):
         x, y = location or (0, 0)

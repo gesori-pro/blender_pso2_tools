@@ -3,9 +3,8 @@ import itertools
 import struct
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Sequence
 
-from System import Array
 from System.IO import FileMode, FileStream
 from Zamboni import IceFile as InternalIceFile
 
@@ -18,8 +17,8 @@ class IceDataFile:
     data: bytes
 
     @classmethod
-    def from_byte_array(cls, array: Array[int]):  # type: ignore
-        name = InternalIceFile.getFileName(array)  # type: ignore
+    def from_byte_array(cls, array: Sequence[int]):
+        name = InternalIceFile.getFileName(array)
         data = bytes(array)
 
         header_size = struct.unpack_from("i", data, offset=0xC)[0]

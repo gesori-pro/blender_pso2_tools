@@ -7,6 +7,7 @@ import bpy
 import mathutils
 
 from . import classes
+from .util import OperatorResult
 
 DEFAULT_TOLERANCE = 1.0e-4
 
@@ -26,7 +27,7 @@ class PSO2_OT_WeldMeshEdges(bpy.types.Operator):
     def poll(cls, context):
         return context.mode == "EDIT_MESH"
 
-    def execute(self, context):  # type: ignore
+    def execute(self, context) -> OperatorResult:
         weld_mesh_edges(context, self.distance)
         return {"FINISHED"}
 
@@ -68,7 +69,7 @@ def group_vertices_by_distance(verts: Iterable[bmesh.types.BMVert], distance: fl
     kd = mathutils.kdtree.KDTree(len(verts))
 
     for i, v in enumerate(verts):
-        kd.insert(v.co, i)
+        kd.insert(v.co, i)  # type: ignore
 
     kd.balance()
 
@@ -80,8 +81,7 @@ def group_vertices_by_distance(verts: Iterable[bmesh.types.BMVert], distance: fl
             i = indices[0]
             group = []
 
-            # pylint: disable=not-an-iterable
-            for _, index, _ in kd.find_range(verts[i].co, distance):
+            for _, index, _ in kd.find_range(verts[i].co, distance):  # type: ignore
                 try:
                     indices.remove(index)
                     group.append(index)

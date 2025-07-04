@@ -24,7 +24,7 @@ class ShaderNodeCustomGroup(bpy.types.ShaderNodeCustomGroup):
         else:
             self.node_tree = cast(
                 bpy.types.ShaderNodeTree,
-                bpy.data.node_groups.new(self.group_name, "ShaderNodeTree"),  # type: ignore
+                bpy.data.node_groups.new(self.group_name, "ShaderNodeTree"),
             )
             self._build(self.node_tree)
 

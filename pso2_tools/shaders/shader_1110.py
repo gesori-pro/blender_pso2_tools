@@ -1,3 +1,5 @@
+import bpy
+
 from . import builder, shader_1100
 
 
@@ -15,14 +17,14 @@ class Shader1110(shader_1100.Shader1100):
         shader.location.x += 50 * 6
         output.location.x += 60 * 6
 
-        decal_uv = tree.add_node("ShaderNodeUVMap", (6, 20), name="Decal UV")
+        decal_uv = tree.add_node(bpy.types.ShaderNodeUVMap, (6, 20), name="Decal UV")
         decal_uv.uv_map = "UVChannel_3"
 
-        decal = tree.add_node("ShaderNodeTexImage", (12, 20), name="Decal")
+        decal = tree.add_node(bpy.types.ShaderNodeTexImage, (12, 20), name="Decal")
         decal.image = self.textures.decal.diffuse
         decal.extension = "CLIP"
 
-        decal_mix = tree.add_node("ShaderNodeMix", (18, 16), name="Decal Mix")
+        decal_mix = tree.add_node(bpy.types.ShaderNodeMix, (18, 16), name="Decal Mix")
         decal_mix.data_type = "RGBA"
         decal_mix.blend_type = "MIX"
         decal_mix.clamp_factor = True
