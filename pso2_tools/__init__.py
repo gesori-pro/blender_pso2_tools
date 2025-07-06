@@ -54,6 +54,8 @@ def unregister():
 
 
 def menu_func_import(self: bpy.types.Operator, context: bpy.types.Context):
+    assert self.layout is not None
+
     self.layout.operator(import_aqp.PSO2_OT_ImportAqp.bl_idname, text="PSO2 AQP (.aqp)")
     self.layout.operator(
         import_ice.PSO2_OT_ImportIce.bl_idname, text="PSO2 ICE Archive"
@@ -64,6 +66,8 @@ def menu_func_import(self: bpy.types.Operator, context: bpy.types.Context):
 
 
 def menu_func_export(self: bpy.types.Operator, context: bpy.types.Context):
+    assert self.layout is not None
+
     self.layout.operator(export_aqp.PSO2_OT_ExportAqp.bl_idname, text="PSO2 AQP (.aqp)")
 
 

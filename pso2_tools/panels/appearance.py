@@ -20,6 +20,8 @@ class PSO2AppearancePanel(bpy.types.Panel):
         return any(mat for mat in bpy.data.materials if MAT_RE.match(mat.name))
 
     def draw(self, context):
+        assert self.layout is not None
+
         layout = self.layout
         layout.use_property_split = True
         layout.use_property_decorate = False
@@ -54,6 +56,8 @@ class PSO2MaterialPanel(bpy.types.Panel):
         )
 
     def draw(self, context):
+        assert self.layout is not None
+
         layout = self.layout
         layout.use_property_split = True
         layout.use_property_decorate = False
