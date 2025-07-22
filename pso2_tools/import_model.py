@@ -8,13 +8,13 @@ import bpy
 from AquaModelLibrary.Core.General import FbxExporterNative
 from AquaModelLibrary.Data.PSO2.Aqua import AquaMotion, AquaNode, AquaPackage
 from AquaModelLibrary.Data.Utility import CoordSystem
-from io_scene_fbx import import_fbx
 from System.Collections.Generic import List
 from System.Numerics import Matrix4x4
 
 from . import (
     colors,
     datafile,
+    fbx_wrapper,
     ice,
     material,
     objects,
@@ -338,7 +338,7 @@ def _import_aqp(
 
         result = cast(
             OperatorResult,
-            import_fbx.load(
+            fbx_wrapper.load(
                 operator,
                 context,
                 filepath=str(fbxfile),

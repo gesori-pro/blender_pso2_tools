@@ -6,8 +6,8 @@ from typing import Any, Iterable, cast
 import bpy
 from AquaModelLibrary.Core.General import AssimpModelImporter
 from AquaModelLibrary.Data.PSO2.Aqua import AquaNode, AquaObject, AquaPackage
-from io_scene_fbx import export_fbx_bin
 
+from . import fbx_wrapper
 from .util import OperatorResult
 
 
@@ -27,7 +27,7 @@ def export(
         # Make sure the armature is included for everything that will be exported,
         # or the exported FBX will convert to a broken AQP.
         with _include_parents(context, fbx_options):
-            result = export_fbx_bin.save(
+            result = fbx_wrapper.save(
                 operator, context, filepath=str(fbxfile), **fbx_options
             )
 

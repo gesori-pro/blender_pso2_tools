@@ -30,6 +30,7 @@ from . import (
     import_aqp,
     import_ice,
     import_search,
+    operators,
     reloader,
     scene_props,
 )
@@ -41,6 +42,7 @@ def register():
     classes.bpy_register()
     bpy.types.TOPBAR_MT_file_import.append(menu_func_import)
     bpy.types.TOPBAR_MT_file_export.append(menu_func_export)
+    bpy.types.VIEW3D_MT_edit_armature_names.append(operators.rename_bones.menu_func)
 
     scene_props.add_scene_properties()
     scene_props.add_material_properties()
@@ -50,6 +52,7 @@ def unregister():
     # TODO: unload pythonnet when the extension is disabled.
     bpy.types.TOPBAR_MT_file_import.remove(menu_func_import)
     bpy.types.TOPBAR_MT_file_export.remove(menu_func_export)
+    bpy.types.VIEW3D_MT_edit_armature_names.remove(operators.rename_bones.menu_func)
     classes.bpy_unregister()
 
 

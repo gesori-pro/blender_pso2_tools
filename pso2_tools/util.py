@@ -1,5 +1,5 @@
 import re
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, Generic, TypeVar
 
 import System.Collections.Generic
 
@@ -22,6 +22,15 @@ def dict_get(d: "System.Collections.Generic.Dictionary_2[K, T]", key: K) -> T | 
         return d[key]
     except System.Collections.Generic.KeyNotFoundException:  # type: ignore
         return None
+
+
+F = TypeVar("F", bound=Callable[..., Any])
+
+
+class copy_signature(Generic[F]):
+    def __init__(self, target: F) -> None: ...
+    def __call__(self, wrapped: Callable[..., Any]) -> F:
+        return wrapped  # type: ignore
 
 
 BLENDER_SUFFIX_RE = re.compile(r"\.\d+$")
