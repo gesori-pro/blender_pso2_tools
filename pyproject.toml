@@ -9,6 +9,10 @@ extension-pkg-whitelist = '''
   Assimp,
   Zamboni,
 '''
+source-roots = '''
+  .,
+  C:/Program Files/Blender Foundation/Blender 4.5/4.5/scripts/addons_core
+'''
 
 [tool.pylint."MESSAGES CONTROL"]
 disable = '''
@@ -45,5 +49,5 @@ reportInvalidTypeForm = false
 reportMissingImports = false
 reportMissingModuleSource = false
 extraPaths = [
-  "C:/Program Files/Blender Foundation/Blender 4.4/4.4/scripts/addons_core",
+  "C:/Program Files/Blender Foundation/Blender 4.5/4.5/scripts/addons_core",
 ]
