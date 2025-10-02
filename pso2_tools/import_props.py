@@ -1,10 +1,10 @@
-from typing import Iterable, cast
+from typing import Any, Iterable, cast
 
 import bpy
 from bpy_extras.io_utils import orientation_helper
 
 
-@orientation_helper(axis_forward="-Z", axis_up="Y")
+@orientation_helper(axis_forward="-Z", axis_up="Y")  # type: ignore https://github.com/nutti/fake-bpy-module/issues/376
 class CommonImportProps:
     use_manual_orientation: bpy.props.BoolProperty(
         name="Manual Orientation",
@@ -68,8 +68,12 @@ class CommonImportProps:
         operator = cast(bpy.types.Operator, self)
         ignore = ignore or ()
 
-        # pylint: disable-next=no-member
-        keywords = operator.as_keywords(ignore=("filter_glob", "filepath", *ignore))
+        # https://github.com/nutti/fake-bpy-module/issues/376
+        keywords = cast(
+            dict[str, Any],
+            # pylint: disable-next=no-member
+            operator.as_keywords(ignore=("filter_glob", "filepath", *ignore)),
+        )
         keywords["use_image_search"] = False
 
         return keywords

@@ -478,8 +478,15 @@ class PSO2_UL_ModelList(bpy.types.UIList):
         items: Sequence[ListItem] = getattr(data, property)
 
         if self.filter_name:
-            flt_flags = bpy.types.UI_UL_list.filter_items_by_name(
-                self.filter_name, self.bitflag_filter_item, items, propname="item_name"
+            # https://github.com/nutti/fake-bpy-module/issues/376
+            flt_flags = cast(
+                list[int],
+                bpy.types.UI_UL_list.filter_items_by_name(
+                    self.filter_name,
+                    self.bitflag_filter_item,
+                    items,
+                    propname="item_name",
+                ),
             )
         else:
             flt_flags = [self.bitflag_filter_item] * len(items)

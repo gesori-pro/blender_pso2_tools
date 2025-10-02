@@ -93,7 +93,7 @@ def _include_parents(context: bpy.types.Context, fbx_options: dict[str, Any]):
                     if not obj.select_get():
                         selection.add(obj)
 
-            with context.temp_override(selected_objects=list(selection)):
+            with context.temp_override(selected_objects=list(selection)):  # type: ignore
                 yield
         else:
             yield

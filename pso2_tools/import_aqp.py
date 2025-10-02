@@ -8,7 +8,7 @@ from .util import OperatorResult
 
 
 @classes.register
-class PSO2_OT_ImportAqp(
+class PSO2_OT_ImportAqp(  # type: ignore https://github.com/nutti/fake-bpy-module/issues/376
     bpy.types.Operator, import_props.CommonImportProps, ImportHelper
 ):
     """Load a PSO2 AQP file"""
@@ -33,5 +33,5 @@ class PSO2_OT_ImportAqp(
 
         return {"FINISHED"}
 
-    def invoke(self, context, event):
+    def invoke(self, context, event):  # type: ignore https://github.com/nutti/fake-bpy-module/issues/376
         return self.invoke_popup(context)
