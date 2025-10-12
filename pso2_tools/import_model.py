@@ -2,7 +2,7 @@ from contextlib import closing
 from dataclasses import dataclass, field
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Iterable, Optional, cast
+from typing import Iterable, Optional, TypedDict, cast, get_type_hints
 
 import bpy
 from AquaModelLibrary.Core.General import FbxExporterNative
@@ -27,12 +27,40 @@ from .preferences import get_preferences
 from .util import OperatorResult
 
 
+class FbxImportOptions(TypedDict, total=False):
+    use_manual_orientation: bool
+    axis_forward: str
+    axis_up: str
+    global_scale: float
+    bake_space_transform: bool
+    use_custom_normals: bool
+    use_image_search: bool
+    use_alpha_decals: bool
+    decal_offset: float
+    use_anim: bool
+    anim_offset: float
+    use_subsurf: bool
+    use_custom_props: bool
+    use_custom_props_enum_as_string: bool
+    ignore_leaf_bones: bool
+    force_connect_children: bool
+    automatic_bone_orientation: bool
+    primary_bone_axis: str
+    secondary_bone_axis: str
+    use_prepost_rot: bool
+    colors_type: str
+
+
+class ImportOptions(FbxImportOptions, total=False):
+    include_tangent_binormal: bool
+
+
 def import_object(
     operator: bpy.types.Operator,
     context: bpy.types.Context,
     obj: objects.CmxObjectBase,
     high_quality=True,
-    fbx_options=None,
+    options: ImportOptions | None = None,
 ):
     debug_print("Importing object:", obj.name)
 
@@ -45,15 +73,15 @@ def import_object(
         if (p := _get_ice_path(f, data_path, high_quality))
     ]
 
-    options = _get_import_options(obj)
+    kwargs = _get_import_kwargs(obj)
 
     return _import_models(
         operator,
         context,
         ice_files,
         high_quality=high_quality,
-        fbx_options=fbx_options,
-        **options,
+        options=options,
+        **kwargs,
     )
 
 
@@ -61,13 +89,13 @@ def import_ice_file(
     operator: bpy.types.Operator,
     context: bpy.types.Context,
     path: Path,
-    fbx_options=None,
+    options: ImportOptions | None = None,
 ):
     debug_print("Importing ICE:", path.name)
 
     file_hash = path.name
     high_quality = True
-    options = {}
+    kwargs = {}
 
     # TODO: if this fails, check the ICE file for an AQP and use guess_aqp_object()
     with closing(objects.ObjectDatabase(context)) as db:
@@ -75,7 +103,7 @@ def import_ice_file(
             debug_print(
                 f'Found matching hash. Importing with options from "{obj.name}"'
             )
-            options = _get_import_options(obj)
+            kwargs = _get_import_kwargs(obj)
 
             if isinstance(obj, objects.CmxObjectWithFile):
                 high_quality = file_hash == obj.file.ex.hash
@@ -84,9 +112,9 @@ def import_ice_file(
         operator,
         context,
         [ice.IceFile.load(path)],
-        fbx_options=fbx_options,
+        options=options,
         high_quality=high_quality,
-        **options,
+        **kwargs,
     )
 
 
@@ -94,27 +122,27 @@ def import_aqp_file(
     operator: bpy.types.Operator,
     context: bpy.types.Context,
     path: Path,
-    fbx_options=None,
+    fbx_options: ImportOptions | None = None,
 ):
     debug_print("Importing AQP:", path.name)
 
-    options = {}
+    kwargs = {}
 
     if obj := objects_aqp.guess_aqp_object(path.name, context):
         debug_print(f'Found matching object. Importing with options from "{obj.name}"')
-        options = _get_import_options(obj)
+        kwargs = _get_import_kwargs(obj)
 
     return _import_models(
         operator,
         context,
         [objects_aqp.AqpDataFileSource(path)],
-        fbx_options=fbx_options,
+        options=fbx_options,
         high_quality=True,
-        **options,
+        **kwargs,
     )
 
 
-def _get_import_options(obj: objects.CmxObjectBase):
+def _get_import_kwargs(obj: objects.CmxObjectBase):
     color_map = obj.get_color_map()
     uv_map = None
 
@@ -150,14 +178,14 @@ def _import_models(
     operator: bpy.types.Operator,
     context: bpy.types.Context,
     sources: Iterable[datafile.DataFileSource],
-    fbx_options=None,
+    options: ImportOptions | None = None,
     high_quality=True,
     use_t2_skin=False,
     color_map: Optional[colors.ColorMapping] = None,
     uv_map: Optional[material.UVMapping] = None,
 ) -> OperatorResult:
-    debug_print(f"Import options: {high_quality=} {use_t2_skin=} {color_map=}")
-    debug_print(f"FBX options: {fbx_options=}")
+    debug_print(f"Import: {high_quality=} {use_t2_skin=} {color_map=}")
+    debug_print(f"Options: {options=}")
 
     files = collect_model_files(sources)
 
@@ -176,7 +204,7 @@ def _import_models(
             context,
             model,
             aqn,
-            fbx_options=fbx_options,
+            options=options,
         )
         if "FINISHED" not in result:
             return result
@@ -288,9 +316,9 @@ def _import_aqp(
     context: bpy.types.Context,
     aqp: Path | datafile.DataFile,
     aqn: Path | datafile.DataFile | None,
-    fbx_options=None,
+    options: ImportOptions | None = None,
 ) -> tuple[OperatorResult, list[material.Material]]:
-    fbx_options = fbx_options or {}
+    options = options or {}
 
     if isinstance(aqp, Path):
         aqp_data = aqp.read_bytes()
@@ -320,21 +348,23 @@ def _import_aqp(
     aqms = List[AquaMotion]()
     aqm_names = List[str]()
     instance_transforms = List[Matrix4x4]()
-    include_metadata = True
 
     with TemporaryDirectory() as tempdir:
         fbxfile = Path(tempdir) / Path(aqp_name).with_suffix(".fbx")
 
         FbxExporterNative.ExportToFile(
-            model,
-            skeleton,
-            aqms,
-            str(fbxfile),
-            aqm_names,
-            instance_transforms,  # type: ignore
-            include_metadata,
-            int(CoordSystem.OpenGL),
+            aqo=model,
+            aqn=skeleton,
+            aqmList=aqms,
+            destinationFilePath=str(fbxfile),
+            aqmNameList=aqm_names,
+            instanceTransforms=instance_transforms,  # type: ignore
+            includeMetadata=True,
+            coordSystem=int(CoordSystem.OpenGL),
+            excludeTangentBinormal=not options.get("include_tangent_binormal", False),
         )
+
+        fbx_options = _get_fbx_options(options)
 
         result = cast(
             OperatorResult,
@@ -413,3 +443,13 @@ def _get_uv_map(obj: objects.CmxBodyObject):
 
         case _:
             return None
+
+
+def _get_fbx_options(options: ImportOptions):
+    result = FbxImportOptions()
+
+    for key in get_type_hints(FbxImportOptions).keys():
+        if key in options:
+            result[key] = options[key]
+
+    return result

@@ -70,6 +70,7 @@ To build and develop the extension, first install the following requirements:
 - [Python 3.11](https://www.python.org/downloads/) or newer.
 - [Visual Studio](https://visualstudio.microsoft.com/vs/community/) with the C# and C++ workflows installed.
 - [Autodesk FBX SDK](https://www.autodesk.com/content/dam/autodesk/www/adn/fbx/2020-1/fbx20201_fbxsdk_vs2017_win.exe) version 2020.1
+- [.NET Framework 4.7 developer pack](https://dotnet.microsoft.com/en-us/download/visual-studio-sdks?cid=msbuild-developerpacks)
 
 First, clone the repo with submodules:
 

@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import cast
 
 import bpy
 from bpy_extras.io_utils import ExportHelper, axis_conversion, orientation_helper
@@ -7,9 +8,10 @@ from mathutils import Matrix
 from . import classes, export_model
 
 
+# https://github.com/nutti/fake-bpy-module/issues/376
 @classes.register
-@orientation_helper(axis_forward="-Z", axis_up="Y")
-class PSO2_OT_ExportAqp(bpy.types.Operator, ExportHelper):
+@orientation_helper(axis_forward="-Z", axis_up="Y")  # type: ignore
+class PSO2_OT_ExportAqp(bpy.types.Operator, ExportHelper):  # type: ignore
     """Write a PSO2 AQP file"""
 
     bl_label = "Export AQP"
@@ -266,6 +268,10 @@ class PSO2_OT_ExportAqp(bpy.types.Operator, ExportHelper):
         options={"HIDDEN"},
     )
 
+    rigid: bpy.props.BoolProperty(
+        name="Rigid", description="Export as a rigid model", default=False
+    )
+
     def draw(self, context):
         assert self.layout is not None
         assert context.space_data is not None
@@ -296,14 +302,17 @@ class PSO2_OT_ExportAqp(bpy.types.Operator, ExportHelper):
             else Matrix()
         )
 
-        options = self.as_keywords(
-            ignore=(
-                "check_existing",
-                "filter_glob",
-                "filepath",
-                "version",
-                "overwrite_aqn",
-            )
+        options = cast(
+            export_model.ExportOptions,
+            self.as_keywords(
+                ignore=(
+                    "check_existing",
+                    "filter_glob",
+                    "filepath",
+                    "version",
+                    "overwrite_aqn",
+                )
+            ),
         )
         # pylint: disable-next=unsupported-assignment-operation
         options["global_matrix"] = global_matrix
@@ -314,7 +323,7 @@ class PSO2_OT_ExportAqp(bpy.types.Operator, ExportHelper):
             path,
             is_ngs=self.game_version == "NGS",
             overwrite_aqn=self.overwrite_aqn,
-            fbx_options=options,
+            options=options,
         )
 
 
@@ -376,6 +385,7 @@ def export_panel_armature(layout: bpy.types.UILayout, operator):
         body.prop(operator, "armature_nodetype")
         body.prop(operator, "use_armature_deform_only")
         body.prop(operator, "add_leaf_bones")
+        body.prop(operator, "rigid")
 
 
 def export_panel_animation(layout: bpy.types.UILayout, operator):
@@ -390,4 +400,5 @@ def export_panel_animation(layout: bpy.types.UILayout, operator):
         body.prop(operator, "bake_anim_use_all_actions")
         body.prop(operator, "bake_anim_force_startend_keying")
         body.prop(operator, "bake_anim_step")
+        body.prop(operator, "bake_anim_simplify_factor")
         body.prop(operator, "bake_anim_simplify_factor")

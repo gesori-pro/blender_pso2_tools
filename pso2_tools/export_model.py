@@ -1,14 +1,61 @@
 from contextlib import contextmanager
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any, Iterable, cast
+from typing import Any, Iterable, TypedDict, cast, get_type_hints
 
 import bpy
 from AquaModelLibrary.Core.General import AssimpModelImporter
 from AquaModelLibrary.Data.PSO2.Aqua import AquaNode, AquaObject, AquaPackage
+from mathutils import Matrix
 
 from . import fbx_wrapper
 from .util import OperatorResult
+
+
+class FbxExportOptions(TypedDict, total=False):
+    use_selection: bool
+    use_visible: bool
+    use_active_collection: bool
+    collection: str
+
+    global_matrix: Matrix
+    apply_unit_scale: bool
+    global_scale: float
+    apply_scale_options: str
+    axis_up: str
+    axis_forward: str
+    context_objects: Any
+    object_types: Any
+    use_mesh_modifiers: bool
+    use_mesh_modifiers_render: bool
+    mesh_smooth_type: str
+    use_subsurf: bool
+    use_armature_deform_only: bool
+    bake_anim: bool
+    bake_anim_use_all_bones: bool
+    bake_anim_use_nla_strips: bool
+    bake_anim_use_all_actions: bool
+    bake_anim_step: float
+    bake_anim_simplify_factor: float
+    bake_anim_force_startend_keying: bool
+    add_leaf_bones: bool
+    primary_bone_axis: str
+    secondary_bone_axis: str
+    use_metadata: bool
+    path_mode: str
+    use_mesh_edges: bool
+    use_tspace: bool
+    use_triangles: bool
+    embed_textures: bool
+    use_custom_props: bool
+    bake_space_transform: bool
+    armature_nodetype: str
+    colors_type: str
+    prioritize_active_color: bool
+
+
+class ExportOptions(FbxExportOptions, total=False):
+    rigid: bool
 
 
 def export(
@@ -17,16 +64,18 @@ def export(
     path: Path,
     is_ngs=True,
     overwrite_aqn=False,
-    fbx_options: dict[str, Any] | None = None,
+    options: ExportOptions | None = None,
 ) -> OperatorResult:
-    fbx_options = fbx_options or {}
+    options = options or {}
 
     with TemporaryDirectory() as tempdir:
         fbxfile = Path(tempdir) / path.with_suffix(".fbx").name
 
         # Make sure the armature is included for everything that will be exported,
         # or the exported FBX will convert to a broken AQP.
-        with _include_parents(context, fbx_options):
+        with _include_parents(context, options):
+            fbx_options = _get_fbx_options(options)
+
             result = fbx_wrapper.save(
                 operator, context, filepath=str(fbxfile), **fbx_options
             )
@@ -42,7 +91,12 @@ def export(
         model, aqn = cast(
             tuple[AquaObject, AquaNode],
             AssimpModelImporter.AssimpAquaConvertFull(
-                str(fbxfile), 1, False, is_ngs, AquaNode()
+                initialFilePath=str(fbxfile),
+                scaleFactor=1,
+                preAssignNodeIds=False,
+                isNGS=is_ngs,
+                aqn=AquaNode(),
+                rigidImport=options.get("rigid", False),
             ),
         )
 
@@ -57,7 +111,7 @@ def export(
 
 
 @contextmanager
-def _include_parents(context: bpy.types.Context, fbx_options: dict[str, Any]):
+def _include_parents(context: bpy.types.Context, fbx_options: ExportOptions):
     shown_objects: set[bpy.types.Object] = set()
     viewport_shown_objects: set[bpy.types.Object] = set()
 
@@ -111,3 +165,13 @@ def _get_visible_meshes(objects: Iterable[bpy.types.Object]):
 
 def _get_selected_meshes(objects: Iterable[bpy.types.Object]):
     return (obj for obj in objects if obj.type == "MESH" and obj.select_get())
+
+
+def _get_fbx_options(options: ExportOptions):
+    result = FbxExportOptions()
+
+    for key in get_type_hints(FbxExportOptions).keys():
+        if key in options:
+            result[key] = options[key]
+
+    return result

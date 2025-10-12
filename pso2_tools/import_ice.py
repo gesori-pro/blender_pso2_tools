@@ -27,9 +27,7 @@ class PSO2_OT_ImportIce(  # type: ignore https://github.com/nutti/fake-bpy-modul
     def execute(self, context) -> OperatorResult:
         path = Path(self.filepath)  # pylint: disable=no-member # type: ignore
 
-        import_model.import_ice_file(
-            self, context, path, fbx_options=self.get_fbx_options()
-        )
+        import_model.import_ice_file(self, context, path, options=self.get_options())
 
         return {"FINISHED"}
 

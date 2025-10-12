@@ -1,7 +1,9 @@
-from typing import Any, Iterable, cast
+from typing import Iterable, cast
 
 import bpy
 from bpy_extras.io_utils import orientation_helper
+
+from .import_model import ImportOptions
 
 
 @orientation_helper(axis_forward="-Z", axis_up="Y")  # type: ignore https://github.com/nutti/fake-bpy-module/issues/376
@@ -64,13 +66,18 @@ class CommonImportProps:
         default="Y",
     )
 
-    def get_fbx_options(self, ignore: Iterable[str] | None = None):
+    include_tangent_binormal: bpy.props.BoolProperty(
+        name="Import Tangents",
+        description="Import tangent and binormal vectors",
+        default=True,
+    )
+
+    def get_options(self, ignore: Iterable[str] | None = None) -> ImportOptions:
         operator = cast(bpy.types.Operator, self)
         ignore = ignore or ()
 
-        # https://github.com/nutti/fake-bpy-module/issues/376
         keywords = cast(
-            dict[str, Any],
+            ImportOptions,
             # pylint: disable-next=no-member
             operator.as_keywords(ignore=("filter_glob", "filepath", *ignore)),
         )
@@ -85,12 +92,15 @@ class CommonImportProps:
         layout.use_property_decorate = False
 
         import_panel_transform_orientation(layout, operator)
-        import_panel_animation(layout, operator)
+        import_panel_geometry(layout, operator)
         import_panel_armature(layout, operator)
+        import_panel_animation(layout, operator)
 
     def draw_import_props_column(self, layout: bpy.types.UILayout):
-        layout.label(text="Armature", icon="ARMATURE_DATA")
+        layout.label(text="Geometry", icon="LATTICE_DATA")
+        layout.prop(self, "include_tangent_binormal")
 
+        layout.label(text="Armature", icon="ARMATURE_DATA")
         layout.prop(self, "ignore_leaf_bones")
         layout.prop(self, "force_connect_children")
         layout.prop(self, "automatic_bone_orientation")
@@ -123,6 +133,13 @@ def import_panel_animation(layout: bpy.types.UILayout, operator: bpy.types.Opera
     if body:
         body.enabled = operator.use_anim  # type: ignore
         body.prop(operator, "anim_offset")
+
+
+def import_panel_geometry(layout: bpy.types.UILayout, operator):
+    header, body = layout.panel("PSO2_import_geometry", default_closed=False)
+    header.label(text="Geometry")
+    if body:
+        body.prop(operator, "include_tangent_binormal")
 
 
 def import_panel_armature(layout: bpy.types.UILayout, operator: bpy.types.Operator):

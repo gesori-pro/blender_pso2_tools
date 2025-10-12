@@ -306,7 +306,7 @@ class PSO2_OT_ModelSearch(bpy.types.Operator, import_props.CommonImportProps):
 
         preferences = get_preferences(context)
         layout = self.layout
-        split = layout.split(factor=0.75)
+        split = layout.split(factor=0.7)
 
         col = split.column()
         col.context_pointer_set("parent", self)
@@ -325,12 +325,12 @@ class PSO2_OT_ModelSearch(bpy.types.Operator, import_props.CommonImportProps):
         col.use_property_decorate = False
         col.context_pointer_set("parent", self)
 
-        row = col.row(align=True)
-        row.use_property_split = False
-        row.props_enum(self, "model_file")
-
         if obj := self.get_selected_object():
             meta = ModelMetadata.from_object(obj, preferences.get_pso2_data_path())
+
+            row = col.row(align=True)
+            row.use_property_split = False
+            row.props_enum(self, "model_file")
 
             if meta.has_linked_inner:
                 col.label(text="Has linked innerwear")
@@ -349,7 +349,7 @@ class PSO2_OT_ModelSearch(bpy.types.Operator, import_props.CommonImportProps):
 
             col.separator(type="LINE")
             self.draw_import_props_column(col)
-            col.separator(factor=2, type="LINE")
+            col.separator(factor=4, type="LINE")
 
         col.operator(PSO2_OT_UpdateModelList.bl_idname, text="Update Model List")
 
@@ -361,7 +361,7 @@ class PSO2_OT_ModelSearch(bpy.types.Operator, import_props.CommonImportProps):
                 context,
                 obj,
                 high_quality=high_quality,
-                fbx_options=self.get_fbx_options(
+                options=self.get_options(
                     ignore=("models", "models_index", "model_file")
                 ),
             )

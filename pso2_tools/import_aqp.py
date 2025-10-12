@@ -28,7 +28,7 @@ class PSO2_OT_ImportAqp(  # type: ignore https://github.com/nutti/fake-bpy-modul
         path = Path(self.filepath)  # pylint: disable=no-member # type: ignore
 
         import_model.import_aqp_file(
-            self, context, path, fbx_options=self.get_fbx_options()
+            self, context, path, fbx_options=self.get_options()
         )
 
         return {"FINISHED"}
