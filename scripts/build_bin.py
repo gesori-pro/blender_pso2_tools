@@ -31,8 +31,10 @@ STUB_GENERATOR_SLN = ROOT / "pythonnet-stub-generator/csharp/PythonNetStubGenera
 PACKAGES_PATH = ROOT / "packages"
 PACKAGES = [
     ("AssimpNet", "5.0.0-beta1"),
+    ("Pfim", "0.11.3"),
     ("Reloaded.Memory", "9.4.2"),
     ("System.Drawing.Common", "8.0.11"),
+    ("ZstdNet", "1.4.5"),
 ]
 
 
@@ -74,7 +76,7 @@ def install_packages():
 
 
 def copy_package_dlls():
-    frameworks = [FRAMEWORK, "netstandard1.3"]
+    frameworks = [FRAMEWORK, "netstandard2.1", "netstandard2.0", "netstandard1.3"]
 
     for package, version in PACKAGES:
         src = PACKAGES_PATH / f"{package}.{version}"
