@@ -10,7 +10,7 @@ class Shader1110(shader_1100.Shader1100):
         super().build(context)
 
         tree = builder.NodeTreeBuilder(self.tree)
-        diffuse = tree.tree.nodes["PSO2 Colorize"]
+        diffuse = tree.tree.nodes["PSO2 Colorize Mix"]
         shader = tree.tree.nodes["PSO2 NGS"]
         output = tree.tree.nodes["Material Output"]
 

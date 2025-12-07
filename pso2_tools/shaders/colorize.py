@@ -1,3 +1,5 @@
+from typing import Literal
+
 import bpy
 
 from .. import classes
@@ -5,11 +7,8 @@ from ..colors import ColorId, ColorMapping
 from . import builder, group
 
 
-@classes.register
-class ShaderNodePso2Colorize(group.ShaderNodeCustomGroup):
-    bl_name = "ShaderNodePso2Colorize"
-    bl_label = "PSO2 Colorize"
-    bl_icon = "NONE"
+class ShaderNodePso2ColorizeBase(group.ShaderNodeCustomGroup):
+    operation: Literal["MIX", "MULTIPLY"] = "MIX"
 
     def _set_channel_used(self, channel: int, used: bool):
         self.input(bpy.types.NodeSocketBool, f"Use Color {channel}").default_value = (
@@ -75,22 +74,22 @@ class ShaderNodePso2Colorize(group.ShaderNodeCustomGroup):
 
         color1 = tree.add_node(bpy.types.ShaderNodeMix, name="Color 1")
         color1.data_type = "RGBA"
-        color1.blend_type = "MIX"
+        color1.blend_type = self.operation
         color1.clamp_factor = True
 
         color2 = tree.add_node(bpy.types.ShaderNodeMix, name="Color 2")
         color2.data_type = "RGBA"
-        color2.blend_type = "MIX"
+        color2.blend_type = self.operation
         color2.clamp_factor = True
 
         color3 = tree.add_node(bpy.types.ShaderNodeMix, name="Color 3")
         color3.data_type = "RGBA"
-        color3.blend_type = "MIX"
+        color3.blend_type = self.operation
         color3.clamp_factor = True
 
         color4 = tree.add_node(bpy.types.ShaderNodeMix, name="Color 4")
         color4.data_type = "RGBA"
-        color4.blend_type = "MIX"
+        color4.blend_type = self.operation
         color4.clamp_factor = True
 
         tree.add_link(group_inputs.outputs["Input"], color1.inputs["A"])
@@ -110,3 +109,21 @@ class ShaderNodePso2Colorize(group.ShaderNodeCustomGroup):
         tree.add_link(alpha_used.outputs[0], color4.inputs["Factor"])
 
         tree.add_link(color4.outputs["Result"], group_outputs.inputs["Result"])
+
+
+@classes.register
+class ShaderNodePso2Colorize(ShaderNodePso2ColorizeBase):
+    bl_name = "ShaderNodePso2Colorize"
+    bl_label = "PSO2 Colorize Mix"
+    bl_icon = "NONE"
+
+    operation = "MIX"
+
+
+@classes.register
+class ShaderNodePso2ColorizeMultiply(ShaderNodePso2ColorizeBase):
+    bl_name = "ShaderNodePso2ColorizeMultiply"
+    bl_label = "PSO2 Colorize Multiply"
+    bl_icon = "NONE"
+
+    operation = "MULTIPLY"

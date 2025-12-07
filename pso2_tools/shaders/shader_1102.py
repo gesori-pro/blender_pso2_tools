@@ -4,7 +4,7 @@ from .. import scene_props
 from ..colors import ColorId, ColorMapping
 from . import attributes, builder
 from .attributes import ShaderNodePso2ShowInnerwear
-from .colorize import ShaderNodePso2Colorize
+from .colorize import ShaderNodePso2Colorize, ShaderNodePso2ColorizeMultiply
 from .colors import ShaderNodePso2Colorchannels
 from .mix import ShaderNodePso2MixTextureAttribute
 from .ngs import ShaderNodePso2Ngs, ShaderNodePso2NgsSkin
@@ -78,7 +78,9 @@ class Shader1102(builder.ShaderBuilder):
         tree.add_link(mask_1.outputs["Color"], mask_mix.inputs["Color 2"])
         tree.add_link(mask_1.outputs["Alpha"], mask_mix.inputs["Alpha 2"])
 
-        colorize = skin.add_node(ShaderNodePso2Colorize, (26, 14), name="Skin Colorize")
+        colorize = skin.add_node(
+            ShaderNodePso2ColorizeMultiply, (26, 14), name="Skin Colorize"
+        )
 
         tree.add_link(diffuse_mix.outputs["Color"], colorize.inputs["Input"])
         tree.add_link(mask_mix.outputs["Color"], colorize.inputs["Mask RGB"])
