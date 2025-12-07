@@ -1,18 +1,18 @@
+import math
 import sys
 import time
 from collections.abc import Sequence
 from contextlib import closing
 from dataclasses import dataclass, fields
 from pathlib import Path
-from typing import Iterable, Optional, Type, cast
+from typing import Any, Iterable, Optional, Type, cast
 
 import bpy
 
-from . import classes, import_model, import_props, objects
-from .colors import COLOR_CHANNELS, ColorId
+from . import ccl, classes, import_model, import_props, objects
+from .colors import COLOR_CHANNELS, Color, ColorId
 from .debug import debug_print
-from .objects import ObjectType
-from .preferences import get_preferences
+from .preferences import Pso2ToolsPreferences, color_property, get_preferences
 from .util import BlenderIcon, OperatorResult
 
 
@@ -38,8 +38,6 @@ class ModelMetadata:
 class FloatItem(bpy.types.PropertyGroup):
     name: bpy.props.StringProperty(name="Name")
     value: bpy.props.FloatProperty(name="Value")
-
-    INVALID = float("inf")
 
 
 @classes.register
@@ -83,21 +81,21 @@ class ColorMapItem(bpy.types.PropertyGroup):
 
 
 _GENDERED_OBJECT_TYPES = [
-    str(ObjectType.BASEWEAR),
-    str(ObjectType.BODYPAINT),
-    str(ObjectType.CAST_ARMS),
-    str(ObjectType.CAST_BODY),
-    str(ObjectType.CAST_LEGS),
-    str(ObjectType.COSTUME),
-    str(ObjectType.FACE),
-    str(ObjectType.FACE_TEXTURE),
-    str(ObjectType.INNERWEAR),
-    str(ObjectType.OUTERWEAR),
-    str(ObjectType.SKIN),
+    str(objects.ObjectType.BASEWEAR),
+    str(objects.ObjectType.BODYPAINT),
+    str(objects.ObjectType.CAST_ARMS),
+    str(objects.ObjectType.CAST_BODY),
+    str(objects.ObjectType.CAST_LEGS),
+    str(objects.ObjectType.COSTUME),
+    str(objects.ObjectType.FACE),
+    str(objects.ObjectType.FACE_TEXTURE),
+    str(objects.ObjectType.INNERWEAR),
+    str(objects.ObjectType.OUTERWEAR),
+    str(objects.ObjectType.SKIN),
 ]
 
 _VERSIONLESS_OBJECT_TYPES = [
-    str(ObjectType.STICKER),
+    str(objects.ObjectType.STICKER),
 ]
 
 
@@ -106,27 +104,27 @@ class ListItem(bpy.types.PropertyGroup):
     object_type: bpy.props.EnumProperty(
         name="Type",
         items=[
-            (str(ObjectType.ACCESSORY), "Accessory", "Accessory"),
-            (str(ObjectType.BASEWEAR), "Basewear", "Basewear"),
-            (str(ObjectType.BODYPAINT), "Bodypaint", "Bodypaint"),
-            (str(ObjectType.CAST_ARMS), "Cast Arms", "Cast Arms"),
-            (str(ObjectType.CAST_BODY), "Cast Body", "Cast Body"),
-            (str(ObjectType.CAST_LEGS), "Cast Legs", "Cast Legs"),
-            (str(ObjectType.COSTUME), "Costume", "Costume"),
-            (str(ObjectType.EAR), "Ears", "Ears"),
-            (str(ObjectType.EYE), "Eyes", "Eyes"),
-            (str(ObjectType.EYEBROW), "Eyebrows", "Eyebrows"),
-            (str(ObjectType.EYELASH), "Eyelashes", "Eyelashes"),
-            (str(ObjectType.FACE), "Face", "Face"),
-            (str(ObjectType.FACE_TEXTURE), "Face Texture", "Face texture"),
-            (str(ObjectType.FACEPAINT), "Facepaint", "Facepaint"),
-            (str(ObjectType.HAIR), "Hair", "Hair"),
-            (str(ObjectType.HORN), "Horns", "Horns"),
-            (str(ObjectType.INNERWEAR), "Innerwear", "Innerwear"),
-            (str(ObjectType.OUTERWEAR), "Outerwear", "Outerwear"),
-            (str(ObjectType.SKIN), "Skin", "Skin"),
-            (str(ObjectType.STICKER), "Sticker", "Sticker"),
-            (str(ObjectType.TEETH), "Teeth", "Teeth"),
+            (str(objects.ObjectType.ACCESSORY), "Accessory", "Accessory"),
+            (str(objects.ObjectType.BASEWEAR), "Basewear", "Basewear"),
+            (str(objects.ObjectType.BODYPAINT), "Bodypaint", "Bodypaint"),
+            (str(objects.ObjectType.CAST_ARMS), "Cast Arms", "Cast Arms"),
+            (str(objects.ObjectType.CAST_BODY), "Cast Body", "Cast Body"),
+            (str(objects.ObjectType.CAST_LEGS), "Cast Legs", "Cast Legs"),
+            (str(objects.ObjectType.COSTUME), "Costume", "Costume"),
+            (str(objects.ObjectType.EAR), "Ears", "Ears"),
+            (str(objects.ObjectType.EYE), "Eyes", "Eyes"),
+            (str(objects.ObjectType.EYEBROW), "Eyebrows", "Eyebrows"),
+            (str(objects.ObjectType.EYELASH), "Eyelashes", "Eyelashes"),
+            (str(objects.ObjectType.FACE), "Face", "Face"),
+            (str(objects.ObjectType.FACE_TEXTURE), "Face Texture", "Face texture"),
+            (str(objects.ObjectType.FACEPAINT), "Facepaint", "Facepaint"),
+            (str(objects.ObjectType.HAIR), "Hair", "Hair"),
+            (str(objects.ObjectType.HORN), "Horns", "Horns"),
+            (str(objects.ObjectType.INNERWEAR), "Innerwear", "Innerwear"),
+            (str(objects.ObjectType.OUTERWEAR), "Outerwear", "Outerwear"),
+            (str(objects.ObjectType.SKIN), "Skin", "Skin"),
+            (str(objects.ObjectType.STICKER), "Sticker", "Sticker"),
+            (str(objects.ObjectType.TEETH), "Teeth", "Teeth"),
         ],
     )
     name_en: bpy.props.StringProperty(name="English Name")
@@ -139,6 +137,9 @@ class ListItem(bpy.types.PropertyGroup):
     int_fields: bpy.props.CollectionProperty(type=IntItem)
     string_fields: bpy.props.CollectionProperty(type=StringItem)
     color_map_fields: bpy.props.CollectionProperty(type=ColorMapItem)
+
+    # Extra metadata for sort
+    leg_length: bpy.props.FloatProperty(name="Leg Length")
 
     @property
     def item_name(self) -> str:
@@ -164,6 +165,11 @@ class ListItem(bpy.types.PropertyGroup):
         self.name_en = obj.name_en
         self.name_jp = obj.name_jp
 
+        if isinstance(obj, objects.CmxBodyObject) and obj.leg_length is not None:
+            self.leg_length = obj.leg_length
+        else:
+            self.leg_length = 0
+
         for field in fields(obj):
             if field.name in ("object_type", "id", "adjusted_id", "name_en", "name_jp"):
                 continue
@@ -174,7 +180,7 @@ class ListItem(bpy.types.PropertyGroup):
             if field.type in (float, Optional[float]):
                 prop = cast(FloatItem, self.float_fields.add())
                 prop.name = name
-                prop.value = FloatItem.INVALID if value is None else value
+                prop.value = math.nan if value is None else value
 
             elif field.type in (int, Optional[int]):
                 prop = cast(IntItem, self.float_fields.add())
@@ -203,7 +209,7 @@ class ListItem(bpy.types.PropertyGroup):
                 raise NotImplementedError(f"Unhandled field type {field.type}")
 
     def to_object(self):
-        object_type = ObjectType(self.object_type)
+        object_type = objects.ObjectType(self.object_type)
         cls = _get_object_class(object_type)
         obj = cls(
             object_type=object_type,
@@ -220,7 +226,7 @@ class ListItem(bpy.types.PropertyGroup):
             setattr(
                 obj,
                 float_item.name,
-                None if float_item.value == FloatItem.INVALID else float_item.value,
+                None if math.isnan(float_item.value) else float_item.value,
             )
 
         for int_item in self.int_fields:
@@ -239,35 +245,43 @@ class ListItem(bpy.types.PropertyGroup):
         return obj
 
 
-def _get_object_class(object_type: ObjectType) -> Type[objects.CmxObjectBase]:
+def _get_object_class(object_type: objects.ObjectType) -> Type[objects.CmxObjectBase]:
     match object_type:
-        case ObjectType.ACCESSORY:
+        case objects.ObjectType.ACCESSORY:
             return objects.CmxAccessory
-        case ObjectType.BASEWEAR | ObjectType.COSTUME | ObjectType.OUTERWEAR:
+        case (
+            objects.ObjectType.BASEWEAR
+            | objects.ObjectType.COSTUME
+            | objects.ObjectType.OUTERWEAR
+        ):
             return objects.CmxBodyObject
-        case ObjectType.CAST_ARMS | ObjectType.CAST_BODY | ObjectType.CAST_LEGS:
+        case (
+            objects.ObjectType.CAST_ARMS
+            | objects.ObjectType.CAST_BODY
+            | objects.ObjectType.CAST_LEGS
+        ):
             return objects.CmxBodyObject
-        case ObjectType.BODYPAINT | ObjectType.INNERWEAR:
+        case objects.ObjectType.BODYPAINT | objects.ObjectType.INNERWEAR:
             return objects.CmxBodyPaint
-        case ObjectType.EAR:
+        case objects.ObjectType.EAR:
             return objects.CmxEarObject
-        case ObjectType.EYE:
+        case objects.ObjectType.EYE:
             return objects.CmxEyeObject
-        case ObjectType.EYEBROW | ObjectType.EYELASH:
+        case objects.ObjectType.EYEBROW | objects.ObjectType.EYELASH:
             return objects.CmxEyebrowObject
-        case ObjectType.FACE:
+        case objects.ObjectType.FACE:
             return objects.CmxFaceObject
-        case ObjectType.FACE_TEXTURE | ObjectType.FACEPAINT:
+        case objects.ObjectType.FACE_TEXTURE | objects.ObjectType.FACEPAINT:
             return objects.CmxFacePaint
-        case ObjectType.HAIR:
+        case objects.ObjectType.HAIR:
             return objects.CmxHairObject
-        case ObjectType.HORN:
+        case objects.ObjectType.HORN:
             return objects.CmxHornObject
-        case ObjectType.SKIN:
+        case objects.ObjectType.SKIN:
             return objects.CmxSkinObject
-        case ObjectType.STICKER:
+        case objects.ObjectType.STICKER:
             return objects.CmxSticker
-        case ObjectType.TEETH:
+        case objects.ObjectType.TEETH:
             return objects.CmxTeethObject
         case _:
             raise NotImplementedError(f"Unhandled item type {object_type}")
@@ -293,9 +307,63 @@ class PSO2_OT_ModelSearch(bpy.types.Operator, import_props.CommonImportProps):
         data_path = get_preferences(context).get_pso2_data_path()
         return _get_file_items(selected.files, data_path)
 
+    def _get_selected_model_colors(
+        self,
+        context: bpy.types.Context | None,
+    ) -> Iterable[tuple[str, str, str]]:
+        if context is None:
+            return []
+
+        try:
+            selected: ListItem = self.models[self.models_index]
+        except IndexError:
+            return []
+
+        return _get_color_sets_enum(selected, context)
+
+    def _update_color_set_colors(self, context: bpy.types.Context):
+        try:
+            item: ListItem = self.models[self.models_index]
+        except IndexError:
+            return
+
+        if (
+            color_set := _get_selected_color_set(item, int(self.color_set), context)
+        ) and (
+            channels := color_set.get_channels(objects.ObjectType(item.object_type))
+        ):
+            prop1 = COLOR_CHANNELS[channels[0]].prop
+            prop2 = COLOR_CHANNELS[channels[1]].prop
+
+            self.color_set_channel_1 = prop1
+            self.color_set_channel_2 = prop2
+
+            setattr(self, prop1, ccl.int_to_color(color_set.color1))
+            setattr(self, prop2, ccl.int_to_color(color_set.color2))
+        else:
+            self.color_set_channel_1 = ""
+            self.color_set_channel_2 = ""
+
     models: bpy.props.CollectionProperty(name="Models", type=ListItem)
-    models_index: bpy.props.IntProperty(name="Selected Index", default=-1)
+    models_index: bpy.props.IntProperty(
+        name="Selected Index", default=-1, update=_update_color_set_colors
+    )
     model_file: bpy.props.EnumProperty(name="File", items=_get_selected_model_files)
+
+    color_set: bpy.props.EnumProperty(
+        name="Color Set",
+        items=_get_selected_model_colors,
+        update=_update_color_set_colors,
+    )
+    outer_color_1: color_property(ColorId.OUTER1, "Primary outerwear color")
+    outer_color_2: color_property(ColorId.OUTER2, "Secondary outerwear color")
+    base_color_1: color_property(ColorId.BASE1, "Primary basewear color")
+    base_color_2: color_property(ColorId.BASE2, "Secondary basewear color")
+    inner_color_1: color_property(ColorId.INNER1, "Primary innerwear color")
+    inner_color_2: color_property(ColorId.INNER2, "Secondary innerwear color")
+
+    color_set_channel_1: bpy.props.StringProperty()
+    color_set_channel_2: bpy.props.StringProperty()
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -328,27 +396,42 @@ class PSO2_OT_ModelSearch(bpy.types.Operator, import_props.CommonImportProps):
         if obj := self.get_selected_object():
             meta = ModelMetadata.from_object(obj, preferences.get_pso2_data_path())
 
-            row = col.row(align=True)
-            row.use_property_split = False
-            row.props_enum(self, "model_file")
+            col.prop(self, "model_file")
 
-            if meta.has_linked_inner:
-                col.label(text="Has linked innerwear")
-
-            if meta.has_linked_outer:
-                col.label(text="Has linked outerwear")
-
-            if meta.leg_length:
-                col.label(text=f"Leg length: {meta.leg_length:.3f}")
-
+            # Colors
             if colors := sorted(obj.get_colors()):
                 col.separator(type="LINE")
                 col.label(text="Colors", icon="COLOR")
-                for color in colors:
-                    col.prop(preferences, COLOR_CHANNELS[color].prop)
 
-            col.separator(type="LINE")
+                if _object_has_color_sets(obj, context):
+                    col.prop(self, "color_set")
+                    col.separator()
+
+                for color in colors:
+                    color_data, color_prop, color_enabled = self._get_color_prop(
+                        context, color, preferences
+                    )
+
+                    color_row = col.row()
+                    color_row.enabled = color_enabled
+                    color_row.prop(color_data, color_prop)
+
+            col.separator()
             self.draw_import_props_column(col)
+            col.separator()
+
+            # Metadata
+            if meta.leg_length:
+                col.label(text=f"Leg length: {meta.leg_length:.3g}")
+
+            grid = col.grid_flow(columns=2)
+
+            if meta.has_linked_inner:
+                grid.label(text="Linked innerwear")
+
+            if meta.has_linked_outer:
+                grid.label(text="Linked outerwear")
+
             col.separator(factor=4, type="LINE")
 
         col.operator(PSO2_OT_UpdateModelList.bl_idname, text="Update Model List")
@@ -361,9 +444,7 @@ class PSO2_OT_ModelSearch(bpy.types.Operator, import_props.CommonImportProps):
                 context,
                 obj,
                 high_quality=high_quality,
-                options=self.get_options(
-                    ignore=("models", "models_index", "model_file")
-                ),
+                options=self.get_object_options(obj),
             )
             return {"FINISHED"}
 
@@ -376,14 +457,69 @@ class PSO2_OT_ModelSearch(bpy.types.Operator, import_props.CommonImportProps):
             self, width=800, confirm_text="Import"
         )
 
-    def get_selected_object(self) -> objects.CmxObjectBase | None:
-        if self.models_index < 0:
-            return None
+    def get_selected_object(self):
+        return _get_selected_object(self)
 
-        try:
-            return self.models[self.models_index].to_object()
-        except IndexError:
-            return None
+    def get_object_options(self, obj: objects.CmxObjectBase):
+        options = super().get_options(
+            ignore=(
+                "models",
+                "models_index",
+                "model_file",
+                "color_set",
+                "color_set_channel_1",
+                "color_set_channel_2",
+                "outer_color_1",
+                "outer_color_2",
+                "base_color_1",
+                "base_color_2",
+                "inner_color_1",
+                "inner_color_2",
+            )
+        )
+        options["colors"] = self._get_color_set_dict(obj)
+        return options
+
+    def _get_color_set_dict(self, obj: objects.CmxObjectBase) -> dict[str, Color]:
+        result = {}
+
+        for color in obj.get_colors():
+            channel = COLOR_CHANNELS[color]
+
+            if channel.prop in (self.color_set_channel_1, self.color_set_channel_2):
+                result[channel.custom_property_name] = getattr(self, channel.prop)
+
+        return result
+
+    def _get_color_prop(
+        self,
+        context: bpy.types.Context,
+        color: ColorId,
+        preferences: Pso2ToolsPreferences,
+    ) -> tuple[Any, str, bool]:
+        """Get (data, prop, enabled) for a color channel"""
+        channel = COLOR_CHANNELS[color]
+
+        # If this object has a color set, use the selected color set's colors (read-only)
+        if channel.prop in (self.color_set_channel_1, self.color_set_channel_2):
+            return self, channel.prop, False
+
+        # If we've imported a model before, use the scene properties
+        if hasattr(context.scene, channel.custom_property_name):
+            return context.scene, channel.custom_property_name, True
+
+        # Otherwise use the defaults from preferences
+        return preferences, channel.prop, True
+
+
+def _get_selected_object(self: PSO2_OT_ModelSearch) -> objects.CmxObjectBase | None:
+    if self.models_index < 0:
+        return None
+
+    try:
+        return self.models[self.models_index].to_object()
+    except IndexError:
+        return None
 
 
 def _get_file_items(items: Iterable[FileNameItem], data_path: Path):
@@ -399,6 +535,36 @@ def _get_file_items(items: Iterable[FileNameItem], data_path: Path):
 
     if normal.exists(data_path):
         yield ("NQ", "Normal Quality", "Select normal quality model")
+
+
+def _get_color_sets(item: ListItem, context: bpy.types.Context):
+    with closing(objects.ObjectDatabase(context)) as db:
+        return db.get_color_sets(item.object_type, item.adjusted_id)
+
+
+def _get_color_sets_enum(item: ListItem, context: bpy.types.Context):
+    color_sets = _get_color_sets(item, context)
+    names = [s.name_en or s.name_jp or "" for s in color_sets.sets]
+
+    for i, name in enumerate(names):
+        yield (str(i), name or "Unnamed", "")
+
+    yield (str(len(names)), "Custom colors", "")
+
+
+def _get_selected_color_set(item: ListItem, index: int, context: bpy.types.Context):
+    color_sets = _get_color_sets(item, context)
+
+    try:
+        return color_sets.sets[index]
+    except IndexError:
+        return None
+
+
+def _object_has_color_sets(obj: objects.CmxObjectBase, context: bpy.types.Context):
+    with closing(objects.ObjectDatabase(context)) as db:
+        result = db.get_color_sets(obj.object_type, obj.adjusted_id)
+        return bool(result.sets)
 
 
 def _populate_model_list(collection, context: bpy.types.Context):
@@ -542,11 +708,26 @@ class PSO2_UL_ModelList(bpy.types.UIList):
                 if str(item.object_type) not in show_types:
                     hide_item(idx)
 
-        if preferences.model_search_sort_alpha:
-            flt_neworder = bpy.types.UI_UL_list.sort_items_by_name(items, "sort_name")
-        else:
-            _sort = [(idx, item.object_id) for idx, item in enumerate(items)]
-            flt_neworder = bpy.types.UI_UL_list.sort_items_helper(_sort, lambda e: e[1])
+        match preferences.model_search_sort:
+            case "ALPHA":
+                flt_neworder = bpy.types.UI_UL_list.sort_items_by_name(
+                    items, "sort_name"
+                )
+
+            case "LEG_LENGTH":
+                _sort = [
+                    (idx, (item.leg_length, item.sort_name))
+                    for idx, item in enumerate(items)
+                ]
+                flt_neworder = bpy.types.UI_UL_list.sort_items_helper(
+                    _sort, lambda e: e[1]
+                )
+
+            case _:
+                _sort = [(idx, item.object_id) for idx, item in enumerate(items)]
+                flt_neworder = bpy.types.UI_UL_list.sort_items_helper(
+                    _sort, lambda e: e[1]
+                )
 
         return flt_flags, flt_neworder
 
@@ -556,7 +737,7 @@ class PSO2_UL_ModelList(bpy.types.UIList):
         row = layout.row(align=True)
         row.activate_init = True
         row.prop(self, "filter_name", text="", icon="VIEWZOOM")
-        row.prop(preferences, "model_search_sort_alpha", text="", icon="SORTALPHA")
+        row.prop(preferences, "model_search_sort", expand=True, icon_only=True)
 
         row = layout.row(align=True)
         row.label(text="Filters")
@@ -588,47 +769,63 @@ class PSO2_UL_ModelList(bpy.types.UIList):
         self.use_filter_show = True
 
         if self.layout_type in {"DEFAULT", "COMPACT"}:
-            icon = _get_icon(ObjectType(item.object_type))
+            preferences = get_preferences(context)
+
+            icon = _get_icon(objects.ObjectType(item.object_type))
 
             row = layout.split(factor=0.5)
 
             row.label(text=item.item_name, icon=icon)
             row.label(text=item.description)
-            row.label(text=str(item.object_id))
+
+            match preferences.model_search_sort:
+                case "LEG_LENGTH":
+                    row.label(text=f"{item.leg_length:.3g}", icon="MOD_LENGTH")
+
+                case _:
+                    row.label(text=str(item.object_id))
 
         elif self.layout_type == "GRID":
             pass
 
 
-def _get_icon(object_type: ObjectType) -> BlenderIcon:
+def _get_icon(object_type: objects.ObjectType) -> BlenderIcon:
     match object_type:
-        case ObjectType.ACCESSORY:
+        case objects.ObjectType.ACCESSORY:
             return "MESH_TORUS"
-        case ObjectType.BASEWEAR | ObjectType.COSTUME | ObjectType.OUTERWEAR:
+        case (
+            objects.ObjectType.BASEWEAR
+            | objects.ObjectType.COSTUME
+            | objects.ObjectType.OUTERWEAR
+        ):
             return "MATCLOTH"
-        case ObjectType.CAST_ARMS | ObjectType.CAST_BODY | ObjectType.CAST_LEGS:
+        case (
+            objects.ObjectType.CAST_ARMS
+            | objects.ObjectType.CAST_BODY
+            | objects.ObjectType.CAST_LEGS
+        ):
             return "MATCLOTH"
-        case ObjectType.BODYPAINT | ObjectType.INNERWEAR:
+        case objects.ObjectType.BODYPAINT | objects.ObjectType.INNERWEAR:
             return "TEXTURE"
-        case ObjectType.EAR:
+        case objects.ObjectType.EAR:
             return "USER"
-        case ObjectType.EYE:
+        case objects.ObjectType.EYE:
             return "HIDE_OFF"
-        case ObjectType.EYEBROW | ObjectType.EYELASH:
+        case objects.ObjectType.EYEBROW | objects.ObjectType.EYELASH:
             return "HIDE_OFF"
-        case ObjectType.FACE:
+        case objects.ObjectType.FACE:
             return "USER"
-        case ObjectType.FACE_TEXTURE | ObjectType.FACEPAINT:
+        case objects.ObjectType.FACE_TEXTURE | objects.ObjectType.FACEPAINT:
             return "USER"
-        case ObjectType.HAIR:
+        case objects.ObjectType.HAIR:
             return "USER"
-        case ObjectType.HORN:
+        case objects.ObjectType.HORN:
             return "USER"
-        case ObjectType.SKIN:
+        case objects.ObjectType.SKIN:
             return "TEXTURE"
-        case ObjectType.STICKER:
+        case objects.ObjectType.STICKER:
             return "TEXTURE"
-        case ObjectType.TEETH:
+        case objects.ObjectType.TEETH:
             return "USER"
         case _:
             raise NotImplementedError(f"Unhandled item type {object_type}")

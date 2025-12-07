@@ -53,6 +53,7 @@ class FbxImportOptions(TypedDict, total=False):
 
 class ImportOptions(FbxImportOptions, total=False):
     include_tangent_binormal: bool
+    colors: dict[str, colors.Color]
 
 
 def import_object(
@@ -225,6 +226,10 @@ def _import_models(
     scene_props.add_scene_properties()
     scene_props.add_material_properties()
 
+    if options:
+        if import_colors := options.get("colors"):
+            _set_scene_colors(context, import_colors)
+
     # Collect extra textures that are not part of the model but are used by it.
     if model_materials.has_skin_material:
         model_materials.skin_textures = material.find_textures("rbd", "sk")
@@ -266,6 +271,13 @@ def _import_models(
         shaders.build_material(context, bpy.data.materials[key], data)
 
     return {"FINISHED"}
+
+
+def _set_scene_colors(
+    context: bpy.types.Context, import_colors: dict[str, colors.Color]
+):
+    for key, value in import_colors.items():
+        setattr(context.scene, key, value)
 
 
 def _get_ice_path(filename: objects.CmxFileName, data_path: Path, high_quality: bool):

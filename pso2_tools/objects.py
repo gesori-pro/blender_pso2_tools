@@ -3,8 +3,9 @@ import sqlite3
 from collections import defaultdict
 from dataclasses import dataclass, field, fields
 from enum import StrEnum
+from io import BytesIO
 from pathlib import Path
-from typing import Any, Generator, Iterable, Type, TypeVar
+from typing import Any, Callable, Generator, Iterable, Type, TypeVar
 
 import bpy
 import System
@@ -31,7 +32,7 @@ from AquaModelLibrary.Data.PSO2.Aqua.CharacterMakingIndexData import (
 from AquaModelLibrary.Data.PSO2.Constants import CharacterMakingDynamic
 from AquaModelLibrary.Data.Utility import ReferenceGenerator
 
-from . import datafile, ice, preferences
+from . import ccl, datafile, ice, preferences
 from .colors import ColorId, ColorMapping
 from .debug import debug_print
 from .paths import get_data_path
@@ -166,6 +167,16 @@ class CmxColorMapping(ColorMapping):
             green=ColorId(int(mapping.greenIndex)),
             blue=ColorId(int(mapping.blueIndex)),
             alpha=ColorId(int(mapping.alphaIndex)),
+        )
+
+    @classmethod
+    def from_bodypaint_obj(cls, obj: BBLYObject):
+        # TODO: unkInt0/1 are definitely used, but not sure about 2/3
+        return cls(
+            red=ColorId(int(obj.bbly.unkInt0)),
+            green=ColorId(int(obj.bbly.unkInt1)),
+            blue=ColorId(int(obj.bbly.unkInt2)),
+            alpha=ColorId(int(obj.bbly.unkInt3)),
         )
 
     @classmethod
@@ -304,6 +315,95 @@ def _db_type(cls: Type[Any] | str | Any) -> str:
     raise NotImplementedError(f"Unhandled type {cls}")
 
 
+_COLOR_SET_TYPES = [
+    ObjectType.BASEWEAR,
+    ObjectType.INNERWEAR,
+    ObjectType.OUTERWEAR,
+    ObjectType.COSTUME,
+]
+
+
+def _color_set_table(object_type: ObjectType):
+    return f"colors_{object_type}"
+
+
+@dataclass
+class CmxColorSet:
+    id: int
+    name_jp: str
+    name_en: str
+    color1: int
+    color2: int
+
+    @staticmethod
+    def get_channels(object_type: ObjectType) -> tuple[ColorId, ColorId] | None:
+        match object_type:
+            case ObjectType.OUTERWEAR:
+                return (ColorId.OUTER1, ColorId.OUTER1)
+
+            case ObjectType.BASEWEAR:
+                return (ColorId.BASE1, ColorId.BASE2)
+
+            case ObjectType.INNERWEAR:
+                return (ColorId.INNER1, ColorId.INNER2)
+
+            case _:
+                return None
+
+
+@dataclass
+class CmxColorSets:
+    base_id: int
+    sets: list[CmxColorSet]
+
+    @classmethod
+    def db_schema(cls, object_type: ObjectType):
+        return f"""
+        CREATE TABLE {_color_set_table(object_type)}(
+            id INTEGER NOT NULL PRIMARY KEY,
+            base_id INTEGER NOT NULL,
+            name_jp TEXT NOT NULL,
+            name_en TEXT NOT NULL,
+            color1 INTEGER NOT NULL,
+            color2 INTEGER NOT NULL
+        );
+        """
+
+    def db_insert(self, con: sqlite3.Connection, object_type: ObjectType):
+        for item in self.sets:
+            con.execute(
+                f"INSERT INTO colors_{object_type} VALUES(:id, :base_id, :name_jp, :name_en, :color1, :color2)",
+                (
+                    item.id,
+                    self.base_id,
+                    item.name_jp,
+                    item.name_en,
+                    item.color1,
+                    item.color2,
+                ),
+            )
+
+    @classmethod
+    def db_select(cls, con: sqlite3.Connection, object_type: ObjectType, base_id: int):
+        q = con.execute(
+            f"SELECT * FROM colors_{object_type} WHERE base_id=?", (base_id,)
+        )
+
+        return CmxColorSets(
+            base_id=base_id,
+            sets=[
+                CmxColorSet(
+                    id=row["id"],
+                    name_jp=row["name_jp"],
+                    name_en=row["name_en"],
+                    color1=row["color1"],
+                    color2=row["color2"],
+                )
+                for row in q
+            ],
+        )
+
+
 @dataclass
 class CmxObjectBase:
     object_type: ObjectType
@@ -417,7 +517,10 @@ class CmxAccessory(CmxObjectWithFile):
 @dataclass
 @register_object(ObjectType.BODYPAINT, ObjectType.INNERWEAR)
 class CmxBodyPaint(CmxObjectWithFile):
-    pass
+    color_mapping: CmxColorMapping = field(default_factory=CmxColorMapping)
+
+    def get_color_map(self) -> ColorMapping:
+        return self.color_mapping
 
 
 @dataclass
@@ -539,7 +642,7 @@ class CmxHornObject(CmxObjectWithFile):
 
 
 class ObjectDatabase:
-    VERSION = 4
+    VERSION = 7
 
     def __init__(self, context: bpy.types.Context):
         self.context = context
@@ -652,6 +755,15 @@ class ObjectDatabase:
 
         return [cls.from_db_row(object_type, row) for row in q]
 
+    def get_color_sets(self, object_type: ObjectType, item_id: int) -> CmxColorSets:
+        if object_type == ObjectType.CAST_BODY:
+            object_type = ObjectType.COSTUME
+
+        if object_type not in _COLOR_SET_TYPES:
+            return CmxColorSets(item_id, [])
+
+        return CmxColorSets.db_select(self.con, object_type, item_id)
+
     def update_database(self):
         bin_path = preferences.get_preferences(self.context).get_pso2_bin_path()
 
@@ -663,12 +775,14 @@ class ObjectDatabase:
             )
         )
 
+        colors = _get_ccl(bin_path)
+
         with self.con:
             self._reset_db()
 
             self._read_accessories(cmx, accessory_text)
-            self._read_basewear(cmx, parts_text)
-            self._read_bodies(cmx, parts_text)
+            self._read_basewear(cmx, parts_text, colors)
+            self._read_bodies(cmx, parts_text, colors)
             self._read_bodypaint(cmx, parts_text)
             self._read_cast_arms(cmx, parts_text)
             self._read_cast_legs(cmx, parts_text)
@@ -681,8 +795,8 @@ class ObjectDatabase:
             self._read_facepaint(cmx, parts_text)
             self._read_hair(cmx, parts_text)
             self._read_horns(cmx, parts_text)
-            self._read_innerwear(cmx, parts_text)
-            self._read_outerwear(cmx, parts_text)
+            self._read_innerwear(cmx, parts_text, colors)
+            self._read_outerwear(cmx, parts_text, colors)
             self._read_skins(cmx, parts_text)
             self._read_stickers(cmx, parts_text)
             self._read_teeth(cmx, parts_text)
@@ -723,6 +837,12 @@ class ObjectDatabase:
                     for object_type, cls in _object_types.items()
                 )
             )
+            con.executescript(
+                "".join(
+                    CmxColorSets.db_schema(object_type)
+                    for object_type in _COLOR_SET_TYPES
+                )
+            )
             con.execute(f"PRAGMA user_version={ObjectDatabase.VERSION}")
 
         return con
@@ -730,6 +850,9 @@ class ObjectDatabase:
     def _reset_db(self):
         for table in ObjectType:
             self.con.execute(f"DELETE FROM {table}")
+
+        for object_type in _COLOR_SET_TYPES:
+            self.con.execute(f"DELETE FROM {_color_set_table(object_type)}")
 
     def _read_accessories(self, cmx: CharacterMakingIndex, text: PSO2Text):
         names = _get_item_names(text, CmxCategory.ACCESSORY)
@@ -743,7 +866,9 @@ class ObjectDatabase:
             )
             obj.db_insert(self.con)
 
-    def _read_basewear(self, cmx: CharacterMakingIndex, text: PSO2Text):
+    def _read_basewear(
+        self, cmx: CharacterMakingIndex, text: PSO2Text, colors: ccl.Pso2Ccl
+    ):
         names = _get_item_names(text, CmxCategory.BASEWEAR)
         for item_id in cmx.baseWearDict.Keys:
             obj = _get_body(
@@ -755,7 +880,19 @@ class ObjectDatabase:
             )
             obj.db_insert(self.con)
 
-    def _read_bodies(self, cmx: CharacterMakingIndex, text: PSO2Text):
+        color_sets = _get_color_sets(
+            colors,
+            cmx.baseWearDict,
+            cmx.baseWearIdLink,
+            names,
+            lambda c: c.basewear_colors,
+        )
+        for color_set in color_sets:
+            color_set.db_insert(self.con, ObjectType.BASEWEAR)
+
+    def _read_bodies(
+        self, cmx: CharacterMakingIndex, text: PSO2Text, colors: ccl.Pso2Ccl
+    ):
         names = _get_item_names(text, CmxCategory.COSTUME)
         names.update(_get_item_names(text, CmxCategory.BODY))
 
@@ -772,6 +909,16 @@ class ObjectDatabase:
                 obj.db_insert(self.con)
             else:
                 obj.db_insert(self.con)
+
+        color_sets = _get_color_sets(
+            colors,
+            cmx.costumeDict,
+            cmx.costumeIdLink,
+            names,
+            lambda c: c.basewear_colors,
+        )
+        for color_set in color_sets:
+            color_set.db_insert(self.con, ObjectType.COSTUME)
 
     def _read_bodypaint(self, cmx: CharacterMakingIndex, text: PSO2Text):
         names = _get_item_names(text, CmxCategory.BODYPAINT1)
@@ -865,7 +1012,9 @@ class ObjectDatabase:
             obj = _get_horn(ObjectType.HORN, cmx.ngsHornDict, names, item_id)
             obj.db_insert(self.con)
 
-    def _read_innerwear(self, cmx: CharacterMakingIndex, text: PSO2Text):
+    def _read_innerwear(
+        self, cmx: CharacterMakingIndex, text: PSO2Text, colors: ccl.Pso2Ccl
+    ):
         names = _get_item_names(text, CmxCategory.INNERWEAR)
         for item_id in cmx.innerWearDict.Keys:
             obj = _get_bodypaint(
@@ -877,13 +1026,35 @@ class ObjectDatabase:
             )
             obj.db_insert(self.con)
 
-    def _read_outerwear(self, cmx: CharacterMakingIndex, text: PSO2Text):
+        color_sets = _get_color_sets(
+            colors,
+            cmx.innerWearDict,
+            cmx.innerWearIdLink,
+            names,
+            lambda c: c.innerwear_colors,
+        )
+        for color_set in color_sets:
+            color_set.db_insert(self.con, ObjectType.INNERWEAR)
+
+    def _read_outerwear(
+        self, cmx: CharacterMakingIndex, text: PSO2Text, colors: ccl.Pso2Ccl
+    ):
         names = _get_item_names(text, CmxCategory.COSTUME)
         for item_id in cmx.outerDict.Keys:
             obj = _get_body(
                 ObjectType.OUTERWEAR, cmx.outerDict, cmx.outerWearIdLink, names, item_id
             )
             obj.db_insert(self.con)
+
+        color_sets = _get_color_sets(
+            colors,
+            cmx.outerDict,
+            cmx.outerWearIdLink,
+            names,
+            lambda c: c.outerwear_colors,
+        )
+        for color_set in color_sets:
+            color_set.db_insert(self.con, ObjectType.OUTERWEAR)
 
     def _read_skins(self, cmx: CharacterMakingIndex, text: PSO2Text):
         names = _get_item_names(text, CmxCategory.SKIN)
@@ -1066,6 +1237,9 @@ def _get_bodypaint(
 ):
     tag = _get_file_tag(object_type)
     data = CmxBodyPaint(**_common_props(object_type, item_id, name_dict, link_id_dict))
+
+    if item := dict_get(object_dict, item_id):
+        data.color_mapping = CmxColorMapping.from_bodypaint_obj(item)
 
     start = _get_file_path_start(item_id)
     data.file.name = f"{start}{tag}_{data.adjusted_id:05d}.ice"
@@ -1294,3 +1468,58 @@ def _parse_face_variation_lua(script_file: datafile.DataFile) -> dict[str, int]:
             language = line.split('"')[1]
 
     return result
+
+
+def _get_ccl(bin_path: Path) -> ccl.Pso2Ccl:
+    pl_default_color_path = bin_path / "data/win32/11f916ecb1c7bddfb50ad879154e9e73"
+
+    try:
+        icefile = ice.IceFile.load(pl_default_color_path)
+
+        for f in icefile.get_files():
+            if f.name.lower() == "pl_default_color.ccl":
+                with BytesIO(f.data) as stream:
+                    return ccl.Pso2Ccl.read(stream)
+
+    except System.IO.FileNotFoundException:  # type: ignore
+        pass
+
+    return ccl.Pso2Ccl([])
+
+
+def _get_color_sets(
+    colors: ccl.Pso2Ccl,
+    object_dict: "System.Collections.Generic.Dictionary_2[int, Any]",
+    link_id_dict: "System.Collections.Generic.Dictionary_2[int, BCLNObject]",
+    name_dict: NameDict,
+    color_getter: Callable[[ccl.Pso2CclColorSet], tuple[int, int]],
+):
+    link_sets = defaultdict[int, set[int]](set)
+
+    for key in object_dict.Keys:
+        item_id = int(key)
+        link_sets[item_id].add(item_id)
+
+    for entry in link_id_dict:
+        item_id = int(entry.Key)
+        base_id = int(entry.Value.bcln.fileId)
+
+        link_sets[base_id].add(item_id)
+
+    for base_id, links in link_sets.items():
+        sets: list[CmxColorSet] = []
+        for item_id in links:
+            if ccl_entry := colors[item_id]:
+                name_jp, name_en = name_dict[item_id]
+                color1, color2 = color_getter(ccl_entry)
+                sets.append(
+                    CmxColorSet(
+                        id=item_id,
+                        name_jp=name_jp,
+                        name_en=name_en,
+                        color1=color1,
+                        color2=color2,
+                    )
+                )
+
+        yield CmxColorSets(base_id, sets)

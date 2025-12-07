@@ -120,8 +120,14 @@ class Pso2ToolsPreferences(bpy.types.AddonPreferences):
         default="200000",
     )
 
-    model_search_sort_alpha: bpy.props.BoolProperty(
-        name="Sort alphabetical", default=True
+    model_search_sort: bpy.props.EnumProperty(
+        name="Sort",
+        default="ALPHA",
+        items=[
+            ("ALPHA", "Alphabetical", "Sort by name", "SORTALPHA", 0),
+            ("ID", "ID", "Sort by item ID", "FILE", 1),
+            ("LEG_LENGTH", "Leg length", "Sort by leg length", "MOD_LENGTH", 2),
+        ],
     )
 
     model_search_categories: bpy.props.EnumProperty(
