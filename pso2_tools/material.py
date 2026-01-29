@@ -326,16 +326,15 @@ class ModelMaterials:
 
         match name:
             # NGS basewear/cast part
-            case "pl_body_base_diffuse.dds":
+            case "pl_body_base_diffuse.dds" | "pl_body_base_mask.dds":
                 r.default.diffuse = find_alt(_NGS_BODY_PARTS, "d")
+                r.default.mask = find("rbd", "bw", "m") or find_alt(
+                    _NGS_BODY_PARTS, "l"
+                )
             case "pl_body_base_multi.dds":
                 r.default.multi = find_alt(_NGS_BODY_PARTS, "s")
             case "pl_body_base_normal.dds":
                 r.default.normal = find_alt(_NGS_BODY_PARTS, "n")
-            case "pl_body_base_mask.dds":
-                r.default.mask = find("rbd", "bw", "m") or find_alt(
-                    _NGS_BODY_PARTS, "l"
-                )
             case (
                 "pl_body_base_subnormal_01.dds"
                 | "pl_body_base_subnormal_02.dds"
