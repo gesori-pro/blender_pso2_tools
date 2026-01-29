@@ -1,5 +1,8 @@
 # pylint: disable=import-outside-toplevel
 
+from pathlib import Path
+
+import clr_loader
 import pythonnet
 
 from .paths import BIN_PATH
@@ -14,6 +17,8 @@ _DLL_NAMES = [
 
 _PROBING_PATH_X64 = str(BIN_PATH / "x64")
 
+_DOTNET_ROOT = Path("C:/Program Files/dotnet")
+
 _loaded = False
 
 
@@ -22,7 +27,11 @@ def load():
     if _loaded:
         return
 
-    pythonnet.load("coreclr")
+    if _DOTNET_ROOT.exists():
+        rt = clr_loader.get_coreclr(dotnet_root=_DOTNET_ROOT)
+        pythonnet.load(rt)
+    else:
+        pythonnet.load("coreclr")
 
     import clr
 
