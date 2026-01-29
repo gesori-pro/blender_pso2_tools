@@ -36,19 +36,15 @@ def build_material(
 def _update_material_settings(material: bpy.types.Material, data: types.ShaderData):
     setattr(material, scene_props.ALPHA_THRESHOLD, data.material.alpha_cutoff)
 
-    if data.material.blend_type in ("add", "blendalpha", "hollow"):
-        if data.material.alpha_cutoff > 0:
-            material.surface_render_method = "DITHERED"
-        else:
-            # TODO: 'BLENDED' looks better for models with translucent materials,
-            # but it causes some meshes that are behind transparent meshes to not
-            # appear at all, such as Twilight Tenzan [Se]. Dithered looks the
-            # least wrong across all models, but ideally we could use blended if
-            # we can figure out the transparency ordering issues.
-            material.surface_render_method = "DITHERED"
+    # TODO: BLENDED looks better for models with translucent materials, but it
+    # causes some meshes that are behind transparent meshes to not appear at all,
+    # such as in Twilight Tenzan [Se]. Using DITHERED for everything for now,
+    # since that doesn't have transparency ordering issues.
+    material.surface_render_method = "DITHERED"
 
+    if data.material.blend_type in ("add", "blendalpha", "hollow"):
+        material.use_transparency_overlap = True
     else:
-        material.surface_render_method = "BLENDED"
         material.use_transparency_overlap = False
 
     match data.material.two_sided:
