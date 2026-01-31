@@ -11,7 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
 
-FRAMEWORK = "net6.0"
+FRAMEWORK = "net9.0"
 
 FBX_URL = "https://www.autodesk.com/content/dam/autodesk/www/adn/fbx/2020-1/fbx20201_fbxsdk_vs2017_win.exe"
 NUGET_URL = "https://learn.microsoft.com/en-us/nuget/consume-packages/install-use-packages-nuget-cli"
@@ -31,9 +31,18 @@ STUB_GENERATOR_SLN = ROOT / "pythonnet-stub-generator/csharp/PythonNetStubGenera
 PACKAGES_PATH = ROOT / "packages"
 PACKAGES = [
     ("AssimpNet", "5.0.0-beta1"),
+    ("BouncyCastle.Cryptography", "2.4.0"),
+    ("DrSwizzler", "1.1.1"),
+    ("prs_rs.Net.Sys", "1.0.4"),
     ("Pfim", "0.11.3"),
     ("Reloaded.Memory", "9.4.2"),
+    ("SixLabors.ImageSharp", "3.1.6"),
+    ("SharpZipLib", "1.4.2"),
     ("System.Drawing.Common", "8.0.11"),
+    ("System.Data.DataSetExtensions", "4.6.0-preview3.19128.7"),
+    ("System.Net.Http", "4.3.4"),
+    ("System.Text.Encoding.CodePages", "9.0.0"),
+    ("System.Text.RegularExpressions", "4.3.1"),
     ("ZstdNet", "1.4.5"),
 ]
 
@@ -83,10 +92,13 @@ def copy_package_dlls():
         lib = src / "lib"
         runtime_x64 = src / "runtimes/win-x64/native"
 
-        framework = next(lib / f for f in frameworks if (lib / f).exists())
+        try:
+            framework = next(lib / f for f in frameworks if (lib / f).exists())
 
-        for dll in framework.glob("*.dll"):
-            shutil.copyfile(dll, BIN_PATH / dll.name)
+            for dll in framework.glob("*.dll"):
+                shutil.copyfile(dll, BIN_PATH / dll.name)
+        except StopIteration:
+            pass
 
         for dll in runtime_x64.glob("*.dll"):
             shutil.copyfile(dll, BIN_PATH / "x64" / dll.name)

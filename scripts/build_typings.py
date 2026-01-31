@@ -30,7 +30,7 @@ DLLS = [
 STUB_GENERATOR = (
     ROOT_PATH
     / "pythonnet-stub-generator/csharp/PythonNetStubTool"
-    / "bin/Release/net6.0/PythonNetStubGenerator.Tool.exe"
+    / "bin/Release/net9.0/PythonNetStubGenerator.Tool.exe"
 )
 
 
