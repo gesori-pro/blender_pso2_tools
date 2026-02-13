@@ -85,7 +85,16 @@ def install_packages():
 
 
 def copy_package_dlls():
-    frameworks = [FRAMEWORK, "netstandard2.1", "netstandard2.0", "netstandard1.3"]
+    frameworks = [
+        "net9.0",
+        "net8.0",
+        "net7.0",
+        "net6.0",
+        "net5.0",
+        "netstandard2.1",
+        "netstandard2.0",
+        "netstandard1.3",
+    ]
 
     for package, version in PACKAGES:
         src = PACKAGES_PATH / f"{package}.{version}"
