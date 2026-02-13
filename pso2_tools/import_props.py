@@ -4,6 +4,7 @@ import bpy
 from bpy_extras.io_utils import orientation_helper
 
 from .import_model import ImportOptions
+from .preferences import Pso2ToolsPreferences
 
 
 @orientation_helper(axis_forward="-Z", axis_up="Y")  # type: ignore https://github.com/nutti/fake-bpy-module/issues/376
@@ -79,7 +80,9 @@ class CommonImportProps:
         keywords = cast(
             ImportOptions,
             # pylint: disable-next=no-member
-            operator.as_keywords(ignore=("filter_glob", "filepath", *ignore)),
+            operator.as_keywords(
+                ignore=("filter_glob", "filepath", "show_advanced", *ignore)
+            ),
         )
         keywords["use_image_search"] = False
 
@@ -96,18 +99,30 @@ class CommonImportProps:
         import_panel_armature(layout, operator)
         import_panel_animation(layout, operator)
 
-    def draw_import_props_column(self, layout: bpy.types.UILayout):
-        layout.label(text="Geometry", icon="LATTICE_DATA")
-        layout.prop(self, "include_tangent_binormal")
+    def draw_import_props_column(
+        self, layout: bpy.types.UILayout, preferences: Pso2ToolsPreferences
+    ):
+        flow = layout.grid_flow(columns=2, even_columns=True)
+        flow.use_property_split = False
+        flow.prop(preferences, "show_advanced")
+        flow.separator(type="LINE")
 
-        layout.label(text="Armature", icon="ARMATURE_DATA")
-        layout.prop(self, "ignore_leaf_bones")
-        layout.prop(self, "force_connect_children")
-        layout.prop(self, "automatic_bone_orientation")
-        sub = layout.column()
-        sub.enabled = not self.automatic_bone_orientation
-        sub.prop(self, "primary_bone_axis")
-        sub.prop(self, "secondary_bone_axis")
+        if preferences.show_advanced:
+            col = layout.column()
+            col.use_property_split = True
+
+            col.label(text="Geometry", icon="LATTICE_DATA")
+            col.prop(self, "include_tangent_binormal")
+
+            col.label(text="Armature", icon="ARMATURE_DATA")
+            col.prop(self, "ignore_leaf_bones")
+            col.prop(self, "force_connect_children")
+            col.prop(self, "automatic_bone_orientation")
+
+            sub = layout.column()
+            sub.enabled = not self.automatic_bone_orientation
+            sub.prop(self, "primary_bone_axis")
+            sub.prop(self, "secondary_bone_axis")
 
 
 def import_panel_transform_orientation(

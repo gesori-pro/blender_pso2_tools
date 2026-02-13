@@ -295,6 +295,13 @@ class PSO2_OT_ModelSearch(bpy.types.Operator, import_props.CommonImportProps):
     bl_idname = "pso2.model_search"
     bl_options = {"REGISTER", "UNDO"}
 
+    # Workaround for a bug: Python must keep a reference to any dynamic enum item
+    # strings or Blender will show garbage. These strings need to not be garbage
+    # collected as _get_selected_model_colors() gets called repeatedly, so keep
+    # the enum items alive so long as the selected item doesn't change.
+    _color_set_item_cache: ListItem | None = None
+    _color_set_enum_cache: list[tuple[str, str, str, int]] = []
+
     def _get_selected_model_files(
         self,
         context: bpy.types.Context | None,
@@ -310,7 +317,7 @@ class PSO2_OT_ModelSearch(bpy.types.Operator, import_props.CommonImportProps):
     def _get_selected_model_colors(
         self,
         context: bpy.types.Context | None,
-    ) -> Iterable[tuple[str, str, str]]:
+    ) -> Iterable[tuple[str, str, str, int]]:
         if context is None:
             return []
 
@@ -319,7 +326,15 @@ class PSO2_OT_ModelSearch(bpy.types.Operator, import_props.CommonImportProps):
         except IndexError:
             return []
 
-        return _get_color_sets_enum(selected, context)
+        if selected == PSO2_OT_ModelSearch._color_set_item_cache:
+            return PSO2_OT_ModelSearch._color_set_enum_cache
+
+        items = _get_color_sets_enum(selected, context)
+
+        PSO2_OT_ModelSearch._color_set_item_cache = selected
+        PSO2_OT_ModelSearch._color_set_enum_cache = items
+
+        return items
 
     def _update_color_set_colors(self, context: bpy.types.Context):
         try:
@@ -369,12 +384,16 @@ class PSO2_OT_ModelSearch(bpy.types.Operator, import_props.CommonImportProps):
         super().__init__(*args, **kwargs)
         _populate_model_list(self.models, bpy.context)
 
+    def __del__(self):
+        PSO2_OT_ModelSearch._color_set_item_cache = None
+        PSO2_OT_ModelSearch._color_set_enum_cache = []
+
     def draw(self, context):
         assert self.layout is not None
 
         preferences = get_preferences(context)
         layout = self.layout
-        split = layout.split(factor=0.7)
+        split = layout.split(factor=0.65)
 
         col = split.column()
         col.context_pointer_set("parent", self)
@@ -385,7 +404,7 @@ class PSO2_OT_ModelSearch(bpy.types.Operator, import_props.CommonImportProps):
             "models",
             self,
             "models_index",
-            rows=15,
+            rows=16,
         )
 
         col = split.column()
@@ -396,42 +415,54 @@ class PSO2_OT_ModelSearch(bpy.types.Operator, import_props.CommonImportProps):
         if obj := self.get_selected_object():
             meta = ModelMetadata.from_object(obj, preferences.get_pso2_data_path())
 
-            col.prop(self, "model_file")
+            row = col.row()
+            row.use_property_split = False
+            row.prop(self, "model_file", expand=True)
+            col.separator()
 
             # Colors
             if colors := sorted(obj.get_colors()):
-                col.separator(type="LINE")
                 col.label(text="Colors", icon="COLOR")
 
                 if _object_has_color_sets(obj, context):
-                    col.prop(self, "color_set")
+                    flow = col.grid_flow(columns=1, align=True)
+                    flow.use_property_split = False
+                    flow.prop(self, "color_set", expand=True)
+
                     col.separator()
+
+                flow = col.grid_flow(columns=2, row_major=True)
+                flow.use_property_split = False
 
                 for color in colors:
                     color_data, color_prop, color_enabled = self._get_color_prop(
                         context, color, preferences
                     )
 
-                    color_row = col.row()
+                    color_row = flow.row()
                     color_row.enabled = color_enabled
                     color_row.prop(color_data, color_prop)
 
-            col.separator()
-            self.draw_import_props_column(col)
-            col.separator()
+                col.separator()
 
             # Metadata
-            if meta.leg_length:
-                col.label(text=f"Leg length: {meta.leg_length:.3g}")
+            if meta.leg_length or meta.has_linked_inner or meta.has_linked_outer:
+                col.label(text="Metadata", icon="OBJECT_DATA")
 
-            grid = col.grid_flow(columns=2)
+                if meta.leg_length:
+                    col.label(text=f"Leg length: {meta.leg_length:.3g}")
 
-            if meta.has_linked_inner:
-                grid.label(text="Linked innerwear")
+                grid = col.grid_flow(columns=2)
 
-            if meta.has_linked_outer:
-                grid.label(text="Linked outerwear")
+                if meta.has_linked_inner:
+                    grid.label(text="Linked innerwear")
 
+                if meta.has_linked_outer:
+                    grid.label(text="Linked outerwear")
+
+                col.separator()
+
+            self.draw_import_props_column(col, preferences)
             col.separator(factor=4, type="LINE")
 
         col.operator(PSO2_OT_UpdateModelList.bl_idname, text="Update Model List")
@@ -454,7 +485,7 @@ class PSO2_OT_ModelSearch(bpy.types.Operator, import_props.CommonImportProps):
         assert context.window_manager is not None
 
         return context.window_manager.invoke_props_dialog(
-            self, width=800, confirm_text="Import"
+            self, width=840, confirm_text="Import"
         )
 
     def get_selected_object(self):
@@ -542,14 +573,17 @@ def _get_color_sets(item: ListItem, context: bpy.types.Context):
         return db.get_color_sets(item.object_type, item.adjusted_id)
 
 
+def _color_set_enum_tuple(index: int, name: str) -> tuple[str, str, str, int]:
+    return (str(index), name, f"Color variant: {name}", index)
+
+
 def _get_color_sets_enum(item: ListItem, context: bpy.types.Context):
     color_sets = _get_color_sets(item, context)
-    names = [s.name_en or s.name_jp or "" for s in color_sets.sets]
 
-    for i, name in enumerate(names):
-        yield (str(i), name or "Unnamed", "")
+    items = [_color_set_enum_tuple(i, s.name) for i, s in enumerate(color_sets.sets)]
+    items.append(_color_set_enum_tuple(len(items), "Custom colors"))
 
-    yield (str(len(names)), "Custom colors", "")
+    return items
 
 
 def _get_selected_color_set(item: ListItem, index: int, context: bpy.types.Context):
@@ -583,7 +617,7 @@ def _populate_model_list(collection, context: bpy.types.Context):
 
 @classes.register
 class PSO2_OT_UpdateModelList(bpy.types.Operator):
-    """Update PSO2 model list"""
+    """Update the database of models from game data"""
 
     bl_label = "Update Model List"
     bl_idname = "pso2.update_model_list"
@@ -841,6 +875,10 @@ class PSO2_OT_SelectAllCategories(bpy.types.Operator):
 
     def execute(self, context) -> OperatorResult:
         preferences = get_preferences(context)
+
+        preferences.model_search_versions = _get_all_enum_items(
+            preferences, "model_search_versions"
+        )
 
         preferences.model_search_categories = _get_all_enum_items(
             preferences, "model_search_categories"

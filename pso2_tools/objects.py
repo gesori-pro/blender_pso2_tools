@@ -335,6 +335,10 @@ class CmxColorSet:
     color1: int
     color2: int
 
+    @property
+    def name(self):
+        return self.name_en or self.name_jp or ""
+
     @staticmethod
     def get_channels(object_type: ObjectType) -> tuple[ColorId, ColorId] | None:
         match object_type:

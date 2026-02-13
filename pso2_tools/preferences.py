@@ -137,7 +137,7 @@ class Pso2ToolsPreferences(bpy.types.AddonPreferences):
             # ID strings must match ObjectType enum
             (
                 "basewear | costume",
-                "Basewear/Setwear",
+                "Base/Setwear",
                 "Basewear and setwear",
                 "MATCLOTH",
                 1 << 0,
@@ -191,6 +191,12 @@ class Pso2ToolsPreferences(bpy.types.AddonPreferences):
             ("NONE", "None", "Genderless", "", 1 << 2),
         ],
         default={"T1", "T2"},  # type: ignore
+    )
+
+    show_advanced: bpy.props.BoolProperty(
+        name="Advanced Options",
+        description="Show advanced import options",
+        default=False,
     )
 
     def draw(self, context: bpy.types.Context):
