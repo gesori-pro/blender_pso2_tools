@@ -10,6 +10,9 @@ MUSCULARITY = "pso2_muscularity"
 # Object
 ALPHA_THRESHOLD = "pso2_alpha_threshold"
 
+# Bone
+BONE_ID = "pso2_bone_id"
+
 
 def add_scene_properties():
     preferences = get_preferences(bpy.context)
