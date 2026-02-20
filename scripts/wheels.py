@@ -1,3 +1,4 @@
+#! /usr/bin/env python3
 """
 Download wheels for the project's dependencies.
 """

@@ -1,5 +1,7 @@
 # Blender Add-on for PSO2
 
+This integrates the model import/export functions of [Aqua-Library](https://github.com/Shadowth117/PSO2-Aqua-Library) into Blender.
+
 ## Installation
 
 The libraries used for import/export are only compiled for Windows x64. This add-on will not currently work on other OSes.
@@ -11,6 +13,8 @@ The libraries used for import/export are only compiled for Windows x64. This add
 5. Select the .zip file you downloaded.
 6. Make sure **PSO2 Tools** is checked in the add-ons list.
 7. Expand **PSO2 Tools** and make sure **Path to pso2_bin/data** is correct. If not, set it to point to your game's install directory.
+
+The add-on has only recently been tested on Blender 5.0, though it may still work on versions as early as 4.4.
 
 ## Usage
 
@@ -62,15 +66,23 @@ In the **Properties** area, go to the **Scene** tab. Two panels will appear here
 
 Clicking the buttons here will show or hide meshes that are associated with toggleable ornaments.
 
+### Working With Aqua-Toolset
+
+The import/export functions of this add-on combine the FBX import/export from [Aqua-Toolset](https://github.com/Shadowth117/Aqua-Toolset) with Blender's FBX import/export. However, bones are renamed from the format used by Aqua-Toolset for better compatibility with Blender functions such as mirroring vertex weights. Aqua-Toolset exports bones in the format `(id)name#flags`, and this add-on strips the `(id)` prefixes and moves them to `pso2_bone_id` custom properties on each bone. These IDs are added back to the bone names when exporting to `.aqp` format.
+
+If you have a model you imported from Aqua-Toolset's FBX export, you can run the **PSO2 bone IDs to properties** operator to move the bone IDs from names to custom properties.
+
+If you want to export to FBX, you can run the **PSO2 bone IDs to names** operator to put the bone IDs back at the start of bone names.
+
 ## Development
 
 To build and develop the extension, first install the following requirements:
 
-- [Blender 4.4](https://www.blender.org/download/releases/) or newer.
-- [Python 3.11](https://www.python.org/downloads/) or newer.
+- [Blender 5.0](https://www.blender.org/download/releases/) or newer.
+- [uv](https://github.com/astral-sh/uv)
 - [Visual Studio](https://visualstudio.microsoft.com/vs/community/) with the C# and C++ workflows installed.
+- [.NET SDK 9.0](https://dotnet.microsoft.com/en-us/download/dotnet/9.0)
 - [Autodesk FBX SDK](https://www.autodesk.com/content/dam/autodesk/www/adn/fbx/2020-1/fbx20201_fbxsdk_vs2017_win.exe) version 2020.1
-- [.NET Framework 4.7 developer pack](https://dotnet.microsoft.com/en-us/download/visual-studio-sdks?cid=msbuild-developerpacks)
 
 First, clone the repo with submodules:
 
@@ -82,18 +94,23 @@ cd blender_pso2_tools
 Then run the following commands to set up the development environment:
 
 ```pwsh
+# Create a virtual environment
+uv venv .venv
+# You can optionally run the "activate" command this prints. Then you don't need
+# to prefix some commands below with "uv run".
+
 # Install Python modules needed for development
-pip install requirements-dev.txt
+uv pip install .
 # Set up Git hooks to format files
-pre-commit install
+uv run prek install
 
 # Download Python wheels for dependencies.
-scripts/wheels.py
+uv run scripts/wheels.py
 # Build binaries needed by the add-on.
-scripts/build_bin.py
+uv run scripts/build_bin.py
 # Generate Python typings for the above binaries.
 # (This will probably fail, but it will generate some useful typings first.)
-scripts/build_typings.py
+uv run scripts/build_typings.py
 ```
 
 [scripts/wheels.py](scripts/wheels.py) defines the Python dependencies used by the add-on. This script needs to be run any time the dependencies are updated, and [pso2_tools/blender_manifest.toml](pso2_tools/blender_manifest.toml) needs to be updated to list all the wheel files.
@@ -105,7 +122,7 @@ scripts/build_typings.py
 To build and install the add-on, run:
 
 ```pwsh
-scripts/install.py --editable
+uv run scripts/install.py --editable
 ```
 
 This will install the add-on in Blender, then symlink it back to this repo. The extension will automatically reload itself when it detects a change to its own files. (This usually crashes Blender after a while, so save your work often.)
@@ -115,5 +132,5 @@ Run the script without `--editable` to install the add-on without a symlink.
 To build the add-on without installing it, e.g. for a release, run:
 
 ```pwsh
-scripts/build_package.py
+uv run scripts/build_package.py
 ```

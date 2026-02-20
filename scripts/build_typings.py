@@ -1,3 +1,4 @@
+#! /usr/bin/env python3
 """
 Generate type stubs for .net dependencies.
 
