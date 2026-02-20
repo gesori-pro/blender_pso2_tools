@@ -1,5 +1,4 @@
 from dataclasses import dataclass, field
-from typing import Optional
 
 from .. import colors as clr
 from .. import material as mat
@@ -9,5 +8,5 @@ from .. import material as mat
 class ShaderData:
     material: mat.Material
     textures: mat.MaterialTextures
-    color_map: Optional[clr.ColorMapping] = field(default_factory=clr.ColorMapping)
-    uv_map: Optional[mat.UVMapping] = None
+    color_map: clr.ColorMapping | None = field(default_factory=clr.ColorMapping)
+    uv_map: mat.UVMapping | None = None

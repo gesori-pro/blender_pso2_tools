@@ -1,8 +1,7 @@
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Tuple
 
-Color = Tuple[float, float, float, float]
+Color = tuple[float, float, float, float]
 
 WHITE: Color = (1, 1, 1, 1)
 GRAY: Color = (0.5, 0.5, 0.5, 1)

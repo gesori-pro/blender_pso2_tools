@@ -1,7 +1,7 @@
 import itertools
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Iterable, Optional
 
 import AquaModelLibrary.Data.PSO2.Aqua.AquaObjectData.Intermediary
 import bpy
@@ -88,19 +88,19 @@ class Material:
 
 @dataclass
 class TextureSet:
-    alpha: Optional[bpy.types.Image] = None  # a
-    diffuse: Optional[bpy.types.Image] = None  # d
-    layer: Optional[bpy.types.Image] = None  # l
-    mask: Optional[bpy.types.Image] = None  # m
-    normal: Optional[bpy.types.Image] = None  # n
-    multi: Optional[bpy.types.Image] = None  # s
-    env: Optional[bpy.types.Image] = None  # v
+    alpha: bpy.types.Image | None = None  # a
+    diffuse: bpy.types.Image | None = None  # d
+    layer: bpy.types.Image | None = None  # l
+    mask: bpy.types.Image | None = None  # m
+    normal: bpy.types.Image | None = None  # n
+    multi: bpy.types.Image | None = None  # s
+    env: bpy.types.Image | None = None  # v
     # Not sure what these are yet
-    texture_c: Optional[bpy.types.Image] = None
-    texture_k: Optional[bpy.types.Image] = None
-    texture_g: Optional[bpy.types.Image] = None
-    texture_o: Optional[bpy.types.Image] = None
-    texture_p: Optional[bpy.types.Image] = None
+    texture_c: bpy.types.Image | None = None
+    texture_k: bpy.types.Image | None = None
+    texture_g: bpy.types.Image | None = None
+    texture_o: bpy.types.Image | None = None
+    texture_p: bpy.types.Image | None = None
 
     def __or__(self, other: "TextureSet"):
         return TextureSet(

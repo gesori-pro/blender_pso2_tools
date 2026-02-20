@@ -1,5 +1,4 @@
 import re
-from typing import Type
 
 import bpy
 
@@ -83,8 +82,8 @@ class PSO2OrnamentsPanel(bpy.types.Panel):
 def draw_toggle(
     layout: bpy.types.UILayout,
     label: str,
-    show: Type["PSO2_OT_ShowOrnament"],
-    hide: Type["PSO2_OT_HideOrnament"],
+    show: type["PSO2_OT_ShowOrnament"],
+    hide: type["PSO2_OT_HideOrnament"],
 ):
     if not show.is_enabled():
         return

@@ -69,7 +69,7 @@ extraPaths = [
 ]
 
 [tool.ruff.lint]
-select = ["E4", "E7", "E9", "F", "I"]
+select = ["E4", "E7", "E9", "F", "UP", "I"]
 
 [tool.setuptools]
 packages = ["pso2_tools"]

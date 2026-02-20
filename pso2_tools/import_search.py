@@ -1,11 +1,11 @@
 import math
 import sys
 import time
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from contextlib import closing
 from dataclasses import dataclass, fields
 from pathlib import Path
-from typing import Any, Iterable, Optional, Type, cast
+from typing import Any, cast
 
 import bpy
 
@@ -20,7 +20,7 @@ from .util import BlenderIcon, OperatorResult
 class ModelMetadata:
     has_linked_inner: bool = False
     has_linked_outer: bool = False
-    leg_length: Optional[float] = None
+    leg_length: float | None = None
 
     @classmethod
     def from_object(cls, obj: objects.CmxObjectBase, data_path: Path):
@@ -177,12 +177,12 @@ class ListItem(bpy.types.PropertyGroup):
             name = field.name
             value = getattr(obj, name)
 
-            if field.type in (float, Optional[float]):
+            if field.type in (float, float | None):
                 prop = cast(FloatItem, self.float_fields.add())
                 prop.name = name
                 prop.value = math.nan if value is None else value
 
-            elif field.type in (int, Optional[int]):
+            elif field.type in (int, int | None):
                 prop = cast(IntItem, self.float_fields.add())
                 prop.name = name
                 prop.value = IntItem.INVALID if value is None else value
@@ -245,7 +245,7 @@ class ListItem(bpy.types.PropertyGroup):
         return obj
 
 
-def _get_object_class(object_type: objects.ObjectType) -> Type[objects.CmxObjectBase]:
+def _get_object_class(object_type: objects.ObjectType) -> type[objects.CmxObjectBase]:
     match object_type:
         case objects.ObjectType.ACCESSORY:
             return objects.CmxAccessory

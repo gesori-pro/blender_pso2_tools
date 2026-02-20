@@ -1,11 +1,12 @@
 import hashlib
 import sqlite3
 from collections import defaultdict
+from collections.abc import Callable, Generator, Iterable
 from dataclasses import dataclass, field, fields
 from enum import StrEnum
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Callable, Generator, Iterable, Type, TypeVar
+from typing import Any, TypeVar
 
 import bpy
 import System
@@ -292,7 +293,7 @@ def _db_attr(name: str):
     return ""
 
 
-def _db_type(cls: Type[Any] | str | Any) -> str:
+def _db_type(cls: type[Any] | str | Any) -> str:
     if cls is str:
         return "TEXT NOT NULL"
 
@@ -500,7 +501,7 @@ class CmxObjectWithFile(CmxObjectBase):
             """
 
 
-_object_types: dict[ObjectType, Type[CmxObjectBase]] = {}
+_object_types: dict[ObjectType, type[CmxObjectBase]] = {}
 
 
 def register_object(*object_types: ObjectType):
@@ -742,7 +743,7 @@ class ObjectDatabase:
 
     def _get_objects(
         self,
-        cls: Type[T],
+        cls: type[T],
         object_type: ObjectType,
         item_id: int | None = None,
         file_hash: str | None = None,

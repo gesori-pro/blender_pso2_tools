@@ -1,7 +1,8 @@
+from collections.abc import Iterable
 from contextlib import contextmanager
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any, Iterable, TypedDict, cast, get_type_hints
+from typing import Any, TypedDict, cast, get_type_hints
 
 import bpy
 from AquaModelLibrary.Core.General import AssimpModelImporter

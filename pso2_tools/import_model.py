@@ -1,8 +1,9 @@
+from collections.abc import Iterable
 from contextlib import closing
 from dataclasses import dataclass, field
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Iterable, Optional, TypedDict, cast, get_type_hints
+from typing import TypedDict, cast, get_type_hints
 
 import bpy
 from AquaModelLibrary.Core.General import FbxExporterNative
@@ -182,8 +183,8 @@ def _import_models(
     options: ImportOptions | None = None,
     high_quality=True,
     use_t2_skin=False,
-    color_map: Optional[colors.ColorMapping] = None,
-    uv_map: Optional[material.UVMapping] = None,
+    color_map: colors.ColorMapping | None = None,
+    uv_map: material.UVMapping | None = None,
 ) -> OperatorResult:
     debug_print(f"Import: {high_quality=} {use_t2_skin=} {color_map=}")
     debug_print(f"Options: {options=}")

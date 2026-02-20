@@ -1,5 +1,3 @@
-from typing import Optional, Type
-
 import bpy
 
 from .. import scene_props
@@ -59,7 +57,7 @@ def _update_material_settings(material: bpy.types.Material, data: types.ShaderDa
             material.use_backface_culling = True
 
 
-def _get_builder(data: types.ShaderData) -> Optional[Type[builder.ShaderBuilder]]:
+def _get_builder(data: types.ShaderData) -> type[builder.ShaderBuilder] | None:
     _, vertex = data.material.shaders
     shader_id = int(vertex)
 

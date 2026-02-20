@@ -1,4 +1,4 @@
-from typing import Literal, Optional, Tuple, TypeVar, cast
+from typing import Literal, TypeVar, cast
 
 import bpy
 
@@ -7,7 +7,7 @@ from . import types
 
 GRID = 50
 
-Vec2 = Tuple[float, float]
+Vec2 = tuple[float, float]
 
 NODE = TypeVar("NODE", bound=bpy.types.Node)
 SOCKET = TypeVar("SOCKET", bound=bpy.types.NodeSocket)
@@ -74,7 +74,7 @@ class NodeTreeBuilder:
         self,
         socket_type: type[SOCKET],
         name: str,
-        parent: Optional[bpy.types.NodeTreeInterfacePanel] = None,
+        parent: bpy.types.NodeTreeInterfacePanel | None = None,
     ):
         assert self.tree.interface is not None
 
@@ -89,7 +89,7 @@ class NodeTreeBuilder:
         self,
         socket_type: type[SOCKET],
         name: str,
-        parent: Optional[bpy.types.NodeTreeInterfacePanel] = None,
+        parent: bpy.types.NodeTreeInterfacePanel | None = None,
     ):
         assert self.tree.interface is not None
 

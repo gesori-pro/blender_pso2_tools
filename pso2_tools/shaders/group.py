@@ -1,4 +1,4 @@
-from typing import ClassVar, Type, TypeVar, cast
+from typing import ClassVar, TypeVar, cast
 
 import bpy
 
@@ -35,7 +35,7 @@ class ShaderNodeCustomGroup(bpy.types.ShaderNodeCustomGroup):
     def _build(self, node_tree: bpy.types.ShaderNodeTree) -> None:
         raise NotImplementedError()
 
-    def input(self, node_type: Type[_T], name: str) -> _T:
+    def input(self, node_type: type[_T], name: str) -> _T:
         return cast(_T, self.inputs[name])
 
     def draw_buttons(

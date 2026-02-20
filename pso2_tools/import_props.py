@@ -1,4 +1,5 @@
-from typing import Iterable, cast
+from collections.abc import Iterable
+from typing import cast
 
 import bpy
 from bpy_extras.io_utils import orientation_helper

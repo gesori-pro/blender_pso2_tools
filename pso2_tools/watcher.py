@@ -1,6 +1,6 @@
 import hashlib
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer

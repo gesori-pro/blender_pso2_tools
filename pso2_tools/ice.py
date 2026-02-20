@@ -1,9 +1,9 @@
 import fnmatch
 import itertools
 import struct
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Sequence
 
 from System.IO import FileMode, FileStream
 from Zamboni import IceFile as InternalIceFile

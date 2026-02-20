@@ -1,9 +1,8 @@
 import fnmatch
 import itertools
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from contextlib import closing
 from pathlib import Path
-from typing import Iterable
 
 import bpy
 

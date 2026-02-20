@@ -1,6 +1,5 @@
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from functools import reduce
-from typing import Iterable
 
 import bmesh
 import bpy
