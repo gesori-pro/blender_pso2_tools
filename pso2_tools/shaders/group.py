@@ -38,5 +38,7 @@ class ShaderNodeCustomGroup(bpy.types.ShaderNodeCustomGroup):
     def input(self, node_type: Type[_T], name: str) -> _T:
         return cast(_T, self.inputs[name])
 
-    def draw_buttons(self, context: bpy.types.Context, layout: bpy.types.UILayout):
+    def draw_buttons(
+        self, context: bpy.types.Context, layout: bpy.types.UILayout | None
+    ):
         pass

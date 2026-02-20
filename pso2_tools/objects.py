@@ -293,17 +293,17 @@ def _db_attr(name: str):
 
 
 def _db_type(cls: Type[Any] | str | Any) -> str:
-    if cls == str:
+    if cls is str:
         return "TEXT NOT NULL"
 
     if cls == int | None:
         return "INTGER"
-    if cls == int:
+    if cls is int:
         return "INTEGER NOT NULL"
 
     if cls == float | None:
         return "REAL"
-    if cls == float:
+    if cls is float:
         return "REAL NOT NULL"
 
     if cls == CmxFileName:

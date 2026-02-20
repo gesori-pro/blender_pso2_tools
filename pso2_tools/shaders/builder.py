@@ -79,7 +79,10 @@ class NodeTreeBuilder:
         assert self.tree.interface is not None
 
         return self.tree.interface.new_socket(
-            name=name, in_out="INPUT", socket_type=socket_type.__name__, parent=parent
+            name=name,
+            in_out="INPUT",
+            socket_type=socket_type.__name__,  # type: ignore (incorrect type stub)
+            parent=parent,
         )
 
     def new_output(
@@ -91,7 +94,10 @@ class NodeTreeBuilder:
         assert self.tree.interface is not None
 
         return self.tree.interface.new_socket(
-            name=name, in_out="OUTPUT", socket_type=socket_type.__name__, parent=parent
+            name=name,
+            in_out="OUTPUT",
+            socket_type=socket_type.__name__,  # type: ignore (incorrect type stub)
+            parent=parent,
         )
 
     def add_link(

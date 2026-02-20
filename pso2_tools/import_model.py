@@ -390,6 +390,9 @@ def _import_aqp(
         if result != {"FINISHED"}:
             return (result, [])
 
+        if context.selected_objects is None:
+            raise TypeError()
+
         if get_preferences(context).hide_armature:
             for obj in context.selected_objects:
                 if obj.type == "ARMATURE":

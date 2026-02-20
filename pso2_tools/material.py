@@ -218,6 +218,9 @@ def texture_has_parts(name: str, parts: str | Iterable[str]):
 def find_textures(*parts: str, images: Iterable[bpy.types.Image] | None = None):
     images = images or bpy.data.images
 
+    if images is None:
+        raise TypeError()
+
     return [img for img in images if texture_has_parts(img.name, parts)]
 
 

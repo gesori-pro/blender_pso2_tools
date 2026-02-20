@@ -33,6 +33,9 @@ class PSO2_OT_WeldMeshEdges(bpy.types.Operator):
 
 
 def weld_mesh_edges(context: bpy.types.Context, distance: float):
+    if context.selected_objects is None:
+        raise TypeError()
+
     objects = [obj for obj in context.selected_objects if obj.type == "MESH"]
     meshes = [bmesh.from_edit_mesh(obj.data) for obj in objects]  # type: ignore
 

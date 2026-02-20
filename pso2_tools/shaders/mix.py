@@ -98,10 +98,14 @@ class ShaderNodePso2MixTextureAttribute(ShaderNodePso2Mix):
         ],
     )
     attribute_name: bpy.props.StringProperty(
-        name="Name", update=_name_update  # type: ignore
+        name="Name",
+        update=_name_update,  # type: ignore
     )
 
-    def draw_buttons(self, context: Context, layout: UILayout):
+    def draw_buttons(self, context: Context, layout: UILayout | None):
+        if layout is None:
+            raise TypeError()
+
         layout.prop(self, "attribute_type")
         layout.prop(self, "attribute_name")
 

@@ -218,7 +218,6 @@ class Shader0100(builder.ShaderBuilder):
 
 @classes.register
 class ShaderNodePso2Classic(group.ShaderNodeCustomGroup):
-
     bl_name = "ShaderNodePso2Classic"
     bl_label = "PSO2 Classic"
     bl_icon = "NONE"

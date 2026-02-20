@@ -4,66 +4,72 @@ version = "2.5.0"
 requires-python = ">= 3.11"
 dependencies = [
   "fake-bpy-module==20260218",
-  "pip",
-  "prek",
-  "pylint",
+  "pip>=26.0.1",
+  "prek>=0.3.3",
+  "pyright>=1.1.408",
   "pythonnet==3.0.5",
+  "ruff>=0.15.2",
   "watchdog==6.0.0",
 ]
 
-[tool.isort]
-profile = "black"
+# [tool.isort]
+# profile = "black"
 
-[tool.pylint.MAIN]
-extension-pkg-whitelist = '''
-  bpy,
-  bpy_extras,
-  AquaModelLibrary,
-  Assimp,
-  Zamboni,
-'''
-source-roots = '''
-  .,
-  C:/Program Files/Blender Foundation/Blender 5.0/5.0/scripts/addons_core
-'''
+# [tool.pylint.MAIN]
+# extension-pkg-whitelist = '''
+#   bpy,
+#   bpy_extras,
+#   AquaModelLibrary,
+#   Assimp,
+#   Zamboni,
+# '''
+# source-roots = '''
+#   .,
+#   C:/Program Files/Blender Foundation/Blender 5.0/5.0/scripts/addons_core
+# '''
 
-[tool.pylint."MESSAGES CONTROL"]
-disable = '''
-  import-error,
-  invalid-name,
-  line-too-long,
-  missing-class-docstring,
-  missing-function-docstring,
-  missing-module-docstring,
-  too-few-public-methods,
-  too-many-arguments,
-  too-many-branches,
-  too-many-instance-attributes,
-  too-many-lines,
-  too-many-locals,
-  too-many-public-methods,
-  too-many-return-statements,
-  unused-argument,
-'''
+# [tool.pylint."MESSAGES CONTROL"]
+# disable = '''
+#   import-error,
+#   invalid-name,
+#   line-too-long,
+#   missing-class-docstring,
+#   missing-function-docstring,
+#   missing-module-docstring,
+#   too-few-public-methods,
+#   too-many-arguments,
+#   too-many-branches,
+#   too-many-instance-attributes,
+#   too-many-lines,
+#   too-many-locals,
+#   too-many-public-methods,
+#   too-many-return-statements,
+#   unused-argument,
+# '''
 
-[tool.pylint.TYPECHECK]
-ignored-modules = '''
-  AquaModelLibrary,
-  Assimp,
-  Zamboni,
-'''
+# [tool.pylint.TYPECHECK]
+# ignored-modules = '''
+#   AquaModelLibrary,
+#   Assimp,
+#   Zamboni,
+# '''
 
-[tool.pylint.FORMAT]
-good-names = "d,ex,f,i,id"
+# [tool.pylint.FORMAT]
+# good-names = "d,ex,f,i,id"
 
 [tool.pyright]
 reportAbstractUsage = false
 reportInvalidTypeForm = false
 reportMissingImports = false
 reportMissingModuleSource = false
+reportUndefinedVariable = false
+reportUnboundVariable = false
 extraPaths = [
   "C:/Program Files/Blender Foundation/Blender 5.0/5.0/scripts/addons_core",
 ]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
 
 [tool.setuptools]
 packages = ["pso2_tools"]

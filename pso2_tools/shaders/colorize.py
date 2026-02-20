@@ -11,9 +11,9 @@ class ShaderNodePso2ColorizeBase(group.ShaderNodeCustomGroup):
     operation: Literal["MIX", "MULTIPLY"] = "MIX"
 
     def _set_channel_used(self, channel: int, used: bool):
-        self.input(bpy.types.NodeSocketBool, f"Use Color {channel}").default_value = (
-            used
-        )
+        self.input(
+            bpy.types.NodeSocketBool, f"Use Color {channel}"
+        ).default_value = used
 
     def set_colors_used(self, colors: ColorMapping | list[int]):
         if isinstance(colors, ColorMapping):

@@ -187,7 +187,7 @@ class ListItem(bpy.types.PropertyGroup):
                 prop.name = name
                 prop.value = IntItem.INVALID if value is None else value
 
-            elif field.type == str:
+            elif field.type is str:
                 prop = cast(StringItem, self.string_fields.add())
                 prop.name = name
                 prop.value = value
@@ -674,6 +674,9 @@ class PSO2_UL_ModelList(bpy.types.UIList):
 
     # pylint: disable=redefined-builtin
     def filter_items(self, context, data, property):  # type: ignore
+        if property is None:
+            raise TypeError()
+
         preferences = get_preferences(context)
         items: Sequence[ListItem] = getattr(data, property)
 
@@ -766,6 +769,9 @@ class PSO2_UL_ModelList(bpy.types.UIList):
         return flt_flags, flt_neworder
 
     def draw_filter(self, context, layout):
+        if layout is None:
+            raise TypeError()
+
         preferences = get_preferences(context)
 
         row = layout.row(align=True)
@@ -799,6 +805,9 @@ class PSO2_UL_ModelList(bpy.types.UIList):
         index=0,
         flt_flag=0,
     ):
+        if layout is None:
+            raise TypeError()
+
         # Hack to keep the filter open
         self.use_filter_show = True
 

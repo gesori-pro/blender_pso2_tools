@@ -124,6 +124,9 @@ def _include_parents(context: bpy.types.Context, fbx_options: ExportOptions):
         assert context.view_layer is not None
         ctx_objects = context.view_layer.objects
 
+    if ctx_objects is None:
+        raise TypeError()
+
     try:
         # If we are only including visible objects, make sure the parents of any
         # visible objects are also visible.
@@ -141,7 +144,7 @@ def _include_parents(context: bpy.types.Context, fbx_options: ExportOptions):
         # If we are only including selected objects, make sure the parents of any
         # selected objects are also selected.
         if use_selection:
-            selection = set(context.selected_objects)
+            selection = set(context.selected_objects or [])
             for obj in _get_selected_meshes(ctx_objects):
                 while obj := obj.parent:
                     if not obj.select_get():

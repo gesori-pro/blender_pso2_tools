@@ -30,7 +30,7 @@ def build():
 def get_package_path() -> Path:
     with MANIFEST.open("rb") as f:
         manifest = tomllib.load(f)
-        name = f"{manifest["id"]}-{manifest['version']}.zip"
+        name = f"{manifest['id']}-{manifest['version']}.zip"
 
         return OUTPUT_DIR / name
 

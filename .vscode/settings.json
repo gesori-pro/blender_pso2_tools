@@ -3,9 +3,11 @@
   "files.exclude": {
     "**/__pycache__": true
   },
-  "isort.args": ["--settings-file", "${workspaceFolder}"],
   "python.analysis.importFormat": "relative",
+  "pylint.enabled": false,
+  "ruff.enable": true,
   "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff",
     "editor.codeActionsOnSave": {
       "source.organizeImports": "explicit"
     }

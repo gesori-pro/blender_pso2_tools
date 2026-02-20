@@ -2,8 +2,7 @@
 PSO2 Tools Blender addon
 """
 
-# pylint: disable=wrong-import-position
-# pylint: disable=wrong-import-order
+# ruff: noqa: E402
 import bpy
 
 bl_info = {
@@ -16,9 +15,10 @@ bl_info = {
 if "reloader" in locals():
     import importlib
 
-    # pylint: disable=used-before-assignment
-    importlib.reload(reloader)  # type: ignore
+    # ruff: disable[F821]
+    importlib.reload(reloader)
     reloader.reload_addon(__name__)  # type: ignore
+    # ruff: enable[F821]
 
 from . import dotnet
 
@@ -31,10 +31,11 @@ from . import (
     import_ice,
     import_search,
     operators,
-    reloader,
     scene_props,
 )
-from .panels import appearance, ornaments
+from . import reloader as reloader
+from .panels import appearance as appearance
+from .panels import ornaments as ornaments
 from .paths import ADDON_PATH
 
 
@@ -78,8 +79,7 @@ if ADDON_PATH.is_symlink():
     from . import watcher
 
     if "watch" in locals():
-        # pylint: disable-next=used-before-assignment
-        watch.reset()  # pyright: ignore[reportUndefinedVariable]
+        watch.reset()  # noqa: F821
     else:
         watch = watcher.FileWatcher(bpy.ops.script.reload)
         watch.start()
