@@ -90,24 +90,19 @@ def _find_function(mod: ast.Module, name: str):
     )
 
 
-def _compile_function(name: str, source: str):
+def _compile_function(source: str):
     mod = ast.parse(source, filename="<export_fbx_bin patched>")
-    return _find_function(mod, name)
+    return next(n for n in mod.body if isinstance(n, ast.FunctionDef))
 
 
 def _get_patched_export_funcs():
-    # There's no convenient function to replace in the export code.
-    # fbx_data_armature_elements() is the smallest scope that has access to the
-    # data needed, but it's long. Instead of putting a patched copy of the whole
-    # function here, parse the source file and generate a patched function.
-
-    module_path = Path(io_scene_fbx.export_fbx_bin.__spec__.origin)
-    source = module_path.read_text(encoding="utf-8")
+    # There's no convenient function to replace in the export code. Instead of
+    # putting complete copies of the code with patches here, parse the source
+    # code and apply patches to the AST to make new functions.
 
     # If a bone has a "pso2_bone_id" custom property, returns "(id)name"
     # Parameter may be io_scene_fbx.fbx_utils.ObjectWrapper or bpy.types.Bone
     get_bone_name = _compile_function(
-        "pso2_get_bone_name",
         """\
 def pso2_get_bone_name(bone):
     search = [bone]
@@ -126,7 +121,7 @@ def pso2_get_bone_name(bone):
 """,
     )
 
-    class RewriteBoneName(ast.NodeTransformer):
+    class RewriteFbxNameClass(ast.NodeTransformer):
         def visit_Call(self, node):
             self.generic_visit(node)
 
@@ -171,34 +166,34 @@ def pso2_get_bone_name(bone):
                 case _:
                     return node
 
-    patched_1 = _compile_function("fbx_data_armature_elements", source)
-    patched_1.body.insert(0, get_bone_name)
-    patched_1 = ast.fix_missing_locations(RewriteBoneName().visit(patched_1))
+    def patch_function(mod: ast.Module, name: str):
+        func = _find_function(mod, name)
+        func.body.insert(0, get_bone_name)
+        func = ast.fix_missing_locations(RewriteFbxNameClass().visit(func))
 
-    patched_2 = _compile_function("fbx_data_object_elements", source)
-    patched_2.body.insert(0, get_bone_name)
-    patched_2 = ast.fix_missing_locations(RewriteBoneName().visit(patched_2))
+        ns = {}
+        exec(ast.unparse(func), io_scene_fbx.export_fbx_bin.__dict__, ns)
+        return ns[name]
 
-    ns = {}
-    exec(ast.unparse(patched_1), io_scene_fbx.export_fbx_bin.__dict__, ns)
-    exec(ast.unparse(patched_2), io_scene_fbx.export_fbx_bin.__dict__, ns)
+    module_path = Path(io_scene_fbx.export_fbx_bin.__spec__.origin)
+    source = module_path.read_text(encoding="utf-8")
+    mod = ast.parse(source, filename="<export_fbx_bin patched>")
 
-    return ns
+    fbx_data_armature_elements = patch_function(mod, "fbx_data_armature_elements")
+    fbx_data_object_elements = patch_function(mod, "fbx_data_object_elements")
+
+    return fbx_data_armature_elements, fbx_data_object_elements
 
 
 @contextmanager
 def _monkey_patch_export_fbx_bin():
     orig_armature_elements = io_scene_fbx.export_fbx_bin.fbx_data_armature_elements
     orig_object_elements = io_scene_fbx.export_fbx_bin.fbx_data_object_elements
-    new = _get_patched_export_funcs()
+    new_armature_elements, new_object_elements = _get_patched_export_funcs()
 
     try:
-        io_scene_fbx.export_fbx_bin.fbx_data_armature_elements = new[
-            "fbx_data_armature_elements"
-        ]
-        io_scene_fbx.export_fbx_bin.fbx_data_object_elements = new[
-            "fbx_data_object_elements"
-        ]
+        io_scene_fbx.export_fbx_bin.fbx_data_armature_elements = new_armature_elements
+        io_scene_fbx.export_fbx_bin.fbx_data_object_elements = new_object_elements
         yield
     finally:
         io_scene_fbx.export_fbx_bin.fbx_data_armature_elements = orig_armature_elements
