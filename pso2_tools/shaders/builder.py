@@ -122,7 +122,7 @@ class NodeTreeBuilder:
         location: Vec2 | None = None,
         name: str | None = None,
     ) -> NODE:
-        return cast(node_type, self._add_node(node_type.__name__, location, name))
+        return cast("node_type", self._add_node(node_type.__name__, location, name))
 
     def _add_node(self, node_type: str, location: Vec2 | None, name: str | None):
         x, y = location or (0, 0)

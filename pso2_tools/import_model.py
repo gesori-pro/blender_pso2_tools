@@ -227,9 +227,8 @@ def _import_models(
     scene_props.add_scene_properties()
     scene_props.add_material_properties()
 
-    if options:
-        if import_colors := options.get("colors"):
-            _set_scene_colors(context, import_colors)
+    if options and (import_colors := options.get("colors")):
+        _set_scene_colors(context, import_colors)
 
     # Collect extra textures that are not part of the model but are used by it.
     if model_materials.has_skin_material:
@@ -380,7 +379,7 @@ def _import_aqp(
         fbx_options = _get_fbx_options(options)
 
         result = cast(
-            OperatorResult,
+            "OperatorResult",
             fbx_wrapper.load(
                 operator,
                 context,
@@ -464,7 +463,7 @@ def _get_uv_map(obj: objects.CmxBodyObject):
 def _get_fbx_options(options: ImportOptions):
     result = FbxImportOptions()
 
-    for key in get_type_hints(FbxImportOptions).keys():
+    for key in get_type_hints(FbxImportOptions):
         if key in options:
             result[key] = options[key]
 

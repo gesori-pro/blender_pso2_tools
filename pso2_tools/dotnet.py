@@ -1,5 +1,3 @@
-# pylint: disable=import-outside-toplevel
-
 from pathlib import Path
 
 import clr_loader
@@ -23,7 +21,7 @@ _loaded = False
 
 
 def load():
-    global _loaded  # pylint: disable=global-statement
+    global _loaded
     if _loaded:
         return
 
@@ -37,7 +35,7 @@ def load():
 
     for name in _DLL_NAMES:
         path = str(BIN_PATH / name)
-        clr.AddReference(path)  # pylint: disable=no-member # type: ignore
+        clr.AddReference(path)  # type: ignore
 
     from Assimp.Unmanaged import AssimpLibrary
 

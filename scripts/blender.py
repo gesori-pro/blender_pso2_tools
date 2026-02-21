@@ -11,7 +11,7 @@ from pathlib import Path
 
 def find_blender() -> Path:
     # TODO: add handling for multiple installed versions
-    program_files = Path(os.getenv("ProgramFiles", "C:/Program Files"))
+    program_files = Path(os.getenv("PROGRAMFILES", "C:/Program Files"))
     blender_root = program_files / "Blender Foundation"
     try:
         return next(blender_root.rglob("blender.exe"))
@@ -21,12 +21,12 @@ def find_blender() -> Path:
 
 def blender_call(cmd, *args, **kwargs):
     blender = find_blender()
-    return subprocess.call([blender] + cmd, *args, **kwargs)
+    return subprocess.call([blender, *cmd], *args, **kwargs)
 
 
 def blender_check_output(cmd, *args, encoding="utf-8", **kwargs) -> str:
     blender = find_blender()
-    return subprocess.check_output([blender] + cmd, *args, encoding=encoding, **kwargs)
+    return subprocess.check_output([blender, *cmd], *args, encoding=encoding, **kwargs)
 
 
 def get_extension_repo(name: str) -> Path | None:

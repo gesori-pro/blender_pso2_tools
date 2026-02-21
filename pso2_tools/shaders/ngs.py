@@ -151,7 +151,7 @@ class ShaderNodePso2NgsSkin(ShaderNodePso2NgsBase):
         super()._build(node_tree)
 
         bsdf = cast(
-            bpy.types.ShaderNodeBsdfPrincipled, node_tree.nodes["Principled BSDF"]
+            "bpy.types.ShaderNodeBsdfPrincipled", node_tree.nodes["Principled BSDF"]
         )
 
         bsdf.subsurface_method = "RANDOM_WALK_SKIN"

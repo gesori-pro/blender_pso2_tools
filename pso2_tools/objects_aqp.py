@@ -85,7 +85,7 @@ class AqpDataFileSource:
         resources = (
             AqpDataFile(path)
             for path in self.path.parent.iterdir()
-            if path.is_file() and not path.suffix.lower() == ".aqp"
+            if path.is_file() and path.suffix.lower() != ".aqp"
         )
 
         return itertools.chain([aqp_file], resources)

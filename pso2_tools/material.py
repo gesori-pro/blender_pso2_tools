@@ -75,7 +75,6 @@ class Material:
             dest_alpha=int(mat.destAlpha),
             diffuse_rgba=to_vec4(mat.diffuseRGBA),
             unknown_rgba_0=to_vec4(mat.unkRGBA0),
-            # pylint: disable-next=protected-access
             srgba=to_vec4(mat._sRGBA),
             unknown_rgba_1=to_vec4(mat.unkRGBA1),
             reserved_0=int(mat.reserve0),

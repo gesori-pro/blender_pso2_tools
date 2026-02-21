@@ -178,27 +178,27 @@ class ListItem(bpy.types.PropertyGroup):
             value = getattr(obj, name)
 
             if field.type in (float, float | None):
-                prop = cast(FloatItem, self.float_fields.add())
+                prop = cast("FloatItem", self.float_fields.add())
                 prop.name = name
                 prop.value = math.nan if value is None else value
 
             elif field.type in (int, int | None):
-                prop = cast(IntItem, self.float_fields.add())
+                prop = cast("IntItem", self.float_fields.add())
                 prop.name = name
                 prop.value = IntItem.INVALID if value is None else value
 
             elif field.type is str:
-                prop = cast(StringItem, self.string_fields.add())
+                prop = cast("StringItem", self.string_fields.add())
                 prop.name = name
                 prop.value = value
 
             elif field.type == objects.CmxFileName:
-                prop = cast(FileNameItem, self.files.add())
+                prop = cast("FileNameItem", self.files.add())
                 prop.name = name
                 prop.value = value.name
 
             elif field.type == objects.CmxColorMapping:
-                prop = cast(ColorMapItem, self.color_map_fields.add())
+                prop = cast("ColorMapItem", self.color_map_fields.add())
                 prop.name = name
                 prop.red = int(value.red)
                 prop.green = int(value.green)
@@ -672,8 +672,7 @@ class PSO2_UL_ModelList(bpy.types.UIList):
         super().__init__(*args, **kwargs)
         self.use_filter_show = True
 
-    # pylint: disable=redefined-builtin
-    def filter_items(self, context, data, property):  # type: ignore
+    def filter_items(self, context, data, property):  # noqa: A002
         if property is None:
             raise TypeError()
 
@@ -683,7 +682,7 @@ class PSO2_UL_ModelList(bpy.types.UIList):
         if self.filter_name:
             # https://github.com/nutti/fake-bpy-module/issues/376
             flt_flags = cast(
-                list[int],
+                "list[int]",
                 bpy.types.UI_UL_list.filter_items_by_name(
                     self.filter_name,
                     self.bitflag_filter_item,

@@ -25,7 +25,7 @@ class PSO2_OT_ImportIce(  # type: ignore https://github.com/nutti/fake-bpy-modul
         self.draw_import_props_panel(self.layout)
 
     def execute(self, context) -> OperatorResult:
-        path = Path(self.filepath)  # pylint: disable=no-member # type: ignore
+        path = Path(self.filepath)  # type: ignore
 
         import_model.import_ice_file(self, context, path, options=self.get_options())
 

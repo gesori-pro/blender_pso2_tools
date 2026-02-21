@@ -12,51 +12,6 @@ dependencies = [
   "watchdog==6.0.0",
 ]
 
-# [tool.isort]
-# profile = "black"
-
-# [tool.pylint.MAIN]
-# extension-pkg-whitelist = '''
-#   bpy,
-#   bpy_extras,
-#   AquaModelLibrary,
-#   Assimp,
-#   Zamboni,
-# '''
-# source-roots = '''
-#   .,
-#   C:/Program Files/Blender Foundation/Blender 5.0/5.0/scripts/addons_core
-# '''
-
-# [tool.pylint."MESSAGES CONTROL"]
-# disable = '''
-#   import-error,
-#   invalid-name,
-#   line-too-long,
-#   missing-class-docstring,
-#   missing-function-docstring,
-#   missing-module-docstring,
-#   too-few-public-methods,
-#   too-many-arguments,
-#   too-many-branches,
-#   too-many-instance-attributes,
-#   too-many-lines,
-#   too-many-locals,
-#   too-many-public-methods,
-#   too-many-return-statements,
-#   unused-argument,
-# '''
-
-# [tool.pylint.TYPECHECK]
-# ignored-modules = '''
-#   AquaModelLibrary,
-#   Assimp,
-#   Zamboni,
-# '''
-
-# [tool.pylint.FORMAT]
-# good-names = "d,ex,f,i,id"
-
 [tool.pyright]
 reportAbstractUsage = false
 reportInvalidTypeForm = false
@@ -69,7 +24,45 @@ extraPaths = [
 ]
 
 [tool.ruff.lint]
-select = ["E4", "E7", "E9", "F", "UP", "I"]
+select = [
+  # flake8-builtins
+  "A",
+  # flake8-bugbear
+  "B",
+  # flake8-comprehensions
+  "C4",
+  # pycodestyle
+  "E4",
+  "E7",
+  "E9",
+  # pyflakes
+  "F",
+  # isort
+  "I",
+  # flake8-implicit-str-concat
+  "ISC",
+  # perflint
+  "PERF",
+  # flake8-pie
+  "PIE",
+  # flake8-use-pathlib
+  "PTH",
+  # flake8-return
+  "RET",
+  # ruff
+  "RUF",
+  # flake8-simplify
+  "SIM",
+  # flake8-type-checking
+  "TC",
+  # pyupgrade
+  "UP"
+]
+ignore = [
+  # https://docs.astral.sh/ruff/rules/mutable-class-default/
+  # bpy.types.Operator
+  "RUF012"
+]
 
 [tool.setuptools]
 packages = ["pso2_tools"]

@@ -459,7 +459,7 @@ class CmxObjectBase:
 
     @classmethod
     def from_db_row(cls, object_type: ObjectType, row: sqlite3.Row):
-        d = {k: row[k] for k in row.keys() if row[k] is not None}
+        d = {k: row[k] for k in row.keys() if row[k] is not None}  # noqa: SIM118
 
         return cls(object_type=object_type, **d)
 
@@ -480,7 +480,7 @@ class CmxObjectBase:
             if field.name not in self._NO_COLUMN
         }
 
-        placeholders = ",".join(":" + k for k in d.keys())
+        placeholders = ",".join(":" + k for k in d)
 
         con.execute(f"INSERT INTO {self.object_type} VALUES({placeholders})", d)
 
@@ -774,7 +774,7 @@ class ObjectDatabase:
 
         cmx: CharacterMakingIndex = ReferenceGenerator.ExtractCMX(str(bin_path))
 
-        parts_text, accessory_text, common_text, common_text_reboot = (
+        parts_text, accessory_text, _common_text, _common_text_reboot = (
             ReferenceGenerator.ReadCMXText(
                 str(bin_path), PSO2Text(), PSO2Text(), PSO2Text(), PSO2Text()
             )
@@ -1366,9 +1366,8 @@ def _get_hair(
     tag = _get_file_tag(object_type)
     data = CmxHairObject(**_common_props(object_type, item_id, name_dict))
 
-    if item := dict_get(object_dict, item_id):
-        if data.is_ngs:
-            data.color_mapping = CmxColorMapping.from_hair_obj(item)
+    if data.is_ngs and (item := dict_get(object_dict, item_id)):
+        data.color_mapping = CmxColorMapping.from_hair_obj(item)
 
     start = _get_file_path_start(item_id)
     data.file.name = f"{start}{tag}_{data.adjusted_id:05d}.ice"

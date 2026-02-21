@@ -290,20 +290,19 @@ class PSO2_OT_ExportAqp(bpy.types.Operator, ExportHelper):  # type: ignore
         export_panel_animation(layout, self)
 
     def execute(self, context):
-        if not self.filepath:  # pylint: disable=no-member # type: ignore
+        if not self.filepath:  # type: ignore
             raise ValueError("filepath not set")
 
-        path = Path(self.filepath)  # pylint: disable=no-member # type: ignore
+        path = Path(self.filepath)  # type: ignore
 
         global_matrix = (
-            # pylint: disable-next=no-member
             axis_conversion(to_forward=self.axis_forward, to_up=self.axis_up).to_4x4()  # type: ignore
             if self.use_space_transform
             else Matrix()
         )
 
         options = cast(
-            export_model.ExportOptions,
+            "export_model.ExportOptions",
             self.as_keywords(
                 ignore=(
                     "check_existing",
@@ -314,7 +313,6 @@ class PSO2_OT_ExportAqp(bpy.types.Operator, ExportHelper):  # type: ignore
                 )
             ),
         )
-        # pylint: disable-next=unsupported-assignment-operation
         options["global_matrix"] = global_matrix
 
         return export_model.export(

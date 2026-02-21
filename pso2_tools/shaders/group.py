@@ -20,10 +20,10 @@ class ShaderNodeCustomGroup(bpy.types.ShaderNodeCustomGroup):
         if not self.has_attributes and (
             tree := bpy.data.node_groups.get(self.group_name, None)
         ):
-            self.node_tree = cast(bpy.types.ShaderNodeTree, tree)
+            self.node_tree = cast("bpy.types.ShaderNodeTree", tree)
         else:
             self.node_tree = cast(
-                bpy.types.ShaderNodeTree,
+                "bpy.types.ShaderNodeTree",
                 bpy.data.node_groups.new(self.group_name, "ShaderNodeTree"),
             )
             self._build(self.node_tree)
@@ -36,7 +36,7 @@ class ShaderNodeCustomGroup(bpy.types.ShaderNodeCustomGroup):
         raise NotImplementedError()
 
     def input(self, node_type: type[_T], name: str) -> _T:
-        return cast(_T, self.inputs[name])
+        return cast("_T", self.inputs[name])
 
     def draw_buttons(
         self, context: bpy.types.Context, layout: bpy.types.UILayout | None

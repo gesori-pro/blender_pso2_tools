@@ -75,12 +75,11 @@ class CommonImportProps:
     )
 
     def get_options(self, ignore: Iterable[str] | None = None) -> ImportOptions:
-        operator = cast(bpy.types.Operator, self)
+        operator = cast("bpy.types.Operator", self)
         ignore = ignore or ()
 
         keywords = cast(
-            ImportOptions,
-            # pylint: disable-next=no-member
+            "ImportOptions",
             operator.as_keywords(
                 ignore=("filter_glob", "filepath", "show_advanced", *ignore)
             ),
@@ -90,7 +89,7 @@ class CommonImportProps:
         return keywords
 
     def draw_import_props_panel(self, layout: bpy.types.UILayout):
-        operator = cast(bpy.types.Operator, self)
+        operator = cast("bpy.types.Operator", self)
 
         layout.use_property_split = True
         layout.use_property_decorate = False

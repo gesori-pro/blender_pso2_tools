@@ -11,9 +11,10 @@ ROOT_PATH = Path(__file__).parent
 
 
 class FileWatcher(FileSystemEventHandler):
-    _hashes: dict[str, str] = {}
+    _hashes: dict[str, str]
 
     def __init__(self, callback: Callable, path=ROOT_PATH):
+        self._hashes = {}
         self._callback = callback
         self._path = path
         self._observer = Observer()
@@ -72,9 +73,8 @@ class FileWatcher(FileSystemEventHandler):
 
         key, digest = self._hash_file(path)
 
-        if prev_digest := self._hashes.get(key):
-            if digest == prev_digest:
-                return
+        if (prev_digest := self._hashes.get(key)) and digest == prev_digest:
+            return
 
         self._hashes[key] = digest
 

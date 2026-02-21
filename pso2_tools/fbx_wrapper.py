@@ -62,7 +62,6 @@ def _monkey_patch_FbxImportHelperNode():
             super().__init__(fbx_elem, bl_data, fbx_transform_data, is_bone)
 
             # Split fbx_name into the name and bone ID
-            # pylint: disable-next=access-member-before-definition
             if result := split_bone_name(self.fbx_name):
                 self.fbx_name = result[0]
                 self.pso2_bone_id = result[1]
@@ -181,9 +180,7 @@ def pso2_get_bone_name(bone):
     patched_2 = ast.fix_missing_locations(RewriteBoneName().visit(patched_2))
 
     ns = {}
-    # pylint: disable-next=exec-used
     exec(ast.unparse(patched_1), io_scene_fbx.export_fbx_bin.__dict__, ns)
-    # pylint: disable-next=exec-used
     exec(ast.unparse(patched_2), io_scene_fbx.export_fbx_bin.__dict__, ns)
 
     return ns

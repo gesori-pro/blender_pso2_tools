@@ -114,7 +114,7 @@ class ShaderNodePso2MixTextureAttribute(ShaderNodePso2Mix):
         if not self.node_tree:
             raise RuntimeError("Tree missing")
 
-        return cast(bpy.types.ShaderNodeAttribute, self.node_tree.nodes["Attribute"])
+        return cast("bpy.types.ShaderNodeAttribute", self.node_tree.nodes["Attribute"])
 
     def _add_nodes(self, tree: builder.NodeTreeBuilder):
         attr = tree.add_node(bpy.types.ShaderNodeAttribute, name="Attribute")

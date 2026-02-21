@@ -8,7 +8,7 @@ import bpy
 from . import classes
 from .colors import COLOR_CHANNELS, ColorId
 
-PROGRAM_FILES = Path(os.getenv("PROGRAMFILES(x86)", "C:\\Program Files (x86)"))
+PROGRAM_FILES = Path(os.getenv("PROGRAMFILES(X86)", "C:\\Program Files (x86)"))
 
 WINDOWS_STORE_PATH = PROGRAM_FILES / "ModifiableWindowsApps/pso2_bin/data"
 STEAM_PATH = "SteamApps/common/PHANTASYSTARONLINE2_NA_STEAM/pso2_bin/data"
@@ -236,5 +236,5 @@ def get_preferences(context: bpy.types.Context | None) -> Pso2ToolsPreferences:
     assert context.preferences is not None
 
     return cast(
-        Pso2ToolsPreferences, context.preferences.addons[__package__].preferences
+        "Pso2ToolsPreferences", context.preferences.addons[__package__].preferences
     )

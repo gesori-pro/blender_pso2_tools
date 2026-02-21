@@ -90,7 +90,7 @@ def export(
 
         # TODO: support exporting motions
         model, aqn = cast(
-            tuple[AquaObject, AquaNode],
+            "tuple[AquaObject, AquaNode]",
             AssimpModelImporter.AssimpAquaConvertFull(
                 initialFilePath=str(fbxfile),
                 scaleFactor=1,
@@ -174,7 +174,7 @@ def _get_selected_meshes(objects: Iterable[bpy.types.Object]):
 def _get_fbx_options(options: ExportOptions):
     result = FbxExportOptions()
 
-    for key in get_type_hints(FbxExportOptions).keys():
+    for key in get_type_hints(FbxExportOptions):
         if key in options:
             result[key] = options[key]
 
