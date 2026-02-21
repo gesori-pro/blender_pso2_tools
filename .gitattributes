@@ -1,0 +1,2 @@
+; Workaround for VS Code Python extension error
+pyproject.toml text eol=lf

@@ -3,9 +3,7 @@
   "files.exclude": {
     "**/__pycache__": true
   },
-  "python.analysis.autoImportCompletions": true,
   "python.analysis.importFormat": "relative",
-  "python.analysis.indexing": true,
   "pylint.enabled": false,
   "ruff.enable": true,
   "[python]": {

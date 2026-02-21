@@ -17,7 +17,6 @@ reportAbstractUsage = false
 reportInvalidTypeForm = false
 reportMissingImports = false
 reportMissingModuleSource = false
-reportUndefinedVariable = false
 reportUnboundVariable = false
 extraPaths = [
   "C:/Program Files/Blender Foundation/Blender 5.0/5.0/scripts/addons_core",
@@ -37,8 +36,6 @@ select = [
   "E9",
   # pyflakes
   "F",
-  # isort
-  "I",
   # flake8-implicit-str-concat
   "ISC",
   # perflint
