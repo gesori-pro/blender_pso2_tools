@@ -20,7 +20,6 @@ from . import (
     material,
     objects,
     objects_aqp,
-    scene_props,
     shaders,
 )
 from .debug import debug_pprint, debug_print
@@ -223,9 +222,6 @@ def _import_models(
         },
         textures=[import_data_image(tex) for tex in files.texture_files],
     )
-
-    scene_props.add_scene_properties()
-    scene_props.add_material_properties()
 
     if options and (import_colors := options.get("colors")):
         _set_scene_colors(context, import_colors)

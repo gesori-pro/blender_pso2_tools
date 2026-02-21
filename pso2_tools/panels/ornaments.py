@@ -1,10 +1,16 @@
-import re
-
 import bpy
 
-from .. import classes, util
+from .. import classes, parts, util
 
-ORNAMENT_MESHES = ["3", "8", "9", "10", "11", "12", "13"]
+ORNAMENT_MESHES = [
+    parts.MeshId.Ornament1,
+    parts.MeshId.Ornament2,
+    parts.MeshId.HeadOrnament,
+    parts.MeshId.CastBodyOrnament,
+    parts.MeshId.CastLegsOrnament,
+    parts.MeshId.CastArmsOrnament,
+    parts.MeshId.OuterOrnament,
+]
 
 
 @classes.register
@@ -18,10 +24,9 @@ class PSO2OrnamentsPanel(bpy.types.Panel):
     @classmethod
     def poll(cls, context):
         return any(
-            m.group(1) in ORNAMENT_MESHES
+            parts.get_mesh_id(obj.name) in ORNAMENT_MESHES
             for obj in bpy.data.objects
             if obj.type == "MESH"
-            and (m := MESH_ID_RE.search(util.remove_blender_suffix(obj.name)))
         )
 
     def draw(self, context):
@@ -94,25 +99,19 @@ def draw_toggle(
     row.operator(hide.bl_idname, depress=hide.is_depressed())
 
 
-MESH_ID_RE = re.compile(r"#(\d+)$")
-
-
-def has_ornament_mesh(mesh_id: str):
+def has_ornament_mesh(mesh_id: parts.MeshId):
     return any(
-        m.group(1) == mesh_id
+        parts.get_mesh_id(obj.name) == mesh_id
         for obj in bpy.data.objects
         if obj.type == "MESH"
-        and (m := MESH_ID_RE.search(util.remove_blender_suffix(obj.name)))
     )
 
 
-def get_ornament_mesh_objects(mesh_id: str):
+def get_ornament_mesh_objects(mesh_id: parts.MeshId):
     return [
         obj
         for obj in bpy.data.objects
-        if obj.type == "MESH"
-        and (m := MESH_ID_RE.search(util.remove_blender_suffix(obj.name)))
-        and m.group(1) == mesh_id
+        if obj.type == "MESH" and parts.get_mesh_id(obj.name) == mesh_id
     ]
 
 
@@ -129,7 +128,7 @@ def find_context_area():
 class PSO2_OT_ShowOrnament(bpy.types.Operator):
     bl_label = "Show"
     bl_options = {"UNDO", "REGISTER", "INTERNAL"}
-    mesh_id = "0"
+    mesh_id: parts.MeshId
 
     def execute(self, context) -> util.OperatorResult:
         for mesh in get_ornament_mesh_objects(self.mesh_id):
@@ -150,7 +149,7 @@ class PSO2_OT_ShowOrnament(bpy.types.Operator):
 class PSO2_OT_HideOrnament(bpy.types.Operator):
     bl_label = "Hide"
     bl_options = {"UNDO", "REGISTER", "INTERNAL"}
-    mesh_id = "0"
+    mesh_id: parts.MeshId
 
     def execute(self, context) -> util.OperatorResult:
         for mesh in get_ornament_mesh_objects(self.mesh_id):
@@ -167,82 +166,82 @@ class PSO2_OT_HideOrnament(bpy.types.Operator):
 @classes.register
 class PSO2_OT_ShowOrnamentBasewear1(PSO2_OT_ShowOrnament):
     bl_idname = "pso2.show_basewear_ornament_1"
-    mesh_id = "3"
+    mesh_id = parts.MeshId.Ornament1
 
 
 @classes.register
 class PSO2_OT_HideOrnamentBasewear1(PSO2_OT_HideOrnament):
     bl_idname = "pso2.hide_basewear_ornament_1"
-    mesh_id = "3"
+    mesh_id = parts.MeshId.Ornament1
 
 
 @classes.register
 class PSO2_OT_ShowOrnamentBasewear2(PSO2_OT_ShowOrnament):
     bl_idname = "pso2.show_basewear_ornament_2"
-    mesh_id = "8"
+    mesh_id = parts.MeshId.Ornament2
 
 
 @classes.register
 class PSO2_OT_HideOrnamentBasewear2(PSO2_OT_HideOrnament):
     bl_idname = "pso2.hide_basewear_ornament_2"
-    mesh_id = "8"
+    mesh_id = parts.MeshId.Ornament2
 
 
 @classes.register
 class PSO2_OT_ShowOrnamentOuterwear(PSO2_OT_ShowOrnament):
     bl_idname = "pso2.show_outerwear_ornament"
-    mesh_id = "13"
+    mesh_id = parts.MeshId.OuterOrnament
 
 
 @classes.register
 class PSO2_OT_HideOrnamentOuterwear(PSO2_OT_HideOrnament):
     bl_idname = "pso2.hide_outerwear_ornament"
-    mesh_id = "13"
+    mesh_id = parts.MeshId.OuterOrnament
 
 
 @classes.register
 class PSO2_OT_ShowOrnamentHair(PSO2_OT_ShowOrnament):
     bl_idname = "pso2.show_hair_ornament"
-    mesh_id = "9"
+    mesh_id = parts.MeshId.HeadOrnament
 
 
 @classes.register
 class PSO2_OT_HideOrnamentHair(PSO2_OT_HideOrnament):
     bl_idname = "pso2.hide_hair_ornament_1"
-    mesh_id = "9"
+    mesh_id = parts.MeshId.HeadOrnament
 
 
 @classes.register
 class PSO2_OT_ShowOrnamentCastBody(PSO2_OT_ShowOrnament):
     bl_idname = "pso2.show_cast_body_ornament"
-    mesh_id = "10"
+    mesh_id = parts.MeshId.CastBodyOrnament
 
 
 @classes.register
 class PSO2_OT_HideOrnamentCastBody(PSO2_OT_HideOrnament):
     bl_idname = "pso2.hide_cast_body_ornament"
-    mesh_id = "10"
+    mesh_id = parts.MeshId.CastBodyOrnament
 
 
 @classes.register
 class PSO2_OT_ShowOrnamentCastArm(PSO2_OT_ShowOrnament):
     bl_idname = "pso2.show_cast_arm_ornament"
-    mesh_id = "11"
+    mesh_id = parts.MeshId.CastArmsOrnament
 
 
 @classes.register
 class PSO2_OT_HideOrnamentCastArm(PSO2_OT_HideOrnament):
     bl_idname = "pso2.hide_cast_arm_ornament"
-    mesh_id = "11"
+    mesh_id = parts.MeshId.CastArmsOrnament
 
 
 @classes.register
 class PSO2_OT_ShowOrnamentCastLeg(PSO2_OT_ShowOrnament):
     bl_idname = "pso2.show_cast_leg_ornament"
-    mesh_id = "12"
+    mesh_id = parts.MeshId.CastLegsOrnament
 
 
 @classes.register
 class PSO2_OT_HideOrnamentCastLeg(PSO2_OT_HideOrnament):
     bl_idname = "pso2.hide_cast_leg_ornament"
-    mesh_id = "12"
+    mesh_id = parts.MeshId.CastLegsOrnament

@@ -35,6 +35,7 @@ from . import (
 )
 from . import reloader as reloader
 from .panels import appearance as appearance
+from .panels import mesh as mesh
 from .panels import ornaments as ornaments
 from .paths import ADDON_PATH
 
@@ -45,8 +46,7 @@ def register():
     bpy.types.TOPBAR_MT_file_export.append(menu_func_export)
     bpy.types.VIEW3D_MT_edit_armature_names.append(operators.rename_bones.menu_func)
 
-    scene_props.add_scene_properties()
-    scene_props.add_material_properties()
+    scene_props.add_custom_properties()
 
 
 def unregister():
@@ -79,7 +79,7 @@ if ADDON_PATH.is_symlink():
     from . import watcher
 
     if "watch" in locals():
-        watch.reset()  # noqa: F821
+        watch.reset()  # noqa: F821 # type: ignore
     else:
         watch = watcher.FileWatcher(bpy.ops.script.reload)
         watch.start()
