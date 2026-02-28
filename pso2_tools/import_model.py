@@ -3,11 +3,13 @@ from contextlib import closing
 from dataclasses import dataclass, field
 from pathlib import Path
 from tempfile import TemporaryDirectory
+import sys
 from typing import TypedDict, cast, get_type_hints
 
 import bpy
-from AquaModelLibrary.Core.General import FbxExporterNative
-from AquaModelLibrary.Data.PSO2.Aqua import AquaMotion, AquaNode, AquaPackage
+import Assimp
+from AquaModelLibrary.Core.General import AssimpModelExporter, FbxExporterNative
+from AquaModelLibrary.Data.PSO2.Aqua import AquaMotion, AquaNode, AquaObject, AquaPackage
 from AquaModelLibrary.Data.Utility import CoordSystem
 from System.Collections.Generic import List
 from System.Numerics import Matrix4x4
@@ -352,24 +354,14 @@ def _import_aqp(
 
     model.FixHollowMatNaming()
 
-    # TODO: support importing motion files
-    aqms = List[AquaMotion]()
-    aqm_names = List[str]()
-    instance_transforms = List[Matrix4x4]()
-
     with TemporaryDirectory() as tempdir:
         fbxfile = Path(tempdir) / Path(aqp_name).with_suffix(".fbx")
 
-        FbxExporterNative.ExportToFile(
-            aqo=model,
-            aqn=skeleton,
-            aqmList=aqms,
-            destinationFilePath=str(fbxfile),
-            aqmNameList=aqm_names,
-            instanceTransforms=instance_transforms,  # type: ignore
-            includeMetadata=True,
-            coordSystem=int(CoordSystem.OpenGL),
-            excludeTangentBinormal=not options.get("include_tangent_binormal", False),
+        _export_to_fbx(
+            model,
+            skeleton,
+            fbxfile,
+            include_tangent_binormal=options.get("include_tangent_binormal", False),
         )
 
         fbx_options = _get_fbx_options(options)
@@ -405,6 +397,62 @@ def _import_aqp(
     ]
 
     return {"FINISHED"}, materials
+
+
+def _export_to_fbx(
+    model: AquaObject,
+    skeleton: AquaNode,
+    fbxfile: Path,
+    include_tangent_binormal: bool,
+):
+    # TODO: support importing motion files
+    aqms = List[AquaMotion]()
+    aqm_names = List[str]()
+    instance_transforms = List[Matrix4x4]()
+
+    if sys.platform == "win32":
+        FbxExporterNative.ExportToFile(
+            aqo=model,
+            aqn=skeleton,
+            aqmList=aqms,
+            destinationFilePath=str(fbxfile),
+            aqmNameList=aqm_names,
+            instanceTransforms=instance_transforms,  # type: ignore
+            includeMetadata=True,
+            coordSystem=int(CoordSystem.OpenGL),
+            excludeTangentBinormal=not include_tangent_binormal,
+        )
+        return
+
+    # Non-Windows fallback: avoid AquaModelLibrary.Native by exporting via Assimp.
+    if not include_tangent_binormal:
+        model = model.Clone()  # type: ignore
+        for vtxl in model.vtxlList:
+            vtxl.vertTangentList.Clear()
+            vtxl.vertBinormalList.Clear()
+
+    scene = AssimpModelExporter.AssimpExport(str(fbxfile), model, skeleton)
+    _assimp_export_fbx(scene, fbxfile)
+
+
+def _assimp_export_fbx(scene, path: Path):
+    context = Assimp.AssimpContext()
+
+    # AssimpNet exposes different ExportFile overloads across versions.
+    try:
+        context.ExportFile(scene, str(path), "fbx")
+        return
+    except TypeError:
+        pass
+
+    none_post_process = getattr(Assimp.PostProcessSteps, "None", Assimp.PostProcessSteps(0))
+
+    context.ExportFile(
+        scene,
+        str(path),
+        "fbx",
+        none_post_process,
+    )
 
 
 def _import_skin_textures(

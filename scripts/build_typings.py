@@ -7,6 +7,7 @@ build_bin.py must be run first.
 
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 ROOT_PATH = Path(__file__).parent.parent
@@ -31,7 +32,12 @@ DLLS = [
 STUB_GENERATOR = (
     ROOT_PATH
     / "pythonnet-stub-generator/csharp/PythonNetStubTool"
-    / "bin/Release/net9.0/PythonNetStubGenerator.Tool.exe"
+    / "bin/Release/net9.0"
+    / (
+        "PythonNetStubGenerator.Tool.exe"
+        if sys.platform == "win32"
+        else "PythonNetStubGenerator.Tool"
+    )
 )
 
 

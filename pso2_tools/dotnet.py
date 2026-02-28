@@ -1,4 +1,5 @@
 from pathlib import Path
+import sys
 
 import clr_loader
 import pythonnet
@@ -15,7 +16,31 @@ _DLL_NAMES = [
 
 _PROBING_PATH_X64 = str(BIN_PATH / "x64")
 
-_DOTNET_ROOT = Path("C:/Program Files/dotnet")
+
+def _get_dotnet_roots() -> list[Path]:
+    if sys.platform == "win32":
+        return [Path("C:/Program Files/dotnet")]
+
+    if sys.platform == "darwin":
+        return [
+            Path("/opt/homebrew/share/dotnet"),
+            Path("/usr/local/share/dotnet"),
+        ]
+
+    return [Path("/usr/share/dotnet"), Path("/usr/local/share/dotnet")]
+
+
+def _get_native_probing_paths() -> list[str]:
+    runtime_dirs = [
+        BIN_PATH,
+        BIN_PATH / "x64",
+        BIN_PATH / "runtimes" / "win-x64" / "native",
+        BIN_PATH / "runtimes" / "osx-arm64" / "native",
+        BIN_PATH / "runtimes" / "osx-x64" / "native",
+        BIN_PATH / "runtimes" / "linux-x64" / "native",
+    ]
+
+    return [str(path) for path in runtime_dirs if path.exists()]
 
 _loaded = False
 
@@ -25,8 +50,9 @@ def load():
     if _loaded:
         return
 
-    if _DOTNET_ROOT.exists():
-        rt = clr_loader.get_coreclr(dotnet_root=_DOTNET_ROOT)
+    dotnet_root = next((p for p in _get_dotnet_roots() if p.exists()), None)
+    if dotnet_root:
+        rt = clr_loader.get_coreclr(dotnet_root=dotnet_root)
         pythonnet.load(rt)
     else:
         pythonnet.load("coreclr")
@@ -39,6 +65,12 @@ def load():
 
     from Assimp.Unmanaged import AssimpLibrary
 
-    AssimpLibrary.Instance.Resolver.SetProbingPaths64([_PROBING_PATH_X64])
+    resolver = AssimpLibrary.Instance.Resolver
+    probing_paths = _get_native_probing_paths() or [_PROBING_PATH_X64]
+
+    if hasattr(resolver, "SetProbingPaths64"):
+        resolver.SetProbingPaths64(probing_paths)
+    elif hasattr(resolver, "SetProbingPaths"):
+        resolver.SetProbingPaths(probing_paths)
 
     _loaded = True

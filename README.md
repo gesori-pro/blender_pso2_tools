@@ -4,9 +4,9 @@ This integrates the model import/export functions of [Aqua-Library](https://gith
 
 ## Installation
 
-The libraries used for import/export are only compiled for Windows x64. This add-on will not currently work on other OSes.
+This add-on supports Windows x64 and macOS (Intel/Apple Silicon).
 
-1. Install the [.NET Runtime 9.0](https://dotnet.microsoft.com/en-us/download/dotnet/9.0) for Windows (on the bottom right of the page).
+1. Install the [.NET Runtime 9.0](https://dotnet.microsoft.com/en-us/download/dotnet/9.0).
 2. Download `pso2_tools-****.zip` from the [latest release](https://github.com/dummycount/blender_pso2_tools/releases/latest).
 3. In Blender, go to **Edit > Preferences > Add-ons**.
 4. Click the down arrow in the upper-right corner and select **Install from Disk...**.
@@ -80,8 +80,11 @@ To build and develop the extension, first install the following requirements:
 
 - [Blender 5.0](https://www.blender.org/download/releases/) or newer.
 - [uv](https://github.com/astral-sh/uv)
-- [Visual Studio](https://visualstudio.microsoft.com/vs/community/) with the C# and C++ workflows installed.
 - [.NET SDK 9.0](https://dotnet.microsoft.com/en-us/download/dotnet/9.0)
+
+Windows-only requirements for native FBX export path:
+
+- [Visual Studio](https://visualstudio.microsoft.com/vs/community/) with the C# and C++ workflows installed.
 - [Autodesk FBX SDK](https://www.autodesk.com/content/dam/autodesk/www/adn/fbx/2020-1/fbx20201_fbxsdk_vs2017_win.exe) version 2020.1
 
 First, clone the repo with submodules:

@@ -4,6 +4,7 @@ Find and run Blender.
 
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -11,12 +12,23 @@ from pathlib import Path
 
 def find_blender() -> Path:
     # TODO: add handling for multiple installed versions
-    program_files = Path(os.getenv("PROGRAMFILES", "C:/Program Files"))
-    blender_root = program_files / "Blender Foundation"
-    try:
-        return next(blender_root.rglob("blender.exe"))
-    except StopIteration as ex:
-        raise RuntimeError("Could not find Blender") from ex
+    if sys.platform == "win32":
+        program_files = Path(os.getenv("PROGRAMFILES", "C:/Program Files"))
+        blender_root = program_files / "Blender Foundation"
+        try:
+            return next(blender_root.rglob("blender.exe"))
+        except StopIteration as ex:
+            raise RuntimeError("Could not find Blender") from ex
+
+    if sys.platform == "darwin":
+        blender_app = Path("/Applications/Blender.app/Contents/MacOS/Blender")
+        if blender_app.exists():
+            return blender_app
+
+    if blender := shutil.which("blender"):
+        return Path(blender)
+
+    raise RuntimeError("Could not find Blender")
 
 
 def blender_call(cmd, *args, **kwargs):
