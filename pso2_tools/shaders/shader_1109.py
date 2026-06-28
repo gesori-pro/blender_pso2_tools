@@ -3,7 +3,7 @@ import bpy
 from ..colors import ColorMapping
 from ..material import MaterialTextures
 from . import attributes, builder
-from .colorize import ShaderNodePso2Colorize
+from .colorize import ShaderNodePso2ColorizeMultiply
 from .colors import ShaderNodePso2Colorchannels
 from .ngs import ShaderNodePso2NgsSkin
 
@@ -44,7 +44,7 @@ class Shader1109(builder.ShaderBuilder):
         mask = tree.add_node(bpy.types.ShaderNodeTexImage, (0, 12), name="Color Mask")
         mask.image = self.textures.default.mask
 
-        colorize = tree.add_node(ShaderNodePso2Colorize, (12, 14))
+        colorize = tree.add_node(ShaderNodePso2ColorizeMultiply, (12, 14))
 
         tree.add_link(diffuse.outputs["Color"], colorize.inputs["Input"])
         tree.add_link(colorize.outputs["Result"], shader_group.inputs["Diffuse"])

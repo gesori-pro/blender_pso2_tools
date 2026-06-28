@@ -222,9 +222,6 @@ def texture_has_parts(name: str, parts: str | Iterable[str]):
 def find_textures(*parts: str, images: Iterable[bpy.types.Image] | None = None):
     images = images or bpy.data.images
 
-    if images is None:
-        raise TypeError()
-
     return [img for img in images if texture_has_parts(img.name, parts)]
 
 
@@ -409,8 +406,8 @@ class ModelMaterials:
             # NGS/classic face
             case "pl_face_diffuse.dds":
                 r.default.diffuse = find("rhd", "d") or find("hd", "d")
+                r.default.mask = find("rhd", "m") or find("hd", "m")
                 if not is_ngs:
-                    r.default.mask = find("rhd", "d") or find("hd", "m")
                     r.default.layer = find("rhd", "l") or find("hd", "l")
                     # TODO: no separate materials for eyelashes ("hr", "fa") or
                     # eyebrows ("hb", "fa"). Are these baked into the face texture?
@@ -418,12 +415,11 @@ class ModelMaterials:
                 r.default.multi = find("rhd", "s") or find("hd", "s")
             case "pl_face_normal.dds":
                 r.default.normal = find("rhd", "n") or find("hd", "n")
-            case "pl_face_mask01.dds":
-                r.default.mask = find("rhd", "m")
             case (
                 "pl_face_2normal01.dds"
                 | "pl_face_2normal02.dds"
                 | "pl_face_2normal03.dds"
+                | "pl_face_mask01.dds"
             ):
                 pass
 

@@ -8,6 +8,8 @@ _COLOR_GROUP_COLS = 6
 
 @classes.register
 class ShaderNodePso2Colorchannels(group.ShaderNodeCustomGroup):
+    # This should be ShaderNodePso2ColorChannels, but fixing the typo will break
+    # any existing .blend files that use this node.
     bl_name = "ShaderNodePso2Colorchannels"
     bl_label = "PSO2 Colors"
     bl_icon = "NONE"
