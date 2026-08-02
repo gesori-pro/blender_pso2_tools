@@ -109,6 +109,23 @@ class AqmMotion:
     def is_material_motion(self) -> bool:
         return self.variant == VARIANT_MATERIAL_ANIM
 
+    def max_key_frame(self) -> int:
+        """Highest frame number found in any node's decoded keyframes.
+
+        MOHeader.end_frame is not always reliable (some mod tools write it
+        incorrectly), so callers that need the true animation length should
+        use this instead of trusting end_frame on its own.
+        """
+        return max(
+            (
+                frame
+                for node in self.nodes
+                for key_set in node.key_sets
+                for frame in key_set.frames()
+            ),
+            default=0,
+        )
+
 
 def read_aqm(path: Path | str) -> AqmMotion:
     return parse_aqm(Path(path).read_bytes())
@@ -416,6 +433,11 @@ def prepare_scaling(motion: AqmMotion, parent_ids: dict[int, int]) -> None:
     ):
         return
 
+    # MOHeader.end_frame is sometimes wrong (some mod tools write it
+    # incorrectly); fall back to the real last keyframe when padding a
+    # single-key scale channel out to the full animation length.
+    end_frame = max(motion.end_frame, motion.max_key_frame())
+
     # Add scale keys to each child at its parent's key timings so the parent
     # influence can be cancelled exactly.
     for index, node in enumerate(motion.nodes):
@@ -429,7 +451,7 @@ def prepare_scaling(motion: AqmMotion, parent_ids: dict[int, int]) -> None:
             continue
 
         if len(parent_scale.timings) > 1 and len(scale.timings) < 2:
-            scale.timings = [0x1, motion.end_frame * 0x10 + 0x2]
+            scale.timings = [0x1, end_frame * 0x10 + 0x2]
             scale.vec4_keys.append(scale.vec4_keys[0])
 
         for timing in parent_scale.timings:

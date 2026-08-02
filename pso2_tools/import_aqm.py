@@ -146,8 +146,13 @@ class PSO2_OT_ImportAqm(  # type: ignore https://github.com/nutti/fake-bpy-modul
             )
 
             if self.set_frame_range:
+                # MOHeader.end_frame is sometimes wrong (some mod tools
+                # write it incorrectly), so use the real last keyframe if
+                # it's later than what the header claims.
                 context.scene.frame_start = 0
-                context.scene.frame_end = motion.end_frame
+                context.scene.frame_end = max(
+                    motion.end_frame, motion.max_key_frame()
+                )
 
             if self.set_fps:
                 fps = max(1, round(motion.frame_speed))
