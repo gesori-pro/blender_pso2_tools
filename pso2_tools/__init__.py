@@ -7,7 +7,7 @@ import bpy
 
 bl_info = {
     "name": "PSO2 Tools",
-    "version": (2, 8, 0),
+    "version": (2, 9, 0),
     "blender": (4, 4, 0),
     "category": "Import-Export",
 }
@@ -24,6 +24,7 @@ from . import (
     classes,
     dotnet,
     export_aqp,
+    import_aqm,
     import_aqp,
     import_ice,
     import_search,
@@ -60,6 +61,7 @@ def menu_func_import(self: bpy.types.Operator, context: bpy.types.Context):
     assert self.layout is not None
 
     self.layout.operator(import_aqp.PSO2_OT_ImportAqp.bl_idname, text="PSO2 AQP (.aqp)")
+    self.layout.operator(import_aqm.PSO2_OT_ImportAqm.bl_idname, text="PSO2 AQM (.aqm)")
     self.layout.operator(
         import_ice.PSO2_OT_ImportIce.bl_idname, text="PSO2 ICE Archive"
     )
