@@ -1,8 +1,9 @@
 """
-Parser for PSO2 AQM motion files (NIFL format).
+Parser and writer for PSO2 AQM motion files (NIFL format).
 
-Based on AquaModelLibrary's AquaMotion reader:
-PSO2-Aqua-Library/AquaModelLibrary.Data/PSO2/Aqua/AquaMotion.cs
+Based on AquaModelLibrary's AquaMotion reader/writer
+(PSO2-Aqua-Library/AquaModelLibrary.Data/PSO2/Aqua/AquaMotion.cs) and the
+PSO2AQM_IO.ms 3ds Max script from Phantasy-Star-Online-2-Model-Tools.
 """
 
 from __future__ import annotations
@@ -244,6 +245,156 @@ def _parse_nifl(data: bytes, base: int) -> AqmMotion:
             node.key_sets.append(key_set)
 
     return motion
+
+
+def write_aqm(path: Path | str, motion: AqmMotion) -> int:
+    data = serialize_aqm(motion)
+    return Path(path).write_bytes(data)
+
+
+def make_baked_timings(end_frame: int, multiplier: int = 0x10) -> list[int]:
+    """Raw timings for one key per frame from 0 to end_frame.
+
+    The first key is stored as 0x1 and the last has 0x2 added as a flag,
+    matching the game's files and the community 3ds Max exporter.
+    """
+    if end_frame <= 0:
+        return []
+
+    timings = [0x1]
+    timings += [frame * multiplier for frame in range(1, end_frame)]
+    timings.append(end_frame * multiplier + 0x2)
+    return timings
+
+
+def serialize_aqm(motion: AqmMotion) -> bytes:
+    """Serialize a motion to NIFL AQM bytes.
+
+    Port of AquaMotion.GetBytesNIFL(). All offsets are relative to the end
+    of the NIFL header (offset 0x20), which equals a position in the REL0
+    block built here since the NIFL header is prepended last.
+    """
+    rel = bytearray()
+    pointer_locations: list[int] = []
+
+    def w_i32(*values: int):
+        for value in values:
+            rel.extend(struct.pack("<i", value))
+
+    def align16():
+        rel.extend(b"\0" * (-len(rel) % 0x10))
+
+    def backfill(location: int, value: int):
+        rel[location : location + 4] = struct.pack("<i", value)
+
+    # REL0 header
+    rel.extend(b"REL0")
+    rel0_size_at = len(rel)
+    w_i32(0, 0x10, 0)
+
+    # MOHeader
+    w_i32(motion.variant, motion.loop_point, motion.end_frame)
+    rel.extend(struct.pack("<f", motion.frame_speed))
+    w_i32(0x2, len(motion.nodes))
+    pointer_locations.append(len(rel))
+    w_i32(0x50)  # Bone table offset. The MOHeader always ends at 0x50.
+    rel.extend(b"test".ljust(0x20, b"\0"))
+    w_i32(0)
+
+    # MSEG table
+    node_offset_locations: list[int] = []
+    for node in motion.nodes:
+        w_i32(node.node_type, len(node.key_sets))
+        node_offset_locations.append(len(rel))
+        pointer_locations.append(len(rel))
+        w_i32(0)  # Node offset, filled in below.
+        rel.extend(node.name.encode("utf-8")[:0x1F].ljust(0x20, b"\0"))
+        w_i32(node.node_id)
+
+    # Key data
+    for node, node_offset_at in zip(motion.nodes, node_offset_locations):
+        backfill(node_offset_at, len(rel))
+
+        frame_address_locations: list[int] = []
+        time_address_locations: list[int | None] = []
+
+        for key_set in node.key_sets:
+            frame_address_locations.append(len(rel) + 0x10)
+            pointer_locations.append(len(rel) + 0x10)
+
+            if key_set.key_count > 1:
+                time_address_locations.append(len(rel) + 0x14)
+                pointer_locations.append(len(rel) + 0x14)
+            else:
+                time_address_locations.append(None)
+
+            w_i32(
+                key_set.key_type,
+                key_set.data_type,
+                key_set.unk_int0,
+                key_set.key_count,
+                0,  # Frame address, filled in below.
+                0,  # Time address, filled in below.
+            )
+
+        align16()
+
+        for key_set, frame_at, time_at in zip(
+            node.key_sets, frame_address_locations, time_address_locations
+        ):
+            if time_at is not None and key_set.timings:
+                backfill(time_at, len(rel))
+                fmt = "H" if key_set.time_multiplier == 0x10 else "I"
+                for timing in key_set.timings:
+                    rel.extend(struct.pack("<" + fmt, timing))
+                align16()
+
+            backfill(frame_at, len(rel))
+
+            if key_set.vec4_keys:
+                for key in key_set.vec4_keys:
+                    rel.extend(struct.pack("<4f", *key))
+            elif key_set.int_keys:
+                for key in key_set.int_keys:
+                    rel.extend(struct.pack("<i", key))
+            elif key_set.float_keys:
+                for key in key_set.float_keys:
+                    rel.extend(struct.pack("<f", key))
+
+            align16()
+
+    # REL0 size
+    backfill(rel0_size_at, len(rel) - 0x8)
+
+    # NOF0 pointer table
+    nof0_offset = len(rel)
+    nof0_size = (len(pointer_locations) + 2) * 4
+    rel.extend(b"NOF0")
+    w_i32(nof0_size, len(pointer_locations), 0)
+    for location in pointer_locations:
+        w_i32(location)
+
+    nof0_full_size = nof0_size + 0x8 + (-len(rel) % 0x10)
+    align16()
+
+    # NEND
+    rel.extend(b"NEND")
+    w_i32(0x8, 0, 0)
+
+    # NIFL header
+    nifl = struct.pack(
+        "<4siiiiiii",
+        MAGIC_NIFL,
+        0x18,
+        1,
+        0x20,
+        nof0_offset,
+        nof0_offset + 0x20,
+        nof0_full_size,
+        0,
+    )
+
+    return bytes(nifl + rel)
 
 
 def prepare_scaling(motion: AqmMotion, parent_ids: dict[int, int]) -> None:
