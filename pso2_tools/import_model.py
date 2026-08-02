@@ -6,11 +6,6 @@ from tempfile import TemporaryDirectory
 from typing import TypedDict, cast, get_type_hints
 
 import bpy
-from AquaModelLibrary.Core.General import FbxExporterNative
-from AquaModelLibrary.Data.PSO2.Aqua import AquaMotion, AquaNode, AquaPackage
-from AquaModelLibrary.Data.Utility import CoordSystem
-from System.Collections.Generic import List
-from System.Numerics import Matrix4x4
 
 from . import (
     colors,
@@ -288,7 +283,7 @@ def _get_ice_path(filename: objects.CmxFileName, data_path: Path, high_quality: 
 
 def _delete_empty_images():
     for image in bpy.data.images.values():
-        if image and image.size[0] == 0 and image.size[1] == 0:
+        if image and image.size[0] == 0 and image.size[1] == 0:  # type: ignore
             bpy.data.images.remove(image)
 
 
@@ -326,6 +321,12 @@ def _import_aqp(
     aqn: Path | datafile.DataFile | None,
     options: ImportOptions | None = None,
 ) -> tuple[OperatorResult, list[material.Material]]:
+    from AquaModelLibrary.Core.General import FbxExporterNative
+    from AquaModelLibrary.Data.PSO2.Aqua import AquaMotion, AquaNode, AquaPackage
+    from AquaModelLibrary.Data.Utility import CoordSystem
+    from System.Collections.Generic import List
+    from System.Numerics import Matrix4x4
+
     options = options or {}
 
     if isinstance(aqp, Path):

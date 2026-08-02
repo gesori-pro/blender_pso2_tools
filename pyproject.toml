@@ -1,14 +1,15 @@
 [project]
 name = "blender_pso2_tools"
-version = "2.6.0"
+version = "2.8.0"
 requires-python = ">= 3.11"
 dependencies = [
-  "fake-bpy-module==20260218",
+  "fake-bpy-module==20260501",
   "pip>=26.0.1",
   "prek>=0.3.3",
   "pyright>=1.1.408",
   "pythonnet==3.0.5",
   "ruff>=0.15.2",
+  "tomlkit>=0.15.0",
   "watchdog==6.0.0",
 ]
 
@@ -19,7 +20,7 @@ reportMissingImports = false
 reportMissingModuleSource = false
 reportUnboundVariable = false
 extraPaths = [
-  "C:/Program Files/Blender Foundation/Blender 5.0/5.0/scripts/addons_core",
+  "C:/Program Files/Blender Foundation/Blender 5.1/5.1/scripts/addons_core",
 ]
 
 [tool.ruff.lint]

@@ -75,7 +75,7 @@ def _get_builder(data: types.ShaderData) -> type[builder.ShaderBuilder] | None:
             return shader_1100.Shader1100
 
         case 1101:
-            # NGS horn/teeth
+            # NGS horn/teeth/anime face
             return shader_1101.Shader1101
 
         case 1102:
