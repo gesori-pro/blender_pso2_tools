@@ -7,7 +7,7 @@ import bpy
 
 bl_info = {
     "name": "PSO2 Tools",
-    "version": (2, 9, 0),
+    "version": (2, 10, 0),
     "blender": (4, 4, 0),
     "category": "Import-Export",
 }
@@ -23,6 +23,7 @@ if "reloader" in locals():
 from . import (
     classes,
     dotnet,
+    export_aqm,
     export_aqp,
     import_aqm,
     import_aqp,
@@ -74,6 +75,7 @@ def menu_func_export(self: bpy.types.Operator, context: bpy.types.Context):
     assert self.layout is not None
 
     self.layout.operator(export_aqp.PSO2_OT_ExportAqp.bl_idname, text="PSO2 AQP (.aqp)")
+    self.layout.operator(export_aqm.PSO2_OT_ExportAqm.bl_idname, text="PSO2 AQM (.aqm)")
 
 
 if ADDON_PATH.is_symlink():
