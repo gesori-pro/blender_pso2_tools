@@ -169,31 +169,36 @@ class CmxColorMapping(ColorMapping):
             alpha=ColorId(int(mapping.alphaIndex)),
         )
 
+    # NOTE: these use the older unkInt fields instead of maskColorMapping to
+    # match the AquaModelLibrary DLLs built from PSO2-Aqua-Library @ bc9d632.
     @classmethod
     def from_bodypaint_obj(cls, obj: "BBLYObject"):
+        # TODO: unkInt0/1 are definitely used, but not sure about 2/3
         return cls(
-            red=ColorId(int(obj.bbly.maskColorMapping.redIndex)),
-            green=ColorId(int(obj.bbly.maskColorMapping.greenIndex)),
-            blue=ColorId.UNUSED,
-            alpha=ColorId.UNUSED,
+            red=ColorId(int(obj.bbly.unkInt0)),
+            green=ColorId(int(obj.bbly.unkInt1)),
+            blue=ColorId(int(obj.bbly.unkInt2)),
+            alpha=ColorId(int(obj.bbly.unkInt3)),
         )
 
     @classmethod
     def from_ear_obj(cls, obj: "NGS_EarObject"):
         return cls(
-            red=ColorId(int(obj.ngsEar.maskColorMapping.redIndex)),
-            green=ColorId(int(obj.ngsEar.maskColorMapping.greenIndex)),
-            blue=ColorId(int(obj.ngsEar.maskColorMapping.blueIndex)),
-            alpha=ColorId(int(obj.ngsEar.maskColorMapping.alphaIndex)),
+            red=ColorId(int(obj.ngsEar.unkInt1)),
+            green=ColorId(int(obj.ngsEar.unkInt2)),
+            blue=ColorId(int(obj.ngsEar.unkInt3)),
+            alpha=ColorId(int(obj.ngsEar.unkInt4)),
         )
 
     @classmethod
     def from_hair_obj(cls, obj: "HAIRObject"):
+        red, green = split_int32(obj.hair.unkInt16)
+        blue, alpha = split_int32(obj.hair.unkInt17)
         return cls(
-            red=ColorId(int(obj.hair.maskColorMapping.redIndex)),
-            green=ColorId(int(obj.hair.maskColorMapping.greenIndex)),
-            blue=ColorId(int(obj.hair.maskColorMapping.blueIndex)),
-            alpha=ColorId(int(obj.hair.maskColorMapping.alphaIndex)),
+            red=ColorId(red),
+            green=ColorId(green),
+            blue=ColorId(blue),
+            alpha=ColorId(alpha),
         )
 
 
