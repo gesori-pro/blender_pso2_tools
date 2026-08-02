@@ -5,11 +5,14 @@ import pythonnet
 
 from .paths import BIN_PATH
 
+# NOTE: reverted to the AssimpNet-era dependency set to match the
+# AquaModelLibrary DLLs built from PSO2-Aqua-Library @ bc9d632 (building the
+# SharpAssimp-era DLLs requires the FBX SDK, which is not installed here).
 _DLL_NAMES = [
+    "AssimpNet.dll",
     "AquaModelLibrary.Core.dll",
     "AquaModelLibrary.Data.dll",
     "AquaModelLibrary.Helpers.dll",
-    "SharpAssimp.dll",
     "ZamboniLib.dll",
 ]
 
@@ -26,11 +29,17 @@ def load():
     if _loaded:
         return
 
-    if _DOTNET_ROOT.exists():
-        rt = clr_loader.get_coreclr(dotnet_root=_DOTNET_ROOT)
-        pythonnet.load(rt)
-    else:
-        pythonnet.load("coreclr")
+    try:
+        if _DOTNET_ROOT.exists():
+            rt = clr_loader.get_coreclr(dotnet_root=_DOTNET_ROOT)
+            pythonnet.load(rt)
+        else:
+            pythonnet.load("coreclr")
+    except RuntimeError:
+        # The runtime is already loaded, e.g. when the extension is
+        # re-enabled after an update. It cannot be unloaded, but referencing
+        # assemblies again is harmless.
+        pass
 
     import clr
 
@@ -46,7 +55,7 @@ def set_assimp_probing_paths():
     if _probing_paths_set:
         return
 
-    from SharpAssimp.Unmanaged import AssimpLibrary
+    from Assimp.Unmanaged import AssimpLibrary
 
     AssimpLibrary.Instance.Resolver.SetProbingPaths64([_PROBING_PATH_X64])
 

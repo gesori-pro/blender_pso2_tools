@@ -11,12 +11,29 @@ from pathlib import Path
 
 def find_blender() -> Path:
     # TODO: add handling for multiple installed versions
+    if blender_path := os.getenv("BLENDER_PATH"):
+        path = Path(blender_path)
+        if path.is_file():
+            return path
+
     program_files = Path(os.getenv("PROGRAMFILES", "C:/Program Files"))
-    blender_root = program_files / "Blender Foundation"
-    try:
-        return next(blender_root.rglob("blender.exe"))
-    except StopIteration as ex:
-        raise RuntimeError("Could not find Blender") from ex
+    roots = [program_files / "Blender Foundation"]
+    roots += [
+        Path(f"{drive}:/Program Files/Blender Foundation")
+        for drive in "CDEFG"
+        if Path(f"{drive}:/Program Files/Blender Foundation") not in roots
+    ]
+
+    for blender_root in roots:
+        if not blender_root.exists():
+            continue
+
+        try:
+            return next(blender_root.rglob("blender.exe"))
+        except StopIteration:
+            continue
+
+    raise RuntimeError("Could not find Blender")
 
 
 def blender_call(cmd, *args, **kwargs):
