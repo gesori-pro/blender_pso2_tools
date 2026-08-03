@@ -179,9 +179,14 @@ def extract_frame1_deltas(motion: aqm.AqmMotion) -> dict:
             elif key_set.key_type == aqm.KEY_TYPE_ROTATION:
                 q0 = Quaternion((f0[3], f0[0], f0[1], f0[2])).normalized()
                 q1 = Quaternion((f1[3], f1[0], f1[1], f1[2])).normalized()
-                delta = q1 @ q0.inverted()
+                # RIGHT delta: the game composes local = rest * (f0^-1 * f1),
+                # in the bone's own frame - not the parent-local left delta
+                # the proportion tables use. Established against the game's
+                # composed bone array: left composition put l_thigh_alt a
+                # mirror-image 42 degrees off, right composition 0.003.
+                delta = q0.inverted() @ q1
                 if delta.angle > 1e-6:
-                    # Store xyzw, PSO2 space, left-delta (SPEC §6-10).
+                    # Store xyzw, PSO2 space, bone-local right delta.
                     entry["rotQuat"] = [delta.x, delta.y, delta.z, delta.w]
 
         if entry["scale"] or entry["pos"] or entry["rotQuat"]:
@@ -237,17 +242,16 @@ def apply_shape_adjust(armature: bpy.types.Object, deltas: dict) -> dict:
             )
 
         if entry["rotQuat"] is not None:
+            # The delta lives in the bone's own frame, where PSO2's axes
+            # and Blender's differ by the fixed permutation (x,y,z) ->
+            # (y,x,-z) - the same swap the scale channel uses. Bone-local
+            # composition is a plain right-multiply of the pose; no rest
+            # conjugation is involved.
             q = entry["rotQuat"]
-            m_pso2 = Quaternion((q[3], q[0], q[1], q[2])).to_matrix()
-            m_blender = import_fnp._PERM @ m_pso2 @ import_fnp._PERM.transposed()
-            delta_local = (
-                rest_rotation.inverted().to_matrix()
-                @ m_blender
-                @ rest_rotation.to_matrix()
-            ).to_quaternion()
+            delta_local = Quaternion((q[3], q[1], q[0], -q[2]))
 
             pose_bone.rotation_mode = "QUATERNION"
-            pose_bone.rotation_quaternion = delta_local @ pose_bone.rotation_quaternion
+            pose_bone.rotation_quaternion = pose_bone.rotation_quaternion @ delta_local
 
         applied += 1
 

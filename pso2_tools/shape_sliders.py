@@ -26,7 +26,7 @@ import bpy
 from bpy_extras.io_utils import ExportHelper, ImportHelper
 from mathutils import Quaternion, Vector
 
-from . import aqm, classes, import_aqm, import_fnp, import_shape_adjust
+from . import aqm, classes, import_aqm, import_shape_adjust
 from .util import OperatorResult
 
 # Pose-bone custom property holding the pre-slider pose:
@@ -283,15 +283,15 @@ def _apply_to_bone(pose_bone, scale, pos, quat):
         rest_rotation.inverted() @ Vector((pos[1], pos[0], -pos[2]))
     )
 
-    # SPEC §6-10: delta * rest in the parent-local frame.
-    m_pso2 = Quaternion((quat[3], quat[0], quat[1], quat[2])).to_matrix()
-    m_blender = import_fnp._PERM @ m_pso2 @ import_fnp._PERM.transposed()
-    delta_local = (
-        rest_rotation.inverted().to_matrix() @ m_blender @ rest_rotation.to_matrix()
-    ).to_quaternion()
+    # The game applies shape-adjust rotations in the bone's own frame
+    # (right delta, verified against its composed bone array), where the
+    # PSO2 -> Blender axis change is the fixed (x,y,z) -> (y,x,-z) swap.
+    # The preview does the same, so what is on screen is what the
+    # exported file will do in game.
+    delta_local = Quaternion((quat[3], quat[1], quat[0], -quat[2]))
 
     pose_bone.rotation_mode = "QUATERNION"
-    pose_bone.rotation_quaternion = delta_local @ base_rot
+    pose_bone.rotation_quaternion = base_rot @ delta_local
 
 
 def _sides(group, values):
