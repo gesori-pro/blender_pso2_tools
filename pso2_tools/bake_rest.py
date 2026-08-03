@@ -24,6 +24,52 @@ from . import classes, import_aqm, shape_sliders
 from .util import OperatorResult
 
 
+def _deformed_meshes(armature: bpy.types.Object) -> list[bpy.types.Object]:
+    """Meshes this armature deforms through an Armature modifier."""
+    return [
+        obj
+        for obj in bpy.data.objects
+        if obj.type == "MESH"
+        and any(
+            modifier.type == "ARMATURE" and modifier.object is armature
+            for modifier in obj.modifiers
+        )
+    ]
+
+
+def _freeze_deformation(
+    context: bpy.types.Context, mesh: bpy.types.Object, armature: bpy.types.Object
+) -> None:
+    """Bake the mesh's current deformation into its vertices.
+
+    Applies a *copy* of the armature modifier, so the mesh keeps the shape
+    it has right now while the original modifier stays in place to receive
+    animation afterwards.
+    """
+    source = next(
+        modifier
+        for modifier in mesh.modifiers
+        if modifier.type == "ARMATURE" and modifier.object is armature
+    )
+
+    context.view_layer.objects.active = mesh
+    copied = mesh.modifiers.new(name="pso2_freeze", type="ARMATURE")
+    copied.object = armature  # type: ignore
+    copied.use_deform_preserve_volume = source.use_deform_preserve_volume  # type: ignore
+
+    # Apply it where the original sits, so it sees the same input. A single
+    # move call, never a loop: if it cannot move, applying it at the end of
+    # the stack is still correct for the usual single-modifier mesh.
+    try:
+        bpy.ops.object.modifier_move_to_index(
+            modifier=copied.name, index=list(mesh.modifiers).index(source)
+        )
+    except (RuntimeError, ValueError):
+        pass
+
+    bpy.ops.object.modifier_apply(modifier=copied.name)
+
+
 def pose_is_modified(armature: bpy.types.Object, epsilon: float = 1e-6) -> bool:
     """Is any pose bone transformed away from its rest position?"""
     for pose_bone in armature.pose.bones:
@@ -70,11 +116,27 @@ class PSO2_OT_BakeShapeToRest(bpy.types.Operator):
             )
             return {"CANCELLED"}
 
+        meshes = _deformed_meshes(armature)
+        blocked = [m.name for m in meshes if m.data.shape_keys]  # type: ignore
+        if blocked:
+            self.report(
+                {"ERROR"},
+                f"{blocked[0]} has shape keys, which block freezing its"
+                " deformation. Remove them and try again.",
+            )
+            return {"CANCELLED"}
+
         previous_active = context.view_layer.objects.active
         previous_mode = armature.mode
         selected = list(context.selected_objects)
 
         try:
+            # Freeze each mesh in its deformed shape first. Rest bones cannot
+            # hold scale, so applying the pose alone would snap every mesh
+            # back to the unshaped body.
+            for mesh in meshes:
+                _freeze_deformation(context, mesh, armature)
+
             context.view_layer.objects.active = armature
             armature.select_set(True)
             bpy.ops.object.mode_set(mode="POSE")
