@@ -109,6 +109,31 @@ class AqmMotion:
     def is_material_motion(self) -> bool:
         return self.variant == VARIANT_MATERIAL_ANIM
 
+    @property
+    def is_shape_adjust(self) -> bool:
+        """Does this look like a shape adjust rather than a motion?
+
+        Shape adjusts share the standard animation variant, so the giveaway
+        is the shape of the data: they park most channels on one static key
+        and animate a handful, across a single frame. Files in use carry
+        around 500 static channels against a dozen animated, where a real
+        motion - even a two-frame one - animates every channel it writes.
+        """
+        if self.end_frame > 1 or self.is_camera_motion or self.is_material_motion:
+            return False
+
+        static = animated = 0
+        for node in self.nodes:
+            for key_set in node.key_sets:
+                if not key_set.key_count:
+                    continue
+                if key_set.key_count > 1:
+                    animated += 1
+                else:
+                    static += 1
+
+        return static > animated and static > 0
+
     def max_key_frame(self) -> int:
         """Highest frame number found in any node's decoded keyframes.
 
@@ -243,7 +268,9 @@ def _parse_nifl(data: bytes, base: int) -> AqmMotion:
             offset = offset0 + frame_addr
 
             if base_type in (0x1, 0x2, 0x3):
-                for value in struct.iter_unpack("<4f", data[offset : offset + key_count * 16]):
+                for value in struct.iter_unpack(
+                    "<4f", data[offset : offset + key_count * 16]
+                ):
                     key_set.vec4_keys.append(value)
             elif base_type == 0x5:
                 key_set.int_keys = list(
@@ -481,9 +508,7 @@ def prepare_scaling(motion: AqmMotion, parent_ids: dict[int, int]) -> None:
                 parent_raw, parent_scale.timings, parent_scale.time_multiplier, timing
             )
             key = scale.vec4_keys[i]
-            scale.vec4_keys[i] = tuple(
-                k / v if v else k for k, v in zip(key, value)
-            )  # type: ignore
+            scale.vec4_keys[i] = tuple(k / v if v else k for k, v in zip(key, value))  # type: ignore
 
 
 def _insert_vec4_key_at_time(key_set: AqmKeySet, timing: int) -> None:

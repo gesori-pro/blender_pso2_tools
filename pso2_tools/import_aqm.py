@@ -140,6 +140,20 @@ class PSO2_OT_ImportAqm(  # type: ignore https://github.com/nutti/fake-bpy-modul
                 )
                 return {"CANCELLED"}
 
+            # Shape adjusts are .aqm files too, so they turn up in this file
+            # browser. Loading one as a motion keys every bone to its static
+            # value and twists the legs, and the damage is easy to mistake
+            # for the shape itself being wrong.
+            if motion.is_shape_adjust:
+                self.report(
+                    {"ERROR"},
+                    f"{path.name} looks like a shape adjust, not a motion."
+                    " Use File > Import > PSO2 Shape Adjust to apply it to the"
+                    " body, or Load AQM in the Shape Adjust panel to edit it"
+                    " with the sliders.",
+                )
+                return {"CANCELLED"}
+
             if self.disconnect_bones and not self.ignore_translation_keys:
                 _disconnect_animated_bones(context, armature, motion, summary)
 
