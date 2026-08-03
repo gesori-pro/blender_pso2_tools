@@ -274,6 +274,74 @@ def has_model_pose(armature: bpy.types.Object) -> bool:
     return any(MODEL_POSE_PROP in pose_bone for pose_bone in armature.pose.bones)
 
 
+def restore_model_pose(armature: bpy.types.Object) -> int:
+    """Put the bones back where the model import had them."""
+    restored = 0
+
+    for pose_bone in armature.pose.bones:
+        stored = pose_bone.get(MODEL_POSE_PROP)
+        if stored is None or len(stored) != 10:
+            continue
+
+        pose_bone.rotation_mode = "QUATERNION"
+        pose_bone.location = stored[0:3]
+        pose_bone.rotation_quaternion = stored[3:7]
+        pose_bone.scale = stored[7:10]
+        restored += 1
+
+    return restored
+
+
+@classes.register
+class PSO2_OT_UnloadCharacterFile(bpy.types.Operator):
+    """Undo a character file, putting the body back the way the model was
+    imported. Colors and muscularity are left where they are"""
+
+    bl_label = "Unload Character File"
+    bl_idname = "pso2.unload_character_file"
+    bl_options = {"UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        armature = import_aqm._find_target_armature(context)
+        return armature is not None and has_model_pose(armature)
+
+    def execute(self, context) -> OperatorResult:
+        armature = import_aqm._find_target_armature(context)
+        if armature is None:
+            self.report(
+                {"ERROR"},
+                "No target armature. Select a PSO2 armature (or a model parented"
+                " to one) and try again.",
+            )
+            return {"CANCELLED"}
+
+        if not has_model_pose(armature):
+            self.report(
+                {"WARNING"},
+                "Nothing to unload: no character file has been applied to this"
+                " armature since it was imported.",
+            )
+            return {"CANCELLED"}
+
+        restored = restore_model_pose(armature)
+        clear_model_pose(armature)
+
+        # The sliders were sitting on top of the character's pose, so their
+        # stored base and values belong to a body that is no longer here.
+        from . import shape_sliders
+
+        shape_sliders.clear_base(armature)
+        if (sliders := shape_sliders.get_settings(context)) is not None:
+            sliders.reset()
+
+        if view_layer := getattr(context, "view_layer", None):
+            view_layer.update()
+
+        self.report({"INFO"}, f"Unloaded the character file from {restored} bones")
+        return {"FINISHED"}
+
+
 def apply_proportions(armature: bpy.types.Object, bones: dict) -> dict:
     """Write computed proportion deltas (PSO2 axis order) into the pose."""
     store_model_pose(armature)

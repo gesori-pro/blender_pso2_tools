@@ -1,6 +1,6 @@
 import bpy
 
-from .. import bake_rest, classes, import_aqm, shape_sliders
+from .. import bake_rest, classes, import_aqm, import_fnp, shape_sliders
 
 
 @classes.register
@@ -38,9 +38,7 @@ class PSO2ShapeAdjustPanel(bpy.types.Panel):
                     column.separator()
 
         armature = import_aqm._find_target_armature(context)
-        bake_rest.draw_shape_state(
-            layout, bake_rest.shape_state(armature), hint="none"
-        )
+        bake_rest.draw_shape_state(layout, bake_rest.shape_state(armature), hint="none")
 
         row = layout.row(align=True)
         row.operator(
@@ -54,6 +52,10 @@ class PSO2ShapeAdjustPanel(bpy.types.Panel):
         row.operator(shape_sliders.PSO2_OT_ShapeSlidersReset.bl_idname, text="Reset")
         row.operator(
             shape_sliders.PSO2_OT_ShapeSlidersFreeze.bl_idname, text="Freeze Current"
+        )
+
+        layout.operator(
+            import_fnp.PSO2_OT_UnloadCharacterFile.bl_idname, icon="LOOP_BACK"
         )
 
         layout.operator(
