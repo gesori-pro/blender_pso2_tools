@@ -14,7 +14,7 @@ The libraries used for import/export are only compiled for Windows x64. This add
 6. Make sure **PSO2 Tools** is checked in the add-ons list.
 7. Expand **PSO2 Tools** and make sure **Path to pso2_bin/data** is correct. If not, set it to point to your game's install directory.
 
-The add-on has only recently been tested on Blender 5.1, though it may still work on versions as early as 4.4.
+Tested on Blender 4.4 and 5.1. Importing and exporting models, motions and character files behaves the same on both, down to identical output files. Versions before 4.4 are untested.
 
 ## Usage
 
