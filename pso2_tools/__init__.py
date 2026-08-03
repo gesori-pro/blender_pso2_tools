@@ -27,6 +27,7 @@ from . import (
     export_aqp,
     import_aqm,
     import_aqp,
+    import_fnp,
     import_ice,
     import_search,
     operators,
@@ -43,8 +44,8 @@ def register():
     dotnet.load()
 
     classes.bpy_register()
-    bpy.types.TOPBAR_MT_file_import.append(menu_func_import)
-    bpy.types.TOPBAR_MT_file_export.append(menu_func_export)
+    bpy.types.TOPBAR_MT_file_import.prepend(menu_func_import)
+    bpy.types.TOPBAR_MT_file_export.prepend(menu_func_export)
     bpy.types.VIEW3D_MT_edit_armature_names.append(operators.rename_bones.menu_func)
 
     scene_props.add_custom_properties()
@@ -61,14 +62,20 @@ def unregister():
 def menu_func_import(self: bpy.types.Operator, context: bpy.types.Context):
     assert self.layout is not None
 
-    self.layout.operator(import_aqp.PSO2_OT_ImportAqp.bl_idname, text="PSO2 AQP (.aqp)")
-    self.layout.operator(import_aqm.PSO2_OT_ImportAqm.bl_idname, text="PSO2 AQM (.aqm)")
-    self.layout.operator(
-        import_ice.PSO2_OT_ImportIce.bl_idname, text="PSO2 ICE Archive"
-    )
     self.layout.operator(
         import_search.PSO2_OT_ModelSearch.bl_idname, text="PSO2 Model Search"
     )
+    self.layout.operator(import_aqp.PSO2_OT_ImportAqp.bl_idname, text="PSO2 AQP (.aqp)")
+    self.layout.operator(
+        import_ice.PSO2_OT_ImportIce.bl_idname, text="PSO2 ICE Archive"
+    )
+    self.layout.operator(import_aqm.PSO2_OT_ImportAqm.bl_idname, text="PSO2 AQM (.aqm)")
+    self.layout.operator(
+        import_fnp.PSO2_OT_ImportFnp.bl_idname,
+        # every body type: (male/female) x (human/newman/cast/deuman)
+        text="PSO2 Character (.fnp/.mhp/...)",
+    )
+    self.layout.separator()
 
 
 def menu_func_export(self: bpy.types.Operator, context: bpy.types.Context):
@@ -76,6 +83,7 @@ def menu_func_export(self: bpy.types.Operator, context: bpy.types.Context):
 
     self.layout.operator(export_aqp.PSO2_OT_ExportAqp.bl_idname, text="PSO2 AQP (.aqp)")
     self.layout.operator(export_aqm.PSO2_OT_ExportAqm.bl_idname, text="PSO2 AQM (.aqm)")
+    self.layout.separator()
 
 
 if ADDON_PATH.is_symlink():
