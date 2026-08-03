@@ -29,7 +29,7 @@ import bpy
 from bpy_extras.io_utils import ImportHelper
 from mathutils import Matrix, Quaternion, Vector
 
-from . import charfile, classes, import_aqm, proportions, scene_props
+from . import char_colors, charfile, classes, import_aqm, proportions, scene_props
 from .debug import debug_print
 from .util import OperatorResult
 
@@ -83,6 +83,15 @@ class PSO2_OT_ImportFnp(  # type: ignore https://github.com/nutti/fake-bpy-modul
         ),
         default=True,
     )
+    import_colors: bpy.props.BoolProperty(
+        name="Import Colors",
+        description=(
+            "Set the scene's skin, hair, eye and outfit colors from the"
+            " file. Materials pick these up when a model is imported, so"
+            " re-import the model to see them on an existing one"
+        ),
+        default=True,
+    )
     set_muscularity: bpy.props.BoolProperty(
         name="Set Muscularity",
         description=(
@@ -101,6 +110,7 @@ class PSO2_OT_ImportFnp(  # type: ignore https://github.com/nutti/fake-bpy-modul
 
         layout.prop(self, "ground_contact")
         layout.prop(self, "outfit_adjust")
+        layout.prop(self, "import_colors")
         layout.prop(self, "set_muscularity")
 
     def execute(self, context) -> OperatorResult:
@@ -134,6 +144,10 @@ class PSO2_OT_ImportFnp(  # type: ignore https://github.com/nutti/fake-bpy-modul
         if self.ground_contact:
             summary["ground"] = solve_ground_contact(armature)
 
+        colors_applied = 0
+        if self.import_colors:
+            colors_applied = char_colors.apply_to_scene(context, char)
+
         if self.set_muscularity:
             muscle_mass = float(char["baseDOC.muscleMass"])
             value = max(0.0, min(1.0, muscle_mass / _MUSCLE_MASS_MAX))
@@ -148,6 +162,8 @@ class PSO2_OT_ImportFnp(  # type: ignore https://github.com/nutti/fake-bpy-modul
         )
         if result["outfit_adjust_bones"] and self.outfit_adjust:
             message += f", outfit adjust on {result['outfit_adjust_bones']} bones"
+        if colors_applied:
+            message += f", {colors_applied} colors"
         if summary.get("ground", {}).get("solved"):
             message += f", grounded at body_root {summary['ground']['scale']}"
         if summary["missing"]:
