@@ -30,11 +30,25 @@ For models that get their textures from other items, such as innerwear textures 
 
 If an NGS model uses skin textures, they will automatically be imported. You can change which textures to use in the add-on preferences.
 
+**Files > Import > PSO2 Character (.fnp/.mhp/...)** reads a character file saved by the game or the Character Creator and reshapes the imported model's skeleton to match, along with its skin, hair, and outfit colors. Import the model first, then the character file. All eight body types are accepted, in file versions 10 through 16, so both current live characters and older saves work.
+
+The proportions the game applies to an outfit depend on the outfit itself, so the result matches what you see in game rather than a generic body.
+
+**Files > Import > PSO2 AQM (.aqm)** loads a motion onto the imported armature as an action.
+
+**Files > Import > PSO2 Shape Adjust (\_sa.aqm)** loads an outfit's shape-adjust motion, the extra per-outfit tweak the game applies on top of the body proportions.
+
 ### Export
 
 **Files > Export > PSO2 AQP (.aqp)** exports the model back to an `.aqp` file.
 
 By default, this will only write a matching `.aqn` file if it does not already exist. Check **Overwrite .aqn** to overwrite any existing file.
+
+**Files > Export > PSO2 AQM (.aqm)** saves the armature's animation as a motion file, one key per frame.
+
+Apply the body shape to the rest pose first (see below). A body shape left in the pose gets written into the motion, which is not what game motion files contain.
+
+**Files > Export > PSO2 Shape Adjust (\_sa.aqm)** saves the current slider values as a shape-adjust motion that the game can load.
 
 ### Preferences
 
@@ -61,6 +75,23 @@ In the **Properties** area, go to the **Scene** tab. Two panels will appear here
 | Hide Innerwear | Hides the innerwear layer on skin materials             |
 | Muscularity    | Adjusts the mix between skin textures on skin materials |
 | Colors         | The color channels used by PSO2 materials               |
+| Shape Adjust   | Sliders for editing the body shape                      |
+
+##### Shape Adjust
+
+These sliders edit the body the same way the in-game customization does, in scale, position, and rotation around 1.0, for the breasts, clavicles, thighs, hips, and pelvis. **Export AQM** writes the result as a shape-adjust motion; **Load AQM** reads one back in.
+
+A Blender skeleton has two layers: the rest pose the mesh is built on, and a pose on top of it. The sliders write the body shape into the pose, and animations use that same pose, so importing a motion overwrites the shape and exporting one bakes the shape into the motion.
+
+**Apply Shape to Rest Pose** moves the shape down into the skeleton itself and leaves the pose free for animation, which is how the game works: proportions reshape the skeleton, motions play on top of it. The usual order of work is:
+
+1. Import a model, then a character file.
+2. Adjust the sliders.
+3. Export the shape adjust motion, if you are making one.
+4. **Apply Shape to Rest Pose.**
+5. Import or export animations.
+
+Step 4 changes mesh data permanently and the sliders can no longer edit the shape afterwards, so re-import the character file if you need to change it. The panel warns you whenever a shape is sitting in the pose, and the **How This Works** section repeats this summary in Blender.
 
 #### PSO2 Ornaments
 
