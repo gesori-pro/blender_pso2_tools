@@ -30,6 +30,7 @@ from . import (
     import_fnp,
     import_ice,
     import_search,
+    import_shape_adjust,
     operators,
     scene_props,
 )
@@ -74,6 +75,10 @@ def menu_func_import(self: bpy.types.Operator, context: bpy.types.Context):
         import_fnp.PSO2_OT_ImportFnp.bl_idname,
         # every body type: (male/female) x (human/newman/cast/deuman)
         text="PSO2 Character (.fnp/.mhp/...)",
+    )
+    self.layout.operator(
+        import_shape_adjust.PSO2_OT_ImportShapeAdjust.bl_idname,
+        text="PSO2 Shape Adjust (_sa.aqm)",
     )
     self.layout.separator()
 
