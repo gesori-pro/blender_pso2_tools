@@ -152,6 +152,31 @@ def md5digest_ex(text: str):
     return md5digest(text + "_ex")
 
 
+def _color_id(value) -> ColorId:
+    """A ColorId, or UNUSED if the file holds something that is not one.
+
+    The colour indices come out of fields whose meaning is only partly
+    known, so a value outside the enum is a possibility. One of those
+    should not take the whole database rebuild down with it.
+    """
+    try:
+        return ColorId(int(value))
+    except (ValueError, TypeError):
+        return ColorId.UNUSED
+
+
+def _mask_color_mapping(data):
+    """The maskColorMapping struct, if this Aqua library build has one.
+
+    Newer AquaModelLibrary builds group the colour indices into a
+    maskColorMapping struct. The AssimpNet-era build this add-on is pinned
+    to (PSO2-Aqua-Library @ bc9d632) still had them as loose unkInt fields.
+    Reading whichever is present keeps the add-on working against either,
+    rather than tying it to the DLLs that happen to be checked in.
+    """
+    return getattr(data, "maskColorMapping", None)
+
+
 @dataclass
 class CmxColorMapping(ColorMapping):
     def __conform__(self, protocol):
@@ -169,36 +194,62 @@ class CmxColorMapping(ColorMapping):
             alpha=ColorId(int(mapping.alphaIndex)),
         )
 
-    # NOTE: these use the older unkInt fields instead of maskColorMapping to
-    # match the AquaModelLibrary DLLs built from PSO2-Aqua-Library @ bc9d632.
+    # The three below read either the maskColorMapping struct or the loose
+    # unkInt fields it replaced, so that the add-on runs against both the
+    # pinned AssimpNet-era Aqua library and newer builds (see
+    # _mask_color_mapping).
     @classmethod
     def from_bodypaint_obj(cls, obj: "BBLYObject"):
+        if (mapping := _mask_color_mapping(obj.bbly)) is not None:
+            return cls(
+                red=_color_id(mapping.redIndex),
+                green=_color_id(mapping.greenIndex),
+                blue=ColorId.UNUSED,
+                alpha=ColorId.UNUSED,
+            )
+
         # TODO: unkInt0/1 are definitely used, but not sure about 2/3
         return cls(
-            red=ColorId(int(obj.bbly.unkInt0)),
-            green=ColorId(int(obj.bbly.unkInt1)),
-            blue=ColorId(int(obj.bbly.unkInt2)),
-            alpha=ColorId(int(obj.bbly.unkInt3)),
+            red=_color_id(obj.bbly.unkInt0),
+            green=_color_id(obj.bbly.unkInt1),
+            blue=_color_id(obj.bbly.unkInt2),
+            alpha=_color_id(obj.bbly.unkInt3),
         )
 
     @classmethod
     def from_ear_obj(cls, obj: "NGS_EarObject"):
+        if (mapping := _mask_color_mapping(obj.ngsEar)) is not None:
+            return cls(
+                red=_color_id(mapping.redIndex),
+                green=_color_id(mapping.greenIndex),
+                blue=_color_id(mapping.blueIndex),
+                alpha=_color_id(mapping.alphaIndex),
+            )
+
         return cls(
-            red=ColorId(int(obj.ngsEar.unkInt1)),
-            green=ColorId(int(obj.ngsEar.unkInt2)),
-            blue=ColorId(int(obj.ngsEar.unkInt3)),
-            alpha=ColorId(int(obj.ngsEar.unkInt4)),
+            red=_color_id(obj.ngsEar.unkInt1),
+            green=_color_id(obj.ngsEar.unkInt2),
+            blue=_color_id(obj.ngsEar.unkInt3),
+            alpha=_color_id(obj.ngsEar.unkInt4),
         )
 
     @classmethod
     def from_hair_obj(cls, obj: "HAIRObject"):
+        if (mapping := _mask_color_mapping(obj.hair)) is not None:
+            return cls(
+                red=_color_id(mapping.redIndex),
+                green=_color_id(mapping.greenIndex),
+                blue=_color_id(mapping.blueIndex),
+                alpha=_color_id(mapping.alphaIndex),
+            )
+
         red, green = split_int32(obj.hair.unkInt16)
         blue, alpha = split_int32(obj.hair.unkInt17)
         return cls(
-            red=ColorId(red),
-            green=ColorId(green),
-            blue=ColorId(blue),
-            alpha=ColorId(alpha),
+            red=_color_id(red),
+            green=_color_id(green),
+            blue=_color_id(blue),
+            alpha=_color_id(alpha),
         )
 
 
