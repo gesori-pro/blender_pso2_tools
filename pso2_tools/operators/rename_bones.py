@@ -25,12 +25,8 @@ class OBJECT_OT_pso2_rename_bones(bpy.types.Operator):
     def execute(self, context) -> OperatorResult:
         bones = list(_get_bones_with_ids_in_names())
 
-        if dupes := list(_find_duplicate_bones(bones)):
-            self.report(
-                {"ERROR_INVALID_INPUT"},
-                "Cannot rename bones. There are duplicates of the following bones:\n"
-                + "\n".join(dupes),
-            )
+        if dupes := _find_duplicate_bones(bones):
+            self.report({"ERROR_INVALID_INPUT"}, _duplicate_message(dupes))
             return {"CANCELLED"}
 
         for bone in bones:
@@ -61,12 +57,8 @@ class OBJECT_OT_pso2_restore_bones(bpy.types.Operator):
     def execute(self, context) -> OperatorResult:
         bones = list(_get_bones_with_id_props())
 
-        if dupes := list(_find_duplicate_bones(bones)):
-            self.report(
-                {"ERROR_INVALID_INPUT"},
-                "Cannot rename bones. There are duplicates of the following bones:\n"
-                + "\n".join(dupes),
-            )
+        if dupes := _find_duplicate_bones(bones):
+            self.report({"ERROR_INVALID_INPUT"}, _duplicate_message(dupes))
             return {"CANCELLED"}
 
         for bone in bones:
@@ -91,9 +83,11 @@ def _get_bones_with_ids_in_names():
             continue
 
         for bone in obj.data.bones:
-            for pattern in (fbx_wrapper.BONE_PATTERN, fbx_wrapper.BONE_PATTERN_2):
-                if pattern.match(bone.name):
-                    yield bone
+            if any(
+                pattern.match(bone.name)
+                for pattern in (fbx_wrapper.BONE_PATTERN, fbx_wrapper.BONE_PATTERN_2)
+            ):
+                yield bone
 
 
 def _get_bones_with_id_props():
@@ -106,9 +100,37 @@ def _get_bones_with_id_props():
                 yield bone
 
 
-def _find_duplicate_bones(bones: Sequence[bpy.types.Bone]):
-    names = set[str]()
+def _find_duplicate_bones(bones: Sequence[bpy.types.Bone]) -> list[str]:
+    """Names that would collide once the ids move, per armature.
+
+    Bone names only have to be unique inside their own armature, so two
+    models open at once share every name between them. Comparing across
+    the whole file called that a clash and refused to do anything.
+    """
+    seen: dict[str, set[str]] = {}
+    dupes: list[str] = []
+
     for bone in bones:
-        if bone.name in names:
-            yield bone.name
-        names.add(bone.name)
+        armature = bone.id_data
+        renamed = (
+            result[0]
+            if (result := fbx_wrapper.split_bone_name(bone.name))
+            else bone.name
+        )
+        within = seen.setdefault(armature.name, set())
+        if renamed in within:
+            dupes.append(f"{armature.name}: {renamed}")
+        within.add(renamed)
+
+    return dupes
+
+
+def _duplicate_message(dupes: Sequence[str], limit: int = 6) -> str:
+    """Blender's report popup truncates, so lead with the count."""
+    shown = "\n".join(dupes[:limit])
+    if len(dupes) > limit:
+        shown += f"\n... and {len(dupes) - limit} more"
+    return (
+        f"Cannot rename bones: {len(dupes)} would end up sharing a name "
+        f"with another bone in the same armature.\n{shown}"
+    )
