@@ -1,6 +1,6 @@
 import bpy
 
-from .. import classes, shape_sliders
+from .. import bake_rest, classes, shape_sliders
 
 
 @classes.register
@@ -39,6 +39,10 @@ class PSO2ShapeAdjustPanel(bpy.types.Panel):
         row.operator(shape_sliders.PSO2_OT_ShapeSlidersReset.bl_idname, text="Reset")
         row.operator(
             shape_sliders.PSO2_OT_ShapeSlidersFreeze.bl_idname, text="Freeze Current"
+        )
+
+        layout.operator(
+            bake_rest.PSO2_OT_BakeShapeToRest.bl_idname, icon="ARMATURE_DATA"
         )
 
         for index, group in enumerate(shape_sliders.GROUPS):

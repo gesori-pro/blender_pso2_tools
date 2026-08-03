@@ -21,6 +21,7 @@ if "reloader" in locals():
     # ruff: enable[F821]
 
 from . import (
+    bake_rest,
     classes,
     dotnet,
     export_aqm,

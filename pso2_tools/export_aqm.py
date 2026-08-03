@@ -95,11 +95,26 @@ class PSO2_OT_ExportAqm(  # type: ignore https://github.com/nutti/fake-bpy-modul
         path = Path(self.filepath)  # type: ignore
         size = aqm.write_aqm(path, motion)
 
-        self.report(
-            {"INFO"},
+        message = (
             f"Exported {path.name}: {len(motion.nodes)} nodes,"
-            f" frames 0-{motion.end_frame}, {size:,} bytes",
+            f" frames 0-{motion.end_frame}, {size:,} bytes"
         )
+
+        # The exporter samples the posed transforms, so a body shape sitting
+        # in the pose layer ends up baked into the motion (SPEC §6-8).
+        from . import bake_rest
+
+        if armature.animation_data is None or armature.animation_data.action is None:
+            if bake_rest.pose_is_modified(armature):
+                self.report(
+                    {"WARNING"},
+                    message + ". The pose holds a body shape and no action, so"
+                    " that shape is now part of this motion - apply it to the"
+                    " rest pose first if that was not intended.",
+                )
+                return {"FINISHED"}
+
+        self.report({"INFO"}, message)
 
         return {"FINISHED"}
 

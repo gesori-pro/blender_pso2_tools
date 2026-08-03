@@ -171,6 +171,20 @@ class PSO2_OT_ImportAqm(  # type: ignore https://github.com/nutti/fake-bpy-modul
         if summary.disconnected:
             message += f", {len(summary.disconnected)} bones disconnected"
 
+        # An action drives the same pose channels the body shape lives in,
+        # so playing it will discard the shape unless it has been baked
+        # into the rest pose first (SPEC §6-8).
+        from . import bake_rest
+
+        if bake_rest.pose_is_modified(armature):
+            self.report(
+                {"WARNING"},
+                message + ". The armature has a body shape in its pose, which"
+                " this animation will override - use Apply Shape to Rest Pose"
+                " (PSO2 Appearance panel) first.",
+            )
+            return {"FINISHED"}
+
         self.report({"INFO"}, message)
 
         return {"FINISHED"}
