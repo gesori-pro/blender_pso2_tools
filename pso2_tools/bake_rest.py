@@ -18,9 +18,11 @@ sliders no longer have a pose to modify, so re-importing the character
 file is the way back.
 """
 
+import contextlib
+
 import bpy
 
-from . import classes, import_aqm, shape_sliders
+from . import classes, import_aqm, import_fnp, shape_sliders
 from .util import OperatorResult
 
 # Where the body shape currently lives.
@@ -89,12 +91,10 @@ def _freeze_deformation(
     # Apply it where the original sits, so it sees the same input. A single
     # move call, never a loop: if it cannot move, applying it at the end of
     # the stack is still correct for the usual single-modifier mesh.
-    try:
+    with contextlib.suppress(RuntimeError, ValueError):
         bpy.ops.object.modifier_move_to_index(
             modifier=copied.name, index=list(mesh.modifiers).index(source)
         )
-    except (RuntimeError, ValueError):
-        pass
 
     bpy.ops.object.modifier_apply(modifier=copied.name)
 
@@ -113,6 +113,88 @@ def pose_is_modified(armature: bpy.types.Object, epsilon: float = 1e-6) -> bool:
     return False
 
 
+@contextlib.contextmanager
+def pose_suspended(armature: bpy.types.Object | None):
+    """Put the skeleton back the way the model import left it, for a while.
+
+    Model export writes the skeleton as it stands, so a body shape or an
+    animation frame sitting in the pose ends up in the .aqp and .aqn -
+    silently, because the files come out the same size either way.
+
+    "The way the model import left it" is not the rest pose: an imported
+    model carries real pose transforms on its finger bones, and clearing
+    the pose would drop them from the exported skeleton. The baseline the
+    character import stored (import_fnp.store_model_pose) is what gets
+    restored here instead.
+
+    Does nothing at all when there is no baseline, so exporting a model
+    that never had a character file applied is untouched.
+
+    A linked action is unlinked as well, since it would be applied again
+    on the next depsgraph evaluation. Everything goes back even if the
+    block raises.
+    """
+    if (
+        armature is None
+        or armature.type != "ARMATURE"
+        or not import_fnp.has_model_pose(armature)
+    ):
+        yield
+        return
+
+    animation_data = armature.animation_data
+    action = animation_data.action if animation_data else None
+    slot = getattr(animation_data, "action_slot", None) if action else None
+
+    saved = [
+        (
+            bone,
+            bone.location.copy(),
+            bone.rotation_quaternion.copy(),
+            bone.rotation_mode,
+            bone.scale.copy(),
+        )
+        for bone in armature.pose.bones
+    ]
+
+    def update():
+        if view_layer := getattr(bpy.context, "view_layer", None):
+            view_layer.update()
+
+    try:
+        if action is not None:
+            animation_data.action = None
+
+        for bone in armature.pose.bones:
+            baseline = bone.get(import_fnp.MODEL_POSE_PROP)
+            if baseline is None or len(baseline) != 10:
+                continue
+
+            bone.rotation_mode = "QUATERNION"
+            bone.location = baseline[0:3]
+            bone.rotation_quaternion = baseline[3:7]
+            bone.scale = baseline[7:10]
+
+        update()
+        yield
+    finally:
+        for bone, location, quaternion, rotation_mode, scale in saved:
+            bone.rotation_mode = "QUATERNION"
+            bone.location = location
+            bone.rotation_quaternion = quaternion
+            bone.scale = scale
+            bone.rotation_mode = rotation_mode
+
+        if action is not None:
+            animation_data.action = action
+            # Reassigning an action drops the slot it was played through.
+            if slot is not None:
+                with contextlib.suppress(AttributeError, TypeError):
+                    animation_data.action_slot = slot
+
+        update()
+
+
 def shape_state(armature: bpy.types.Object | None) -> str:
     """Which layer the body shape lives in, for the UI to report.
 
@@ -122,7 +204,10 @@ def shape_state(armature: bpy.types.Object | None) -> str:
     if armature is None:
         return STATE_REST
 
-    if armature.animation_data is not None and armature.animation_data.action is not None:
+    if (
+        armature.animation_data is not None
+        and armature.animation_data.action is not None
+    ):
         return STATE_ANIMATED
 
     if pose_is_modified(armature):
@@ -232,18 +317,19 @@ class PSO2_OT_BakeShapeToRest(bpy.types.Operator):
             return {"CANCELLED"}
         finally:
             if armature.mode != previous_mode:
-                try:
+                with contextlib.suppress(RuntimeError):
                     bpy.ops.object.mode_set(mode=previous_mode)
-                except RuntimeError:
-                    pass
             for obj in selected:
                 obj.select_set(True)
             if previous_active is not None:
                 context.view_layer.objects.active = previous_active
 
         # The pose is empty now, so the sliders' stored baseline is gone
-        # with it; they start again from the new rest pose.
+        # with it; they start again from the new rest pose. The model pose
+        # goes too - it is part of the rest pose from here on, and putting
+        # it back on top would double it.
         shape_sliders.clear_base(armature)
+        import_fnp.clear_model_pose(armature)
         settings = shape_sliders.get_settings(context)
         if settings is not None:
             settings.reset()

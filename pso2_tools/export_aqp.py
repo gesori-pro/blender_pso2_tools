@@ -5,7 +5,7 @@ import bpy
 from bpy_extras.io_utils import ExportHelper, axis_conversion, orientation_helper
 from mathutils import Matrix
 
-from . import classes, export_model
+from . import classes, export_model, import_aqm
 
 
 # https://github.com/nutti/fake-bpy-module/issues/376
@@ -33,6 +33,17 @@ class PSO2_OT_ExportAqp(bpy.types.Operator, ExportHelper):  # type: ignore
         name="Overwrite .aqn",
         description="If a .aqn file with the same name exists, overwrite it",
         default=False,
+    )
+    ignore_pose: bpy.props.BoolProperty(
+        name="Ignore Pose",
+        description=(
+            "Export the skeleton at its rest pose. A body shape or an"
+            " animation frame left in the pose is otherwise written into the"
+            " model, and the file comes out the same size either way, so it"
+            " is easy to miss. Turn this off to export exactly what is on"
+            " screen"
+        ),
+        default=True,
     )
 
     use_selection: bpy.props.BoolProperty(
@@ -310,24 +321,33 @@ class PSO2_OT_ExportAqp(bpy.types.Operator, ExportHelper):  # type: ignore
                     "filepath",
                     "version",
                     "overwrite_aqn",
+                    "ignore_pose",
                 )
             ),
         )
         options["global_matrix"] = global_matrix
 
-        return export_model.export(
-            self,
-            context,
-            path,
-            is_ngs=self.game_version == "NGS",
-            overwrite_aqn=self.overwrite_aqn,
-            options=options,
+        from . import bake_rest
+
+        armature = (
+            import_aqm._find_target_armature(context) if self.ignore_pose else None
         )
+
+        with bake_rest.pose_suspended(armature):
+            return export_model.export(
+                self,
+                context,
+                path,
+                is_ngs=self.game_version == "NGS",
+                overwrite_aqn=self.overwrite_aqn,
+                options=options,
+            )
 
 
 def export_panel_main(layout: bpy.types.UILayout, operator):
     layout.prop(operator, "overwrite_aqn")
     layout.prop(operator, "game_version")
+    layout.prop(operator, "ignore_pose")
 
 
 def export_panel_include(layout: bpy.types.UILayout, operator, is_file_browser: bool):

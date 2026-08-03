@@ -132,9 +132,7 @@ class PSO2_OT_ImportFnp(  # type: ignore https://github.com/nutti/fake-bpy-modul
             return {"CANCELLED"}
 
         try:
-            result = proportions.compute(
-                char, apply_outfit_adjust=self.outfit_adjust
-            )
+            result = proportions.compute(char, apply_outfit_adjust=self.outfit_adjust)
         except (OSError, KeyError, ValueError) as ex:
             self.report({"ERROR"}, f"Could not compute proportions: {ex}")
             return {"CANCELLED"}
@@ -168,8 +166,7 @@ class PSO2_OT_ImportFnp(  # type: ignore https://github.com/nutti/fake-bpy-modul
                 debug_print("Could not set scene muscularity")
 
         message = (
-            f"Applied {len(result['sliders'])} sliders to"
-            f" {summary['applied']} bones"
+            f"Applied {len(result['sliders'])} sliders to {summary['applied']} bones"
         )
         if result["outfit_adjust_bones"] and self.outfit_adjust:
             message += f", outfit adjust on {result['outfit_adjust_bones']} bones"
@@ -220,8 +217,51 @@ def reset_pose(armature: bpy.types.Object) -> None:
         pose_bone.scale = (1.0, 1.0, 1.0)
 
 
+# Pose-bone custom property holding the pose the model import produced,
+# captured before proportions overwrite it: [loc xyz, quat wxyz, scale xyz].
+MODEL_POSE_PROP = "pso2_model_pose"
+
+
+def store_model_pose(armature: bpy.types.Object) -> int:
+    """Remember the pose as the model import left it.
+
+    An imported model is not sitting at its rest pose - the finger bones
+    carry real transforms - so "put the skeleton back" cannot mean "clear
+    the pose", and model export needs somewhere to put it back to. Written
+    once and then left alone, so importing a second character file does not
+    overwrite the baseline with an already shaped pose.
+    """
+    stored = 0
+
+    for pose_bone in armature.pose.bones:
+        if MODEL_POSE_PROP in pose_bone:
+            continue
+
+        pose_bone.rotation_mode = "QUATERNION"
+        pose_bone[MODEL_POSE_PROP] = [
+            *pose_bone.location,
+            *pose_bone.rotation_quaternion,
+            *pose_bone.scale,
+        ]
+        stored += 1
+
+    return stored
+
+
+def clear_model_pose(armature: bpy.types.Object) -> None:
+    """Forget the stored model pose (call once it is part of the rest pose)."""
+    for pose_bone in armature.pose.bones:
+        if MODEL_POSE_PROP in pose_bone:
+            del pose_bone[MODEL_POSE_PROP]
+
+
+def has_model_pose(armature: bpy.types.Object) -> bool:
+    return any(MODEL_POSE_PROP in pose_bone for pose_bone in armature.pose.bones)
+
+
 def apply_proportions(armature: bpy.types.Object, bones: dict) -> dict:
     """Write computed proportion deltas (PSO2 axis order) into the pose."""
+    store_model_pose(armature)
     reset_pose(armature)
     inherit = set_inherit_scale(armature)
 
@@ -297,9 +337,7 @@ def _lowest_vertex_z(armature: bpy.types.Object) -> float | None:
     return lowest
 
 
-def solve_ground_contact(
-    armature: bpy.types.Object, low=0.9, high=1.6
-) -> dict:
+def solve_ground_contact(armature: bpy.types.Object, low=0.9, high=1.6) -> dict:
     """Scale body_root until the lowest vertex sits on Z = 0 (SPEC §6-9).
 
     body_root's runtime scale is not a proportion value: the game uses it
@@ -308,7 +346,8 @@ def solve_ground_contact(
     character's size is unaffected.
     """
     base_names = {
-        b.name.split("#")[0]: b.name for b in armature.data.bones  # type: ignore
+        b.name.split("#")[0]: b.name
+        for b in armature.data.bones  # type: ignore
     }
     bone_name = base_names.get("body_root")
     if bone_name is None:

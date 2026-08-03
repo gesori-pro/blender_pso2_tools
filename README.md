@@ -44,6 +44,8 @@ The proportions the game applies to an outfit depend on the outfit itself, so th
 
 By default, this will only write a matching `.aqn` file if it does not already exist. Check **Overwrite .aqn** to overwrite any existing file.
 
+**Ignore Pose** is on by default and exports the skeleton as the model import left it. Without it, a body shape or animation frame sitting in the pose is written into the model, and since the file comes out the same size either way there is nothing to notice. It does nothing unless a character file has been applied, so plain model round trips are unaffected.
+
 **Files > Export > PSO2 AQM (.aqm)** saves the armature's animation as a motion file, one key per frame.
 
 Apply the body shape to the rest pose first (see below). A body shape left in the pose gets written into the motion, which is not what game motion files contain.
