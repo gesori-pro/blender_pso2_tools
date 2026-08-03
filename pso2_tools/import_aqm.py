@@ -210,14 +210,21 @@ def _find_target_armature(context: bpy.types.Context) -> bpy.types.Object | None
 
         return None
 
-    if armature := armature_of(context.active_object):
+    # Not every context exposes a selection: right after a file load, or when
+    # an operator runs from a non-3D-view area, reading these raises instead
+    # of returning None.
+    if armature := armature_of(getattr(context, "active_object", None)):
         return armature
 
-    for obj in context.selected_objects or []:
+    for obj in getattr(context, "selected_objects", None) or []:
         if armature := armature_of(obj):
             return armature
 
-    armatures = [obj for obj in context.view_layer.objects if obj.type == "ARMATURE"]
+    view_layer = getattr(context, "view_layer", None)
+    if view_layer is None:
+        return None
+
+    armatures = [obj for obj in view_layer.objects if obj.type == "ARMATURE"]
     if len(armatures) == 1:
         return armatures[0]
 
