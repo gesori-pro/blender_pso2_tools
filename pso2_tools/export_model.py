@@ -104,6 +104,8 @@ def export(
             ),
         )
 
+    restore_bone_flags(context, aqn)
+
     package = AquaPackage(model)
     package.WritePackage(str(path))
 
@@ -112,6 +114,48 @@ def export(
         aqn_path.write_bytes(aqn.GetBytesNIFL())  # type: ignore
 
     return {"FINISHED"}
+
+
+def restore_bone_flags(context: bpy.types.Context, aqn) -> int:
+    """Put the second bone flag back on the nodes the conversion flattened.
+
+    Bone names carry two flags, `name#short1#short2`. Coming back out of
+    the FBX the second one arrives as a copy of the first, so a skeleton
+    that went in with l_breast at (0x1C0, 0) comes out at (0x1C0, 0x1C0),
+    and physics bones lose the 0x400 that marks them - the game then
+    treats them as ordinary bones. Blender still has the real names, so
+    read the flags off those and write them back.
+    """
+    flags: dict[str, tuple[int, int]] = {}
+    for obj in bpy.data.objects:
+        if obj.type != "ARMATURE":
+            continue
+        for bone in obj.data.bones:  # type: ignore
+            parts = bone.name.split("#")
+            if len(parts) < 3:
+                continue
+            try:
+                flags.setdefault(parts[0], (int(parts[1], 16), int(parts[2], 16)))
+            except ValueError:
+                continue
+
+    if not flags:
+        return 0
+
+    fixed = 0
+    for index in range(len(aqn.nodeList)):
+        node = aqn.nodeList[index]
+        name = str(node.boneName.GetString())
+        known = flags.get(name)
+        if known is None or (node.boneShort1, node.boneShort2) == known:
+            continue
+
+        # NODE is a value type: mutate a copy, then put it back.
+        node.boneShort1, node.boneShort2 = known
+        aqn.nodeList[index] = node
+        fixed += 1
+
+    return fixed
 
 
 @contextmanager
