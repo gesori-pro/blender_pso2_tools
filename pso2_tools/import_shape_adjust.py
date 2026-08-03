@@ -118,11 +118,18 @@ class PSO2_OT_ImportShapeAdjust(  # type: ignore https://github.com/nutti/fake-b
 
 
 def extract_frame1_deltas(motion: aqm.AqmMotion) -> dict:
-    """Per-node frame-1 deltas relative to frame 0, in PSO2 axis order.
+    """Per-node adjustment deltas, in PSO2 axis order.
 
     Same convention as the weight tables' _baseCorrection: scale is a
     multiplier (frame1 / frame0), position is a difference, rotation is
     the left delta (frame1 * frame0^-1).
+
+    A channel with a single key is a static value, not a change - and what
+    that means differs by channel. The rest pose's scale is 1.0, so a
+    static scale IS the multiplier; real files rely on this, storing
+    pelvis 1.3/1.15/1.0 as one key. Static position and rotation channels
+    hold the rest pose itself (hip at 0.898 and so on), so for those,
+    nothing to compare against means no adjustment.
     """
     deltas: dict[int, dict] = {}
 
@@ -139,19 +146,33 @@ def extract_frame1_deltas(motion: aqm.AqmMotion) -> dict:
                 continue
 
             keys = dict(zip(key_set.frames(), key_set.vec4_keys))
+
+            if key_set.key_type == aqm.KEY_TYPE_SCALE:
+                if 0 in keys and 1 in keys:
+                    f0, f1 = keys[0], keys[1]
+                    mul = [
+                        a / b if abs(b) > 1e-9 else 1.0 for a, b in zip(f1[:3], f0[:3])
+                    ]
+                elif len(keys) == 1:
+                    mul = list(next(iter(keys.values()))[:3])
+                    # A few nodes carry an all-zero scale (l_legadd in
+                    # real files); the game does not collapse the bone,
+                    # so treat it as neutral rather than degenerate.
+                    if all(abs(m) < 1e-9 for m in mul):
+                        continue
+                else:
+                    continue
+
+                if any(abs(m - 1.0) > 1e-6 for m in mul):
+                    entry["scale"] = mul
+                continue
+
             if 0 not in keys or 1 not in keys:
                 continue
 
             f0, f1 = keys[0], keys[1]
 
-            if key_set.key_type == aqm.KEY_TYPE_SCALE:
-                mul = [
-                    a / b if abs(b) > 1e-9 else 1.0
-                    for a, b in zip(f1[:3], f0[:3])
-                ]
-                if any(abs(m - 1.0) > 1e-6 for m in mul):
-                    entry["scale"] = mul
-            elif key_set.key_type == aqm.KEY_TYPE_POSITION:
+            if key_set.key_type == aqm.KEY_TYPE_POSITION:
                 diff = [a - b for a, b in zip(f1[:3], f0[:3])]
                 if any(abs(d) > 1e-9 for d in diff):
                     entry["pos"] = diff
@@ -226,9 +247,7 @@ def apply_shape_adjust(armature: bpy.types.Object, deltas: dict) -> dict:
             ).to_quaternion()
 
             pose_bone.rotation_mode = "QUATERNION"
-            pose_bone.rotation_quaternion = (
-                delta_local @ pose_bone.rotation_quaternion
-            )
+            pose_bone.rotation_quaternion = delta_local @ pose_bone.rotation_quaternion
 
         applied += 1
 
