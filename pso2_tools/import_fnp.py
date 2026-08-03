@@ -139,6 +139,21 @@ class PSO2_OT_ImportFnp(  # type: ignore https://github.com/nutti/fake-bpy-modul
 
         summary = apply_proportions(armature, result["bones"])
 
+        # Nothing matched means this armature is not the one the file
+        # describes, or its bones are named in a way the lookup cannot
+        # follow. Saying "FINISHED" here left people staring at an
+        # unchanged model.
+        if summary["applied"] == 0:
+            self.report(
+                {"ERROR"},
+                f"{path.name}: no bones matched. Bones need either their"
+                " pso2_bone_id properties or plain PSO2 names such as"
+                " l_thigh_alt. A rig from Aqua Toolset keeps the ids in the"
+                " names, like (52)l_thigh_alt - run 'PSO2 bone IDs to"
+                " properties' on it first (Edit Mode > Armature > Names).",
+            )
+            return {"CANCELLED"}
+
         if self.ground_contact:
             summary["ground"] = solve_ground_contact(armature)
 
