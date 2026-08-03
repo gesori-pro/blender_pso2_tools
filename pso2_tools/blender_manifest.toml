@@ -19,11 +19,21 @@ wheels = [
 ]
 
 [build]
-# "platforms" above limits this to Windows, so the Linux and macOS native
-# libraries the .NET build drops in bin/runtimes can never be loaded - they
-# were two thirds of the package. bin/ is wiped and refilled by
-# scripts/build_bin.py, so anything kept aside in there by hand is not part
-# of the add-on either.
+# The .NET build drops native libraries for every architecture it knows
+# about into bin/, but "platforms" above limits this add-on to 64-bit
+# Windows, and dotnet.py only ever loads out of bin/ and bin/x64. Everything
+# else was dead weight - two thirds of the download.
+#
+# bin/x64/assimp.dll and bin/runtimes/win-x64/native/assimp.dll are the same
+# 7.9 MB file byte for byte; the probing path in dotnet.py points at the
+# first, so the second only inflates the package.
+#
+# bin/ is wiped and refilled by scripts/build_bin.py, so anything kept aside
+# in there by hand is not part of the add-on either.
+#
+# Verified by importing an ICE archive and exporting it back to .aqp in a
+# fresh Blender with all of these removed: same 39 meshes, same 11,559
+# vertices, same .aqp out.
 paths_exclude_pattern = [
   "__pycache__/",
   "/.git/",
@@ -31,6 +41,11 @@ paths_exclude_pattern = [
   "/bin/backup-*/",
   "/bin/runtimes/linux-*/",
   "/bin/runtimes/osx-*/",
+  "/bin/runtimes/win-x86/",
+  "/bin/runtimes/win-arm64/",
+  "/bin/runtimes/win-x64/native/assimp.dll",
+  "/bin/AquaModelLibrary.Native.X86.dll",
+  "/bin/x86/",
 ]
 
 [permissions]
