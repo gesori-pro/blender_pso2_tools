@@ -1,6 +1,6 @@
 import bpy
 
-from .. import bake_rest, classes, shape_sliders
+from .. import bake_rest, classes, import_aqm, shape_sliders
 
 
 @classes.register
@@ -26,6 +26,21 @@ class PSO2ShapeAdjustPanel(bpy.types.Panel):
         layout = self.layout
         layout.use_property_split = True
         layout.use_property_decorate = False
+
+        header, body = layout.panel("pso2_shape_help", default_closed=True)
+        header.label(text="How This Works", icon="INFO")
+        if body:
+            column = body.column(align=True)
+            for line in bake_rest.WORKFLOW_HELP:
+                if line:
+                    column.label(text=line)
+                else:
+                    column.separator()
+
+        armature = import_aqm._find_target_armature(context)
+        bake_rest.draw_shape_state(
+            layout, bake_rest.shape_state(armature), hint="none"
+        )
 
         row = layout.row(align=True)
         row.operator(

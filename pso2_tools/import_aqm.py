@@ -83,6 +83,10 @@ class PSO2_OT_ImportAqm(  # type: ignore https://github.com/nutti/fake-bpy-modul
         default=True,
     )
 
+    # Captured at invoke time: the file browser's context has no armature
+    # to inspect by the time draw() runs.
+    shape_state: bpy.props.StringProperty(options={"HIDDEN", "SKIP_SAVE"})
+
     def draw(self, context):
         assert self.layout is not None
 
@@ -94,6 +98,10 @@ class PSO2_OT_ImportAqm(  # type: ignore https://github.com/nutti/fake-bpy-modul
         layout.prop(self, "set_fps")
         layout.prop(self, "ignore_translation_keys")
         layout.prop(self, "disconnect_bones")
+
+        from . import bake_rest
+
+        bake_rest.draw_shape_state(layout, self.shape_state)
 
     def execute(self, context) -> OperatorResult:
         armature = _find_target_armature(context)
@@ -190,6 +198,9 @@ class PSO2_OT_ImportAqm(  # type: ignore https://github.com/nutti/fake-bpy-modul
         return {"FINISHED"}
 
     def invoke(self, context, event):  # type: ignore https://github.com/nutti/fake-bpy-module/issues/376
+        from . import bake_rest
+
+        self.shape_state = bake_rest.shape_state(_find_target_armature(context))
         return self.invoke_popup(context)
 
 
