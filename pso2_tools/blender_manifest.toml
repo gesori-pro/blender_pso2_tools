@@ -18,5 +18,20 @@ wheels = [
   "wheels/watchdog-6.0.0-py3-none-win_amd64.whl",
 ]
 
+[build]
+# "platforms" above limits this to Windows, so the Linux and macOS native
+# libraries the .NET build drops in bin/runtimes can never be loaded - they
+# were two thirds of the package. bin/ is wiped and refilled by
+# scripts/build_bin.py, so anything kept aside in there by hand is not part
+# of the add-on either.
+paths_exclude_pattern = [
+  "__pycache__/",
+  "/.git/",
+  "/*.zip",
+  "/bin/backup-*/",
+  "/bin/runtimes/linux-*/",
+  "/bin/runtimes/osx-*/",
+]
+
 [permissions]
 files = "Import/export PSO2 model files"
