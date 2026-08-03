@@ -144,6 +144,17 @@ class PSO2_OT_ImportFnp(  # type: ignore https://github.com/nutti/fake-bpy-modul
         if self.ground_contact:
             summary["ground"] = solve_ground_contact(armature)
 
+        # The pose was rebuilt, so the shape sliders' stored baseline is
+        # stale and their values belong to whatever character was loaded
+        # before. Clear both, or the next slider touch would apply the old
+        # character's shape all at once.
+        # Local import: shape_sliders imports this module at load time.
+        from . import shape_sliders
+
+        shape_sliders.clear_base(armature)
+        if (sliders := shape_sliders.get_settings(context)) is not None:
+            sliders.reset()
+
         colors_applied = 0
         if self.import_colors:
             colors_applied = char_colors.apply_to_scene(context, char)

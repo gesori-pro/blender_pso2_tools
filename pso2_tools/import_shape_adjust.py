@@ -93,6 +93,12 @@ class PSO2_OT_ImportShapeAdjust(  # type: ignore https://github.com/nutti/fake-b
         if self.ground_contact:
             summary["ground"] = import_fnp.solve_ground_contact(armature)
 
+        # The pose changed underneath the shape sliders; their stored base
+        # is stale. Local import: shape_sliders imports this module.
+        from . import shape_sliders
+
+        shape_sliders.clear_base(armature)
+
         message = f"Adjusted {summary['applied']} bones from {path.name}"
         if motion.end_frame != 1:
             message += (

@@ -33,11 +33,13 @@ from . import (
     import_shape_adjust,
     operators,
     scene_props,
+    shape_sliders,
 )
 from . import reloader as reloader
 from .panels import appearance as appearance
 from .panels import mesh as mesh
 from .panels import ornaments as ornaments
+from .panels import shape_adjust as shape_adjust
 from .paths import ADDON_PATH
 
 
@@ -50,6 +52,7 @@ def register():
     bpy.types.VIEW3D_MT_edit_armature_names.append(operators.rename_bones.menu_func)
 
     scene_props.add_custom_properties()
+    shape_sliders.add_scene_property()
 
 
 def unregister():
@@ -88,6 +91,10 @@ def menu_func_export(self: bpy.types.Operator, context: bpy.types.Context):
 
     self.layout.operator(export_aqp.PSO2_OT_ExportAqp.bl_idname, text="PSO2 AQP (.aqp)")
     self.layout.operator(export_aqm.PSO2_OT_ExportAqm.bl_idname, text="PSO2 AQM (.aqm)")
+    self.layout.operator(
+        shape_sliders.PSO2_OT_ExportShapeAdjust.bl_idname,
+        text="PSO2 Shape Adjust (_sa.aqm)",
+    )
     self.layout.separator()
 
 
