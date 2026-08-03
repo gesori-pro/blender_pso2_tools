@@ -3,10 +3,17 @@ Read the colour choices out of a character file into the scene's PSO2
 colour properties.
 
 Character files store colours in the `ngsCOL2` block: eighteen entries of
-four bytes each, laid out RGBA and matching the addon's eighteen
-ColorId channels one for one. The block is identical across file versions
-(V10 through V16) apart from where it starts, which the layout tables
-already handle.
+four bytes each, matching the addon's eighteen ColorId channels one for
+one. The block is identical across file versions (V10 through V16) apart
+from where it starts, which the layout tables already handle.
+
+The three colour bytes are ordered **blue, green, red**. Two things say
+so independently: no skin tone has more blue in it than red, and reading
+a character's skinColor1 of 199/217/255 forwards gives pale blue skin
+where backwards gives (255, 217, 199), an ordinary light complexion; and
+skinColor2 reads backwards as a dark red, which is what the sub-skin
+channel defaults to here (DEFAULT_SUB_SKIN is pure red) and forwards as a
+blue that nothing would use.
 
 The stored bytes are the sRGB values the in-game colour picker shows,
 while Blender's COLOR properties are linear, so they are converted on the
@@ -51,7 +58,9 @@ def srgb_to_linear(value: float) -> float:
     return ((value + 0.055) / 1.055) ** 2.4
 
 
-def read_colors(char: CharacterFile) -> dict[ColorId, tuple[float, float, float, float]]:
+def read_colors(
+    char: CharacterFile,
+) -> dict[ColorId, tuple[float, float, float, float]]:
     """Character file -> linear RGBA per colour channel."""
     result = {}
 
@@ -63,7 +72,8 @@ def read_colors(char: CharacterFile) -> dict[ColorId, tuple[float, float, float,
         if not isinstance(raw, (list, tuple)) or len(raw) < 3:
             continue
 
-        rgb = tuple(srgb_to_linear(int(c) / 255.0) for c in raw[:3])
+        # Stored blue, green, red - reverse into Blender's order.
+        rgb = tuple(srgb_to_linear(int(c) / 255.0) for c in reversed(raw[:3]))
         result[color_id] = (*rgb, 1.0)
 
     return result
