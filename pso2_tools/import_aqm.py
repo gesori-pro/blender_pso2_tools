@@ -131,9 +131,7 @@ class PSO2_OT_ImportAqm(  # type: ignore https://github.com/nutti/fake-bpy-modul
                 return {"CANCELLED"}
 
             if motion.is_camera_motion:
-                self.report(
-                    {"ERROR"}, f"{path.name}: camera motions are not supported"
-                )
+                self.report({"ERROR"}, f"{path.name}: camera motions are not supported")
                 return {"CANCELLED"}
 
             if motion.is_material_motion:
@@ -158,9 +156,7 @@ class PSO2_OT_ImportAqm(  # type: ignore https://github.com/nutti/fake-bpy-modul
                 # write it incorrectly), so use the real last keyframe if
                 # it's later than what the header claims.
                 context.scene.frame_start = 0
-                context.scene.frame_end = max(
-                    motion.end_frame, motion.max_key_frame()
-                )
+                context.scene.frame_end = max(motion.end_frame, motion.max_key_frame())
 
             if self.set_fps:
                 fps = max(1, round(motion.frame_speed))
@@ -255,7 +251,6 @@ def _disconnect_animated_bones(
     pose.
     """
     bones_by_id, bones_by_name = _get_bone_maps(armature)
-    data: bpy.types.Armature = armature.data  # type: ignore
 
     names = []
     for index, node in enumerate(motion.nodes):
@@ -266,13 +261,32 @@ def _disconnect_animated_bones(
         if name is None:
             continue
 
-        bone = data.bones.get(name)
-        if bone is not None and bone.use_connect:
-            names.append(name)
+        names.append(name)
 
+    summary.disconnected.extend(disconnect_bones(context, armature, names))
+
+
+def disconnect_bones(
+    context: bpy.types.Context, armature: bpy.types.Object, names
+) -> list[str]:
+    """Detach the named bones from their parents, and say which moved.
+
+    Blender ignores the pose location of a connected bone, so anything that
+    means to translate one has to do this first. Names that are absent or
+    already disconnected are skipped. Disconnecting only lifts the
+    restriction: it does not move the bone or change the rest pose.
+    """
+    data: bpy.types.Armature = armature.data  # type: ignore
+
+    names = [
+        name
+        for name in dict.fromkeys(names)
+        if (bone := data.bones.get(name)) is not None and bone.use_connect
+    ]
     if not names:
-        return
+        return []
 
+    disconnected: list[str] = []
     view_layer = context.view_layer
     previous_active = view_layer.objects.active
     previous_mode = previous_active.mode if previous_active else "OBJECT"
@@ -294,7 +308,7 @@ def _disconnect_animated_bones(
         finally:
             bpy.ops.object.mode_set(mode="OBJECT")
 
-        summary.disconnected.extend(names)
+        disconnected = names
     except RuntimeError as ex:
         debug_print("Could not disconnect bones:", ex)
     finally:
@@ -307,6 +321,8 @@ def _disconnect_animated_bones(
                 bpy.ops.object.mode_set(mode=previous_mode)
         except RuntimeError:
             pass
+
+    return disconnected
 
 
 def apply_motion(
@@ -433,9 +449,7 @@ def _apply_bone_motion(
     prefix = f'pose.bones["{pose_bone.name}"]'
     group = pose_bone.name
 
-    if not ignore_translation and (
-        key_set := node.get_key_set(aqm.KEY_TYPE_POSITION)
-    ):
+    if not ignore_translation and (key_set := node.get_key_set(aqm.KEY_TYPE_POSITION)):
         values = [
             rest_rotation_inv @ (Vector(key[:3]) - rest_translation)
             for key in key_set.vec4_keys
@@ -448,9 +462,7 @@ def _apply_bone_motion(
         values = []
         for key in key_set.vec4_keys:
             # AQM quaternions are stored XYZW.
-            rotation = rest_rotation_inv @ Quaternion(
-                (key[3], key[0], key[1], key[2])
-            )
+            rotation = rest_rotation_inv @ Quaternion((key[3], key[0], key[1], key[2]))
             rotation.normalize()
 
             # Keep consecutive keys on the same hemisphere so per-component
@@ -492,9 +504,7 @@ def _apply_object_motion(armature: bpy.types.Object, node: aqm.AqmNode, channelb
     identity = True
     if position and any(Vector(key[:3]).length > 1e-6 for key in position.vec4_keys):
         identity = False
-    if rotation and any(
-        abs(1 - abs(key[3])) > 1e-6 for key in rotation.vec4_keys
-    ):
+    if rotation and any(abs(1 - abs(key[3])) > 1e-6 for key in rotation.vec4_keys):
         identity = False
     if scale and any(
         (Vector(key[:3]) - Vector((1, 1, 1))).length > 1e-4 for key in scale.vec4_keys
@@ -533,7 +543,9 @@ def _apply_object_motion(armature: bpy.types.Object, node: aqm.AqmNode, channelb
         _add_fcurves(channelbag, "scale", None, scale.frames(), values, 3)
 
 
-def _add_fcurves(channelbag, data_path: str, group_name: str | None, frames, values, count: int):
+def _add_fcurves(
+    channelbag, data_path: str, group_name: str | None, frames, values, count: int
+):
     """Create keyframes for one property, one F-curve per array index."""
     # Duplicate frames can appear (the final frame is often keyed twice, with
     # and without the end-flag timing). Keep the last value.

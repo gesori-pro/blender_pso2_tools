@@ -61,18 +61,45 @@ class Group:
 # barely deforms anything in practice, so it only added clutter.
 GROUPS = [
     Group("breast", "Breast", "l_breast", "r_breast", {"l_breast": 41, "r_breast": 43}),
-    Group("breast2", "Breast Scale", "l_breast_scale", "r_breast_scale",
-          {"l_breast_scale": 124, "r_breast_scale": 125}),
-    Group("cbreast2", "Center Breast Scale", "c_breast_scale", None,
-          {"c_breast_scale": 130}),
-    Group("clav", "Clavicle", "l_clavicle", "r_clavicle",
-          {"l_clavicle": 22, "r_clavicle": 30}, rotate=False),
-    Group("thigh", "Thigh", "l_thigh_alt", "r_thigh_alt",
-          {"l_thigh_alt": 52, "r_thigh_alt": 63}),
-    Group("thightw", "Thigh Twist", "l_thigh_tw_alt", "r_thigh_tw_alt",
-          {"l_thigh_tw_alt": 53, "r_thigh_tw_alt": 64}),
-    Group("hiptw", "Hip Twist", "l_hip_tw", "r_hip_tw",
-          {"l_hip_tw": 50, "r_hip_tw": 51}),
+    Group(
+        "breast2",
+        "Breast Scale",
+        "l_breast_scale",
+        "r_breast_scale",
+        {"l_breast_scale": 124, "r_breast_scale": 125},
+    ),
+    Group(
+        "cbreast2",
+        "Center Breast Scale",
+        "c_breast_scale",
+        None,
+        {"c_breast_scale": 130},
+    ),
+    Group(
+        "clav",
+        "Clavicle",
+        "l_clavicle",
+        "r_clavicle",
+        {"l_clavicle": 22, "r_clavicle": 30},
+        rotate=False,
+    ),
+    Group(
+        "thigh",
+        "Thigh",
+        "l_thigh_alt",
+        "r_thigh_alt",
+        {"l_thigh_alt": 52, "r_thigh_alt": 63},
+    ),
+    Group(
+        "thightw",
+        "Thigh Twist",
+        "l_thigh_tw_alt",
+        "r_thigh_tw_alt",
+        {"l_thigh_tw_alt": 53, "r_thigh_tw_alt": 64},
+    ),
+    Group(
+        "hiptw", "Hip Twist", "l_hip_tw", "r_hip_tw", {"l_hip_tw": 50, "r_hip_tw": 51}
+    ),
     Group("pelvis", "Pelvis", "pelvis", None, {"pelvis": 3}),
 ]
 
@@ -284,6 +311,19 @@ def apply_sliders(context) -> dict:
 
     _, bones_by_name = import_aqm._get_bone_maps(armature)
 
+    targets = [
+        name
+        for group in GROUPS
+        for bone in group.bones
+        if (name := bones_by_name.get(bone)) is not None
+    ]
+
+    # Blender throws away the pose location of a bone that is connected to
+    # its parent, and the model import leaves a few of these connected -
+    # asymmetrically, so l_thigh_tw_alt arrives connected while its mirror
+    # does not, and the Thigh Twist sliders used to move only one leg.
+    disconnected = import_aqm.disconnect_bones(context, armature, targets)
+
     applied = 0
     for group in GROUPS:
         values = settings.group_values(group.key)
@@ -295,7 +335,7 @@ def apply_sliders(context) -> dict:
             applied += 1
 
     bpy.context.view_layer.update()
-    return {"applied": applied}
+    return {"applied": applied, "disconnected": disconnected}
 
 
 # ---------------------------------------------------------------------------
@@ -407,7 +447,9 @@ class PSO2_OT_ShapeSlidersFromAqm(  # type: ignore https://github.com/nutti/fake
 
         dropped = sorted(UNCOVERED_BONES & set(by_name))
         if dropped:
-            warnings.append(f"no slider for {', '.join(dropped)} (will not be exported)")
+            warnings.append(
+                f"no slider for {', '.join(dropped)} (will not be exported)"
+            )
 
         apply_sliders(context)
 
