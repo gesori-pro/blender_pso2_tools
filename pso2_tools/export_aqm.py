@@ -120,15 +120,16 @@ class PSO2_OT_ExportAqm(  # type: ignore https://github.com/nutti/fake-bpy-modul
         # in the pose layer ends up baked into the motion (SPEC §6-8).
         from . import bake_rest
 
-        if armature.animation_data is None or armature.animation_data.action is None:
-            if bake_rest.pose_is_modified(armature):
-                self.report(
-                    {"WARNING"},
-                    message + ". The pose holds a body shape and no action, so"
-                    " that shape is now part of this motion - apply it to the"
-                    " rest pose first if that was not intended.",
-                )
-                return {"FINISHED"}
+        if (
+            armature.animation_data is None or armature.animation_data.action is None
+        ) and bake_rest.pose_is_modified(armature):
+            self.report(
+                {"WARNING"},
+                message + ". The pose holds a body shape and no action, so"
+                " that shape is now part of this motion - apply it to the"
+                " rest pose first if that was not intended.",
+            )
+            return {"FINISHED"}
 
         self.report({"INFO"}, message)
 
@@ -218,10 +219,8 @@ def build_motion(
         node_count=len(samples) + (1 if player_anim else 0),
     )
 
-    for index, (name, keys) in enumerate(zip(node_names, samples)):
-        node = aqm.AqmNode(
-            node_type=aqm.NODE_TYPE_STANDARD, node_id=index, name=name
-        )
+    for index, (name, keys) in enumerate(zip(node_names, samples, strict=True)):
+        node = aqm.AqmNode(node_type=aqm.NODE_TYPE_STANDARD, node_id=index, name=name)
 
         for key_type, data_type, offset in (
             (aqm.KEY_TYPE_POSITION, 0x1, 0),
@@ -317,9 +316,7 @@ def _get_export_bones(armature: bpy.types.Object) -> list[str]:
     expected = list(range(1, len(ids) + 1))
     if ids != expected:
         missing = sorted(set(expected) - set(ids))[:10]
-        raise ExportError(
-            f"Bone IDs are not contiguous. Missing node IDs: {missing}"
-        )
+        raise ExportError(f"Bone IDs are not contiguous. Missing node IDs: {missing}")
 
     return [bones_by_id[i][0] for i in ids]
 

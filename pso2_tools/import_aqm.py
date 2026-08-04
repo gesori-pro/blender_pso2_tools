@@ -389,9 +389,7 @@ def apply_motion(
             continue
 
         ignore_translation = ignore_translation_keys and index >= _ROOT_NODE_COUNT
-        _apply_bone_motion(
-            pose_bone, node, channelbag, ignore_translation, correction
-        )
+        _apply_bone_motion(pose_bone, node, channelbag, ignore_translation, correction)
         summary.matched += 1
 
     animation_data = armature.animation_data_create()
@@ -537,9 +535,12 @@ def _apply_bone_motion(
         for key in key_set.vec4_keys:
             # AQM quaternions are stored XYZW.
             source = Quaternion((key[3], key[0], key[1], key[2])).normalized()
-            rotation = rest_rotation_inv @ (
-                parent_correction3_inv @ source.to_matrix() @ correction3
-            ).to_quaternion()
+            rotation = (
+                rest_rotation_inv
+                @ (
+                    parent_correction3_inv @ source.to_matrix() @ correction3
+                ).to_quaternion()
+            )
             rotation.normalize()
 
             # Keep consecutive keys on the same hemisphere so per-component
@@ -630,11 +631,8 @@ def _add_fcurves(
 ):
     """Create keyframes for one property, one F-curve per array index."""
     # Duplicate frames can appear (the final frame is often keyed twice, with
-    # and without the end-flag timing). Keep the last value.
-    unique = {}
-    for frame, value in zip(frames, values):
-        unique[frame] = value
-
+    # and without the end-flag timing). dict() keeps the last value.
+    unique = dict(zip(frames, values, strict=True))
     items = sorted(unique.items())
 
     group = None
