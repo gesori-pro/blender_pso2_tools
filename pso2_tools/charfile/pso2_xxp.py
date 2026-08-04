@@ -4,7 +4,7 @@ Pure standard library, so it drops straight into a Blender addon.
 
     from pso2_xxp import CharacterFile
 
-    ch = CharacterFile.load("focuslite.fnp")
+    ch = CharacterFile.load("character.fnp")
     print(ch["baseDOC.race"], ch["baseFIGR.bodyVerts.X"])
     ch["baseFIGR.bodyVerts.X"] = 0          # height to centre
     ch.save("out.fnp")                      # always written as V10

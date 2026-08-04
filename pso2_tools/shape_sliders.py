@@ -14,9 +14,9 @@ the base pose is snapshotted into a custom property on each managed pose
 bone the first time a slider moves. Re-importing a character clears the
 snapshots (the pose was rebuilt), and "Freeze Current" re-captures.
 
-Mirroring follows the convention observed in real mod files (Tae_Puffy,
-N-Forge _sa): the right side negates the position's PSO2 Y component and
-the quaternion's X and Z components; scale is copied as is.
+Mirroring follows the convention observed in the game's own _sa files and
+in hand-made ones: the right side negates the position's PSO2 Y component
+and the quaternion's X and Z components; scale is copied as is.
 """
 
 import math
