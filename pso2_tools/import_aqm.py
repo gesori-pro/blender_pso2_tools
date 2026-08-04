@@ -148,9 +148,8 @@ class PSO2_OT_ImportAqm(  # type: ignore https://github.com/nutti/fake-bpy-modul
                 self.report(
                     {"ERROR"},
                     f"{path.name} looks like a shape adjust, not a motion."
-                    " Use File > Import > PSO2 Shape Adjust to apply it to the"
-                    " body, or Load AQM in the Shape Adjust panel to edit it"
-                    " with the sliders.",
+                    " Load it from Scene > PSO2 Appearance > Shape Adjust"
+                    " instead.",
                 )
                 return {"CANCELLED"}
 

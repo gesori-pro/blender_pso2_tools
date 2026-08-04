@@ -36,7 +36,7 @@ The proportions the game applies to an outfit depend on the outfit itself, so th
 
 **Files > Import > PSO2 AQM (.aqm)** loads a motion onto the imported armature as an action.
 
-**Files > Import > PSO2 Shape Adjust (\_sa.aqm)** loads an outfit's shape-adjust motion, the extra per-outfit tweak the game applies on top of the body proportions.
+Shape adjusts - the extra per-outfit tweak the game applies on top of the body proportions - are loaded from **Scene > PSO2 Appearance > Shape Adjust**, alongside the sliders that edit them, rather than from the import menu.
 
 ### Export
 
