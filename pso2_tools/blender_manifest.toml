@@ -1,6 +1,6 @@
 schema_version = "1.0.0"
 id = "pso2_tools"
-version = "2.10.0"
+version = "2.8.1"
 name = "PSO2 Tools"
 tagline = "PSO2 file format support"
 maintainer = "dummycount"
