@@ -1,3 +1,4 @@
+import re
 from collections.abc import Iterable
 from contextlib import contextmanager
 from pathlib import Path
@@ -105,6 +106,7 @@ def export(
         )
 
     restore_bone_flags(context, aqn)
+    name_root_node(context, aqn, path.stem)
 
     package = AquaPackage(model)
     package.WritePackage(str(path))
@@ -114,6 +116,62 @@ def export(
         aqn_path.write_bytes(aqn.GetBytesNIFL())  # type: ignore
 
     return {"FINISHED"}
+
+
+def name_root_node(context: bpy.types.Context, aqn, model_name: str) -> bool:
+    """Rebuild node 0, the skeleton root the conversion leaves degenerate.
+
+    The game writes it named after the model and with flags, as in
+    `pl_rbd_216590_bw#1CF#0`, sitting at the top of the hierarchy. What
+    comes out of the conversion is blank and zeroed: no name, no flags,
+    scale (0, 0, 0), and parent/child/sibling all 0, so the node is its own
+    parent. A zero scale makes its inverse bind matrix NaN, and importing
+    that file back gives an armature and meshes with NaN transforms.
+
+    The importer puts the root's whole string on the armature object, so
+    read the name and flags back from there and fall back to the file name.
+    """
+    from AquaModelLibrary.Data.DataTypes.SetLengthStrings import PSO2String
+    from System.Numerics import Matrix4x4, Vector3
+
+    if not len(aqn.nodeList):
+        return False
+
+    name, flags = model_name, None
+    for obj in bpy.data.objects:
+        if obj.type != "ARMATURE":
+            continue
+        # Blender appends .001 to duplicate names; the flags are hex.
+        parts = re.sub(r"\.\d+$", "", obj.name).split("#")
+        if len(parts) < 3 or not parts[0]:
+            continue
+        try:
+            flags = (int(parts[1], 16), int(parts[2], 16))
+        except ValueError:
+            continue
+        name = parts[0]
+        break
+
+    if not name:
+        return False
+
+    # Both NODE and PSO2String are value types, so the whole field has to be
+    # replaced and the node written back.
+    node = aqn.nodeList[0]
+    if not str(node.boneName.GetString()):
+        node.boneName = PSO2String.GeneratePSO2String(name)
+    if flags is not None:
+        node.boneShort1, node.boneShort2 = flags
+
+    node.parentId = -1
+    node.firstChild = 1 if len(aqn.nodeList) > 1 else -1
+    node.nextSibling = -1
+    if min(abs(node.scale.X), abs(node.scale.Y), abs(node.scale.Z)) < 1e-6:
+        node.scale = Vector3(1.0, 1.0, 1.0)
+        node.SetInverseBindPoseMatrix(Matrix4x4.Identity)
+
+    aqn.nodeList[0] = node
+    return True
 
 
 def restore_bone_flags(context: bpy.types.Context, aqn) -> int:
