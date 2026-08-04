@@ -205,6 +205,65 @@ def restore_snapshot(armature: bpy.types.Object) -> list[str]:
     return missing
 
 
+@contextlib.contextmanager
+def bake_suspended(armature: bpy.types.Object | None):
+    """Put the model back to its unbaked shape for a while.
+
+    Applying the shape to the rest pose writes it into the mesh, so a model
+    exported afterwards carries the shape - and the game reshapes the
+    skeleton by the character's own proportions on top of that, applying it
+    twice. Swapping the stored pre-bake copies in for the export keeps the
+    file neutral without disturbing what is on screen.
+
+    Does nothing when there is no stored state to swap in. Everything goes
+    back even if the block raises.
+    """
+    if armature is None or not has_snapshot(armature):
+        yield
+        return
+
+    snapshot = armature[SNAPSHOT_PROP]
+    swapped = []
+
+    def update():
+        if view_layer := getattr(bpy.context, "view_layer", None):
+            view_layer.update()
+
+    def swap(obj, replacement):
+        """Put `replacement` on `obj`, borrowing the live data's name.
+
+        The conversion reads a mesh's PSO2 settings out of its data name, so
+        a copy called "..._mesh.prebake" fails to parse. Both names are put
+        back when the block ends.
+        """
+        live = obj.data
+        live_name, copy_name = live.name, replacement.name
+        swapped.append((obj, live, live_name, replacement, copy_name))
+        obj.data = replacement
+        live.name = f"{live_name}.swapped"
+        replacement.name = live_name
+
+    try:
+        for object_name, entry in dict(snapshot["meshes"]).items():
+            obj = bpy.data.objects.get(object_name)
+            mesh = bpy.data.meshes.get(next(iter(entry)))
+            if obj is not None and mesh is not None:
+                swap(obj, mesh)
+
+        rest = bpy.data.armatures.get(next(iter(snapshot["armature"])))
+        if rest is not None:
+            swap(armature, rest)
+
+        update()
+        yield
+    finally:
+        for obj, live, live_name, replacement, copy_name in swapped:
+            obj.data = live
+            replacement.name = copy_name
+            live.name = live_name
+        update()
+
+
 def _deformed_meshes(armature: bpy.types.Object) -> list[bpy.types.Object]:
     """Meshes this armature deforms through an Armature modifier."""
     return [

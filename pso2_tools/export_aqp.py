@@ -45,6 +45,17 @@ class PSO2_OT_ExportAqp(bpy.types.Operator, ExportHelper):  # type: ignore
         ),
         default=True,
     )
+    ignore_applied_shape: bpy.props.BoolProperty(
+        name="Ignore Applied Shape",
+        description=(
+            "Export the model as it was before Apply Shape to Rest Pose."
+            " That button writes the body shape into the mesh, and the game"
+            " reshapes the skeleton by the character's own proportions on top"
+            " of it, so a model exported afterwards comes out shaped twice."
+            " Has no effect on a model that was never baked"
+        ),
+        default=True,
+    )
 
     use_selection: bpy.props.BoolProperty(
         name="Selected Objects",
@@ -343,6 +354,7 @@ class PSO2_OT_ExportAqp(bpy.types.Operator, ExportHelper):  # type: ignore
                     "version",
                     "overwrite_aqn",
                     "ignore_pose",
+                    "ignore_applied_shape",
                 )
             ),
         )
@@ -350,11 +362,11 @@ class PSO2_OT_ExportAqp(bpy.types.Operator, ExportHelper):  # type: ignore
 
         from . import bake_rest
 
-        armature = (
-            import_aqm._find_target_armature(context) if self.ignore_pose else None
-        )
+        target = import_aqm._find_target_armature(context)
+        armature = target if self.ignore_pose else None
+        unbaked = target if self.ignore_applied_shape else None
 
-        with bake_rest.pose_suspended(armature):
+        with bake_rest.pose_suspended(armature), bake_rest.bake_suspended(unbaked):
             return export_model.export(
                 self,
                 context,
@@ -369,6 +381,7 @@ def export_panel_main(layout: bpy.types.UILayout, operator):
     layout.prop(operator, "overwrite_aqn")
     layout.prop(operator, "game_version")
     layout.prop(operator, "ignore_pose")
+    layout.prop(operator, "ignore_applied_shape")
 
 
 def export_panel_include(layout: bpy.types.UILayout, operator, is_file_browser: bool):
