@@ -58,6 +58,14 @@ class ExportOptions(FbxExportOptions, total=False):
     rigid: bool
 
 
+# The package stores each entry's name in a fixed 0x20 byte field, and the
+# writer appends "_l1.aqo" to the file name. Measured against real exports: a
+# stem of 22 still leaves room for the terminator, 23 and 24 lose the ".aqo"
+# and the package reads back with no models at all, and 25 or more is
+# truncated so two different names can collide.
+MAX_MODEL_NAME = 22
+
+
 def export(
     operator: bpy.types.Operator,
     context: bpy.types.Context,
@@ -72,6 +80,16 @@ def export(
     dotnet.set_assimp_probing_paths()
 
     options = options or {}
+
+    if len(path.stem) > MAX_MODEL_NAME:
+        operator.report(
+            {"WARNING"},
+            f"'{path.stem}' is {len(path.stem)} characters. The package stores"
+            " the entry name in 32 bytes and appends '_l1.aqo' to the file"
+            " name, so a longer one is cut off - the file still writes, but it"
+            " can read back with no model in it. Keep the name to"
+            f" {MAX_MODEL_NAME} characters.",
+        )
 
     with TemporaryDirectory() as tempdir:
         fbxfile = Path(tempdir) / path.with_suffix(".fbx").name
