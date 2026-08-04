@@ -12,6 +12,13 @@ MUSCULARITY = "pso2_muscularity"
 ALPHA_THRESHOLD = "pso2_alpha_threshold"
 MESH_ID = "pso2_mesh_id"
 
+# Armature: the primary and secondary bone axes the FBX importer was given,
+# as "X,Y", or "AUTO" when it oriented bones from their children instead.
+# Motion import needs them to undo the rotation the importer put on every
+# bone's local axes.
+BONE_AXES = "pso2_bone_axes"
+DEFAULT_BONE_AXES = "X,Y"
+
 # Bone
 BONE_ID = "pso2_bone_id"
 

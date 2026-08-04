@@ -15,6 +15,7 @@ from . import (
     material,
     objects,
     objects_aqp,
+    scene_props,
     shaders,
 )
 from .debug import debug_pprint, debug_print
@@ -389,6 +390,19 @@ def _import_aqp(
 
         if context.selected_objects is None:
             raise TypeError()
+
+        # Record how the bones were oriented on the way in. Motion keys are
+        # in PSO2's own axes, so importing one has to undo this rotation.
+        if fbx_options.get("automatic_bone_orientation"):
+            bone_axes = "AUTO"
+        else:
+            bone_axes = "{},{}".format(
+                fbx_options.get("primary_bone_axis", "X"),
+                fbx_options.get("secondary_bone_axis", "Y"),
+            )
+        for obj in context.selected_objects:
+            if obj.type == "ARMATURE":
+                obj[scene_props.BONE_AXES] = bone_axes
 
         if get_preferences(context).hide_armature:
             for obj in context.selected_objects:

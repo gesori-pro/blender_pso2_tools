@@ -160,6 +160,11 @@ def build_motion(
     scene = context.scene
     export_bones = _get_export_bones(armature)
 
+    # Bone axes run differently in Blender and PSO2 (see
+    # import_aqm.bone_correction). Keys have to go back the way they came.
+    correction = import_aqm.bone_correction(armature)
+    correction_inv = correction.inverted()
+
     end_frame = frame_end - frame_start
     frame_count = end_frame + 1
 
@@ -185,10 +190,18 @@ def build_motion(
 
                 if pose_bone.parent is not None:
                     local = pose_bone.parent.matrix.inverted() @ pose_bone.matrix
+                    parent_correction = correction
                 else:
                     local = pose_bone.matrix
+                    # Parented to the armature object, which is not a bone
+                    # and so carries no correction.
+                    parent_correction = Matrix.Identity(4)
 
-                _sample_matrix(samples[index], local, pose_bone.matrix)
+                _sample_matrix(
+                    samples[index],
+                    parent_correction @ local @ correction_inv,
+                    pose_bone.matrix @ correction_inv,
+                )
     finally:
         scene.frame_set(current_frame)
 

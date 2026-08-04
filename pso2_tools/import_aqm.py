@@ -11,8 +11,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import bpy
-from bpy_extras.io_utils import ImportHelper
-from mathutils import Quaternion, Vector
+from bpy_extras.io_utils import ImportHelper, axis_conversion
+from mathutils import Matrix, Quaternion, Vector
 
 from . import aqm, classes, scene_props
 from .debug import debug_print
@@ -352,6 +352,7 @@ def apply_motion(
 
     parent_ids = _get_parent_ids(armature, bones_by_id)
     aqm.prepare_scaling(motion, parent_ids)
+    correction = bone_correction(armature)
 
     action = bpy.data.actions.new(name)
     action.use_fake_user = True
@@ -388,7 +389,9 @@ def apply_motion(
             continue
 
         ignore_translation = ignore_translation_keys and index >= _ROOT_NODE_COUNT
-        _apply_bone_motion(pose_bone, node, channelbag, ignore_translation)
+        _apply_bone_motion(
+            pose_bone, node, channelbag, ignore_translation, correction
+        )
         summary.matched += 1
 
     animation_data = armature.animation_data_create()
@@ -397,6 +400,42 @@ def apply_motion(
 
     summary.actions.append(action)
     return action
+
+
+def bone_correction(armature: bpy.types.Object) -> Matrix:
+    """The rotation the FBX importer put on every bone's local axes.
+
+    A Blender bone always runs down its own +Y, while a PSO2 node runs down
+    +X, so io_scene_fbx rotates each bone as it builds the armature. Motion
+    keys are written in PSO2's axes, so reading one back has to undo the same
+    rotation - otherwise a key that only restates the bind offset comes out
+    as a translation of root(2) times the bone's length, and the model tears
+    itself apart.
+
+    This mirrors io_scene_fbx.import_fbx's own bone_correction_matrix, built
+    from the axes the model importer recorded on the armature.
+    """
+    axes = str(armature.get(scene_props.BONE_AXES) or scene_props.DEFAULT_BONE_AXES)
+    parts = axes.split(",")
+    if len(parts) != 2:
+        # "AUTO", or a rig from somewhere else: bones point at their
+        # children and no fixed correction applies.
+        return Matrix.Identity(4)
+
+    primary, secondary = (part.strip() for part in parts)
+    if (primary, secondary) == ("Y", "X"):
+        # What io_scene_fbx treats as no correction at all.
+        return Matrix.Identity(4)
+
+    try:
+        return axis_conversion(
+            from_forward="X",
+            from_up="Y",
+            to_forward=secondary,
+            to_up=primary,
+        ).to_4x4()
+    except ValueError:
+        return Matrix.Identity(4)
 
 
 def _get_bone_maps(armature: bpy.types.Object):
@@ -437,34 +476,56 @@ def _apply_bone_motion(
     node: aqm.AqmNode,
     channelbag,
     ignore_translation: bool,
+    correction: Matrix,
 ):
     """Convert a node's local-space keys to pose-space keyframes.
 
+    A key is in the PSO2 node's own axes, which the FBX importer rotated by
+    C when it built the bone (see bone_correction). Undoing that turns the
+    node's local matrix into the bone's:
+
+        L_bone = C_parent⁻¹ @ L_anim @ C
+
     With rest local matrix L_rest = T_r @ R_r (PSO2 bind poses have no scale)
-    and animated local matrix L_anim = T(p) @ R(q) @ S(s):
+    and L_anim = T(p) @ R(q) @ S(s), that splits back into one term per
+    channel, because C is a signed axis permutation:
 
-        matrix_basis = L_rest⁻¹ @ L_anim
-                     = T(R_r⁻¹ @ (p - t_r)) @ (R_r⁻¹ @ R(q)) @ S(s)
+        p' = C_parent⁻¹ @ p
+        R' = C_parent⁻¹ @ R(q) @ C
+        S' = C⁻¹ @ S(s) @ C                     (still diagonal)
 
-    so each channel only depends on its own key set and native key timings
-    can be kept, matching the game's linear interpolation.
+        matrix_basis = L_rest⁻¹ @ T(p') @ R' @ S'
+                     = T(R_r⁻¹ @ (p' - t_r)) @ (R_r⁻¹ @ R') @ S'
+
+    so each channel still depends only on its own key set and native key
+    timings can be kept, matching the game's linear interpolation.
     """
     bone = pose_bone.bone
 
     if bone.parent is not None:
         rest = bone.parent.matrix_local.inverted() @ bone.matrix_local
+        parent_correction = correction
     else:
         rest = bone.matrix_local.copy()
+        # A parentless bone hangs off the skeleton root, which the model
+        # importer turns into the armature object. That is not a bone, so it
+        # carries no correction.
+        parent_correction = Matrix.Identity(4)
 
     rest_translation = rest.to_translation()
     rest_rotation_inv = rest.to_quaternion().inverted()
+
+    correction3 = correction.to_3x3()
+    correction3_inv = correction3.inverted()
+    parent_correction3_inv = parent_correction.to_3x3().inverted()
 
     prefix = f'pose.bones["{pose_bone.name}"]'
     group = pose_bone.name
 
     if not ignore_translation and (key_set := node.get_key_set(aqm.KEY_TYPE_POSITION)):
         values = [
-            rest_rotation_inv @ (Vector(key[:3]) - rest_translation)
+            rest_rotation_inv
+            @ ((parent_correction3_inv @ Vector(key[:3])) - rest_translation)
             for key in key_set.vec4_keys
         ]
         _add_fcurves(
@@ -475,7 +536,10 @@ def _apply_bone_motion(
         values = []
         for key in key_set.vec4_keys:
             # AQM quaternions are stored XYZW.
-            rotation = rest_rotation_inv @ Quaternion((key[3], key[0], key[1], key[2]))
+            source = Quaternion((key[3], key[0], key[1], key[2])).normalized()
+            rotation = rest_rotation_inv @ (
+                parent_correction3_inv @ source.to_matrix() @ correction3
+            ).to_quaternion()
             rotation.normalize()
 
             # Keep consecutive keys on the same hemisphere so per-component
@@ -496,7 +560,12 @@ def _apply_bone_motion(
         )
 
     if key_set := node.get_key_set(aqm.KEY_TYPE_SCALE):
-        values = [Vector(key[:3]) for key in key_set.vec4_keys]
+        values = [
+            (
+                correction3_inv @ Matrix.Diagonal(Vector(key[:3])) @ correction3
+            ).to_scale()
+            for key in key_set.vec4_keys
+        ]
 
         if any((value - Vector((1, 1, 1))).length > 1e-4 for value in values):
             _add_fcurves(
