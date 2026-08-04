@@ -56,6 +56,8 @@ class FbxExportOptions(TypedDict, total=False):
 
 class ExportOptions(FbxExportOptions, total=False):
     rigid: bool
+    override_bounding_radius: bool
+    bounding_radius: float
 
 
 # The package stores each entry's name in a fixed 0x20 byte field, and the
@@ -64,6 +66,9 @@ class ExportOptions(FbxExportOptions, total=False):
 # and the package reads back with no models at all, and 25 or more is
 # truncated so two different names can collide.
 MAX_MODEL_NAME = 22
+
+# What the game's own player body models carry in the bounding radius field.
+GAME_BOUNDING_RADIUS = -10.0
 
 
 def export(
@@ -126,6 +131,9 @@ def export(
     restore_bone_flags(context, aqn)
     name_root_node(context, aqn, path.stem)
 
+    if options.get("override_bounding_radius"):
+        set_bounding_radius(model, options.get("bounding_radius", GAME_BOUNDING_RADIUS))
+
     package = AquaPackage(model)
     package.WritePackage(str(path))
 
@@ -134,6 +142,25 @@ def export(
         aqn_path.write_bytes(aqn.GetBytesNIFL())  # type: ignore
 
     return {"FINISHED"}
+
+
+def set_bounding_radius(model, radius: float) -> float:
+    """Overwrite the culling radius the conversion measured off the mesh.
+
+    The game's own body models ship -10 here rather than a measured value.
+    A radius that is merely correct for the bind pose is too small once an
+    animation swings a limb out, and the model blinks out when its sphere
+    leaves the view.
+    """
+    # OBJC and BoundingVolume are value types: read a copy, edit it, and put
+    # the whole chain back, or the write goes nowhere.
+    objc = model.objc
+    bounds = objc.bounds
+    previous = float(bounds.boundingRadius)
+    bounds.boundingRadius = radius
+    objc.bounds = bounds
+    model.objc = objc
+    return previous
 
 
 def name_root_node(context: bpy.types.Context, aqn, model_name: str) -> bool:

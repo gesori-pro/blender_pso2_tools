@@ -283,6 +283,27 @@ class PSO2_OT_ExportAqp(bpy.types.Operator, ExportHelper):  # type: ignore
         name="Rigid", description="Export as a rigid model", default=False
     )
 
+    override_bounding_radius: bpy.props.BoolProperty(
+        name="Set Bounding Radius",
+        description=(
+            "Write the culling radius yourself instead of keeping the one"
+            " measured off the mesh. A measured radius only covers the bind"
+            " pose, so a model can blink out once an animation swings a limb"
+            " past it. The game's own body models use -10"
+        ),
+        default=False,
+    )
+    bounding_radius: bpy.props.FloatProperty(
+        name="Bounding Radius",
+        description=(
+            "Radius to write. -10 is what the game ships on player bodies."
+            " A larger positive value keeps the model on screen longer"
+        ),
+        default=export_model.GAME_BOUNDING_RADIUS,
+        soft_min=-10.0,
+        soft_max=10.0,
+    )
+
     def draw(self, context):
         assert self.layout is not None
         assert context.space_data is not None
@@ -392,6 +413,12 @@ def export_panel_geometry(layout: bpy.types.UILayout, operator):
         sub = body.row()
         # ~ sub.enabled = operator.mesh_smooth_type in {'OFF'}
         sub.prop(operator, "use_tspace")
+
+        body.separator()
+        body.prop(operator, "override_bounding_radius")
+        sub = body.row()
+        sub.enabled = operator.override_bounding_radius
+        sub.prop(operator, "bounding_radius")
 
 
 def export_panel_armature(layout: bpy.types.UILayout, operator):
