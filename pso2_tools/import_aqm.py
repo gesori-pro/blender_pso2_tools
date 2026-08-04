@@ -123,9 +123,7 @@ class PSO2_OT_ImportAqm(  # type: ignore https://github.com/nutti/fake-bpy-modul
                 return {"CANCELLED"}
 
             if motion.is_camera_motion:
-                self.report(
-                    {"ERROR"}, f"{path.name}: camera motions are not supported"
-                )
+                self.report({"ERROR"}, f"{path.name}: camera motions are not supported")
                 return {"CANCELLED"}
 
             if motion.is_material_motion:
@@ -150,9 +148,7 @@ class PSO2_OT_ImportAqm(  # type: ignore https://github.com/nutti/fake-bpy-modul
                 # write it incorrectly), so use the real last keyframe if
                 # it's later than what the header claims.
                 context.scene.frame_start = 0
-                context.scene.frame_end = max(
-                    motion.end_frame, motion.max_key_frame()
-                )
+                context.scene.frame_end = max(motion.end_frame, motion.max_key_frame())
 
             if self.set_fps:
                 fps = max(1, round(motion.frame_speed))
@@ -401,9 +397,7 @@ def _apply_bone_motion(
     prefix = f'pose.bones["{pose_bone.name}"]'
     group = pose_bone.name
 
-    if not ignore_translation and (
-        key_set := node.get_key_set(aqm.KEY_TYPE_POSITION)
-    ):
+    if not ignore_translation and (key_set := node.get_key_set(aqm.KEY_TYPE_POSITION)):
         values = [
             rest_rotation_inv @ (Vector(key[:3]) - rest_translation)
             for key in key_set.vec4_keys
@@ -416,9 +410,7 @@ def _apply_bone_motion(
         values = []
         for key in key_set.vec4_keys:
             # AQM quaternions are stored XYZW.
-            rotation = rest_rotation_inv @ Quaternion(
-                (key[3], key[0], key[1], key[2])
-            )
+            rotation = rest_rotation_inv @ Quaternion((key[3], key[0], key[1], key[2]))
             rotation.normalize()
 
             # Keep consecutive keys on the same hemisphere so per-component
@@ -460,9 +452,7 @@ def _apply_object_motion(armature: bpy.types.Object, node: aqm.AqmNode, channelb
     identity = True
     if position and any(Vector(key[:3]).length > 1e-6 for key in position.vec4_keys):
         identity = False
-    if rotation and any(
-        abs(1 - abs(key[3])) > 1e-6 for key in rotation.vec4_keys
-    ):
+    if rotation and any(abs(1 - abs(key[3])) > 1e-6 for key in rotation.vec4_keys):
         identity = False
     if scale and any(
         (Vector(key[:3]) - Vector((1, 1, 1))).length > 1e-4 for key in scale.vec4_keys
@@ -501,14 +491,13 @@ def _apply_object_motion(armature: bpy.types.Object, node: aqm.AqmNode, channelb
         _add_fcurves(channelbag, "scale", None, scale.frames(), values, 3)
 
 
-def _add_fcurves(channelbag, data_path: str, group_name: str | None, frames, values, count: int):
+def _add_fcurves(
+    channelbag, data_path: str, group_name: str | None, frames, values, count: int
+):
     """Create keyframes for one property, one F-curve per array index."""
     # Duplicate frames can appear (the final frame is often keyed twice, with
-    # and without the end-flag timing). Keep the last value.
-    unique = {}
-    for frame, value in zip(frames, values):
-        unique[frame] = value
-
+    # and without the end-flag timing). dict() keeps the last value.
+    unique = dict(zip(frames, values, strict=True))
     items = sorted(unique.items())
 
     group = None

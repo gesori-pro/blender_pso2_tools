@@ -174,10 +174,8 @@ def build_motion(
         node_count=len(samples) + (1 if player_anim else 0),
     )
 
-    for index, (name, keys) in enumerate(zip(node_names, samples)):
-        node = aqm.AqmNode(
-            node_type=aqm.NODE_TYPE_STANDARD, node_id=index, name=name
-        )
+    for index, (name, keys) in enumerate(zip(node_names, samples, strict=True)):
+        node = aqm.AqmNode(node_type=aqm.NODE_TYPE_STANDARD, node_id=index, name=name)
 
         for key_type, data_type, offset in (
             (aqm.KEY_TYPE_POSITION, 0x1, 0),
@@ -273,9 +271,7 @@ def _get_export_bones(armature: bpy.types.Object) -> list[str]:
     expected = list(range(1, len(ids) + 1))
     if ids != expected:
         missing = sorted(set(expected) - set(ids))[:10]
-        raise ExportError(
-            f"Bone IDs are not contiguous. Missing node IDs: {missing}"
-        )
+        raise ExportError(f"Bone IDs are not contiguous. Missing node IDs: {missing}")
 
     return [bones_by_id[i][0] for i in ids]
 

@@ -160,9 +160,11 @@ def _skip_ice_envelope(data: bytes) -> int:
         return 0
 
     (header_size,) = struct.unpack_from("<i", data, 0xC)
-    if 0x10 <= header_size < len(data) - 4:
-        if data[header_size : header_size + 4] in (MAGIC_NIFL, MAGIC_VTBF):
-            return header_size
+    if 0x10 <= header_size < len(data) - 4 and data[header_size : header_size + 4] in (
+        MAGIC_NIFL,
+        MAGIC_VTBF,
+    ):
+        return header_size
 
     raise AqmError("Not an AQM file (no NIFL or VTBF header found)")
 
@@ -205,7 +207,7 @@ def _parse_nifl(data: bytes, base: int) -> AqmMotion:
     mseg_offset = offset0 + bone_table_offset
     node_offsets: list[int] = []
 
-    for i in range(node_count):
+    for _ in range(node_count):
         node_type, node_data_count, node_offset = struct.unpack_from(
             "<iii", data, mseg_offset
         )
@@ -217,7 +219,9 @@ def _parse_nifl(data: bytes, base: int) -> AqmMotion:
         node_offsets.append((node_offset, node_data_count))
 
     # MKEY data
-    for node, (node_offset, node_data_count) in zip(motion.nodes, node_offsets):
+    for node, (node_offset, node_data_count) in zip(
+        motion.nodes, node_offsets, strict=True
+    ):
         mkey_offset = offset0 + node_offset
 
         headers = []
@@ -231,10 +235,7 @@ def _parse_nifl(data: bytes, base: int) -> AqmMotion:
             )
 
             if key_count > 1:
-                fmt = "<%d%s" % (
-                    key_count,
-                    "I" if data_type & _UINT_TIMING_FLAG else "H",
-                )
+                fmt = f"<{key_count}{'I' if data_type & _UINT_TIMING_FLAG else 'H'}"
                 key_set.timings = list(
                     struct.unpack_from(fmt, data, offset0 + time_addr)
                 )
@@ -243,15 +244,17 @@ def _parse_nifl(data: bytes, base: int) -> AqmMotion:
             offset = offset0 + frame_addr
 
             if base_type in (0x1, 0x2, 0x3):
-                for value in struct.iter_unpack("<4f", data[offset : offset + key_count * 16]):
+                for value in struct.iter_unpack(
+                    "<4f", data[offset : offset + key_count * 16]
+                ):
                     key_set.vec4_keys.append(value)
             elif base_type == 0x5:
                 key_set.int_keys = list(
-                    struct.unpack_from("<%di" % key_count, data, offset)
+                    struct.unpack_from(f"<{key_count}i", data, offset)
                 )
             elif base_type in (0x4, 0x6):
                 key_set.float_keys = list(
-                    struct.unpack_from("<%df" % key_count, data, offset)
+                    struct.unpack_from(f"<{key_count}f", data, offset)
                 )
             else:
                 raise AqmError(
@@ -329,7 +332,7 @@ def serialize_aqm(motion: AqmMotion) -> bytes:
         w_i32(node.node_id)
 
     # Key data
-    for node, node_offset_at in zip(motion.nodes, node_offset_locations):
+    for node, node_offset_at in zip(motion.nodes, node_offset_locations, strict=True):
         backfill(node_offset_at, len(rel))
 
         frame_address_locations: list[int] = []
@@ -357,7 +360,10 @@ def serialize_aqm(motion: AqmMotion) -> bytes:
         align16()
 
         for key_set, frame_at, time_at in zip(
-            node.key_sets, frame_address_locations, time_address_locations
+            node.key_sets,
+            frame_address_locations,
+            time_address_locations,
+            strict=True,
         ):
             if time_at is not None and key_set.timings:
                 backfill(time_at, len(rel))
@@ -482,7 +488,7 @@ def prepare_scaling(motion: AqmMotion, parent_ids: dict[int, int]) -> None:
             )
             key = scale.vec4_keys[i]
             scale.vec4_keys[i] = tuple(
-                k / v if v else k for k, v in zip(key, value)
+                k / v if v else k for k, v in zip(key, value, strict=True)
             )  # type: ignore
 
 
@@ -525,6 +531,6 @@ def _interpolate_vec4(
 
             ratio = (frame - low) / (high - low)
             a, b = keys[i], keys[i + 1]
-            return tuple(x + (y - x) * ratio for x, y in zip(a, b))  # type: ignore
+            return tuple(x + (y - x) * ratio for x, y in zip(a, b, strict=True))  # type: ignore
 
     return keys[-1]
