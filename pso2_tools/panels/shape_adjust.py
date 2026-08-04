@@ -62,6 +62,11 @@ class PSO2ShapeAdjustPanel(bpy.types.Panel):
             bake_rest.PSO2_OT_BakeShapeToRest.bl_idname, icon="ARMATURE_DATA"
         )
 
+        if bake_rest.has_snapshot(armature):
+            layout.operator(
+                bake_rest.PSO2_OT_RevertShapeBake.bl_idname, icon="LOOP_BACK"
+            )
+
         for index, group in enumerate(shape_sliders.GROUPS):
             header, body = layout.panel(
                 f"pso2_shape_{group.key}", default_closed=index > 0

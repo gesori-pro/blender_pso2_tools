@@ -30,6 +30,14 @@ STATE_REST = "REST"  # nothing in the pose - ready for animation
 STATE_SHAPE_IN_POSE = "SHAPE_IN_POSE"  # shape in the pose, not baked yet
 STATE_ANIMATED = "ANIMATED"  # an action owns the pose
 
+# Set on the armature by the bake: what it takes to put things back. The
+# datablock copies it names carry a fake user, so a revert still works after
+# saving and reloading, where Blender's own undo stack is gone.
+SNAPSHOT_PROP = "pso2_prebake"
+
+# Pose bone properties the bake clears, kept so a revert can restore them.
+_SNAPSHOT_BONE_PROPS = (import_fnp.MODEL_POSE_PROP, shape_sliders.BASE_PROP)
+
 # Panel help. Blender labels do not wrap, so these are pre-wrapped;
 # an empty string draws as a separator.
 WORKFLOW_HELP = (
@@ -53,6 +61,148 @@ WORKFLOW_HELP = (
     "     4.  Apply Shape to Rest Pose",
     "     5.  Import or export animations",
 )
+
+
+def take_snapshot(armature: bpy.types.Object, meshes) -> None:
+    """Copy everything the bake is about to overwrite onto the armature.
+
+    Baking rewrites three things at once - every deformed mesh's vertices,
+    the armature's rest pose, and the pose layer with the properties hanging
+    off it - so putting it back means keeping all three. The meshes and the
+    armature are kept as datablock copies with a fake user; the pose is small
+    enough to store as plain numbers.
+    """
+    discard_snapshot(armature)
+
+    rest_name = armature.data.name  # type: ignore
+    rest = armature.data.copy()  # type: ignore
+    rest.use_fake_user = True
+    rest.name = f"{rest_name}.prebake"
+
+    mesh_copies = {}
+    for mesh in meshes:
+        original = mesh.data.name  # type: ignore
+        copy = mesh.data.copy()  # type: ignore
+        copy.use_fake_user = True
+        copy.name = f"{original}.prebake"
+        # Keep the name the data had, so a revert can put it back rather
+        # than leaving the object on something called ".prebake.001".
+        mesh_copies[mesh.name] = [copy.name, original]
+
+    pose = {}
+    bone_props = {}
+    for bone in armature.pose.bones:
+        bone.rotation_mode = "QUATERNION"
+        pose[bone.name] = (
+            list(bone.location) + list(bone.rotation_quaternion) + list(bone.scale)
+        )
+        kept = {
+            name: list(bone[name])
+            for name in _SNAPSHOT_BONE_PROPS
+            if bone.get(name) is not None
+        }
+        if kept:
+            bone_props[bone.name] = kept
+
+    armature[SNAPSHOT_PROP] = {
+        "armature": [rest.name, rest_name],
+        "meshes": mesh_copies,
+        "pose": pose,
+        "bone_props": bone_props,
+    }
+
+
+def has_snapshot(armature: bpy.types.Object | None) -> bool:
+    """Is there a stored pre-bake state, with its copies still present?"""
+    if armature is None:
+        return False
+
+    snapshot = armature.get(SNAPSHOT_PROP)
+    if not snapshot:
+        return False
+
+    if bpy.data.armatures.get(next(iter(snapshot["armature"]))) is None:
+        return False
+
+    return all(
+        bpy.data.meshes.get(next(iter(entry))) is not None
+        for entry in dict(snapshot["meshes"]).values()
+    )
+
+
+def discard_snapshot(armature: bpy.types.Object) -> None:
+    """Drop a stored pre-bake state and the copies it holds."""
+    snapshot = armature.get(SNAPSHOT_PROP)
+    if not snapshot:
+        return
+
+    rest = bpy.data.armatures.get(next(iter(snapshot["armature"])))
+    if rest is not None and rest is not armature.data:
+        rest.use_fake_user = False
+        if rest.users == 0:
+            bpy.data.armatures.remove(rest)
+
+    for entry in dict(snapshot["meshes"]).values():
+        mesh = bpy.data.meshes.get(next(iter(entry)))
+        if mesh is None:
+            continue
+        mesh.use_fake_user = False
+        if mesh.users == 0:
+            bpy.data.meshes.remove(mesh)
+
+    del armature[SNAPSHOT_PROP]
+
+
+def restore_snapshot(armature: bpy.types.Object) -> list[str]:
+    """Put back the state the bake replaced. Returns what could not be found."""
+    snapshot = armature[SNAPSHOT_PROP]
+    missing: list[str] = []
+
+    for object_name, entry in dict(snapshot["meshes"]).items():
+        copy_name, original_name = list(entry)
+        obj = bpy.data.objects.get(object_name)
+        mesh = bpy.data.meshes.get(copy_name)
+        if obj is None or mesh is None:
+            missing.append(object_name)
+            continue
+        stale = obj.data
+        obj.data = mesh
+        mesh.use_fake_user = False
+        if stale is not None and stale.users == 0:
+            bpy.data.meshes.remove(stale)  # type: ignore
+        mesh.name = original_name
+
+    copy_name, original_name = list(snapshot["armature"])
+    rest = bpy.data.armatures.get(copy_name)
+    if rest is None:
+        missing.append(str(armature.data.name))  # type: ignore
+    else:
+        stale = armature.data
+        armature.data = rest
+        rest.use_fake_user = False
+        if stale is not None and stale.users == 0:
+            bpy.data.armatures.remove(stale)  # type: ignore
+        rest.name = original_name
+
+    pose = dict(snapshot["pose"])
+    bone_props = dict(snapshot["bone_props"])
+    for bone in armature.pose.bones:
+        values = pose.get(bone.name)
+        if values is None:
+            continue
+        bone.rotation_mode = "QUATERNION"
+        bone.location = values[0:3]
+        bone.rotation_quaternion = values[3:7]
+        bone.scale = values[7:10]
+
+        for name in _SNAPSHOT_BONE_PROPS:
+            if bone.get(name) is not None:
+                del bone[name]
+        for name, value in dict(bone_props.get(bone.name, {})).items():
+            bone[name] = list(value)
+
+    discard_snapshot(armature)
+    return missing
 
 
 def _deformed_meshes(armature: bpy.types.Object) -> list[bpy.types.Object]:
@@ -301,6 +451,8 @@ class PSO2_OT_BakeShapeToRest(bpy.types.Operator):
         previous_mode = armature.mode
         selected = list(context.selected_objects)
 
+        take_snapshot(armature, meshes)
+
         try:
             # Freeze each mesh in its deformed shape first. Rest bones cannot
             # hold scale, so applying the pose alone would snap every mesh
@@ -313,6 +465,7 @@ class PSO2_OT_BakeShapeToRest(bpy.types.Operator):
             bpy.ops.object.mode_set(mode="POSE")
             bpy.ops.pose.armature_apply(selected=False)
         except RuntimeError as ex:
+            discard_snapshot(armature)
             self.report({"ERROR"}, f"Could not apply the pose: {ex}")
             return {"CANCELLED"}
         finally:
@@ -337,6 +490,83 @@ class PSO2_OT_BakeShapeToRest(bpy.types.Operator):
         self.report(
             {"INFO"},
             "Body shape applied to the rest pose. Animations can now be"
-            " imported without losing it.",
+            " imported without losing it. Revert Applied Shape puts it back.",
+        )
+        return {"FINISHED"}
+
+
+@classes.register
+class PSO2_OT_RevertShapeBake(bpy.types.Operator):
+    """Put the skeleton and meshes back the way they were before the shape
+    was applied to the rest pose, and return the shape to the pose"""
+
+    bl_label = "Revert Applied Shape"
+    bl_idname = "pso2.revert_shape_bake"
+    bl_options = {"UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        return has_snapshot(import_aqm._find_target_armature(context))
+
+    def invoke(self, context, event):  # type: ignore https://github.com/nutti/fake-bpy-module/issues/376
+        return context.window_manager.invoke_props_dialog(
+            self, width=400, confirm_text="Revert"
+        )
+
+    def draw(self, context):
+        assert self.layout is not None
+
+        column = self.layout.column(align=True)
+        column.label(text="Restores the skeleton and the meshes as they were")
+        column.label(text="before Apply Shape to Rest Pose, and puts the")
+        column.label(text="shape back in the pose so the sliders can edit it.")
+        column.separator()
+        column.label(text="Anything sculpted since then is lost.", icon="ERROR")
+
+    def execute(self, context) -> OperatorResult:
+        armature = import_aqm._find_target_armature(context)
+        if armature is None:
+            self.report(
+                {"ERROR"},
+                "No target armature. Select a PSO2 armature (or a model parented"
+                " to one) and try again.",
+            )
+            return {"CANCELLED"}
+
+        if not has_snapshot(armature):
+            self.report(
+                {"ERROR"},
+                "Nothing to revert: no stored state from Apply Shape to Rest"
+                " Pose, or the copies it kept have been deleted.",
+            )
+            return {"CANCELLED"}
+
+        if armature.animation_data and armature.animation_data.action:
+            self.report(
+                {"ERROR"},
+                "The armature has an animation action, which drives the same"
+                " pose the shape goes back into. Unlink the action first.",
+            )
+            return {"CANCELLED"}
+
+        missing = restore_snapshot(armature)
+        context.view_layer.update()
+
+        settings = shape_sliders.get_settings(context)
+        if settings is not None:
+            settings.reset()
+
+        if missing:
+            self.report(
+                {"WARNING"},
+                f"Reverted, but {len(missing)} object(s) had no stored copy"
+                f" left: {', '.join(missing[:3])}",
+            )
+            return {"FINISHED"}
+
+        self.report(
+            {"INFO"},
+            "Reverted to the state before the shape was applied. The shape is"
+            " back in the pose.",
         )
         return {"FINISHED"}
