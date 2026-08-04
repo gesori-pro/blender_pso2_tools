@@ -122,6 +122,11 @@ class AqmMotion:
         if self.end_frame > 1 or self.is_camera_motion or self.is_material_motion:
             return False
 
+        # Player animations are motions by definition. Pose mods live here:
+        # one frame, every channel a single key.
+        if self.variant == VARIANT_PLAYER_ANIM:
+            return False
+
         static = animated = 0
         for node in self.nodes:
             for key_set in node.key_sets:
@@ -132,7 +137,10 @@ class AqmMotion:
                 else:
                     static += 1
 
-        return static > animated and static > 0
+        # A shape adjust always keys something twice: frame 0 carries the rest
+        # value and frame 1 the adjusted one. A one-frame pose has no two-key
+        # channel at all, so however static it looks, it is still a motion.
+        return animated > 0 and static > animated
 
     def max_key_frame(self) -> int:
         """Highest frame number found in any node's decoded keyframes.
