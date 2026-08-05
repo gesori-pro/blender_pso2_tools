@@ -36,6 +36,13 @@ BASE_PROP = "pso2_shape_base"
 # Scene property name for the slider group.
 SHAPE_SLIDERS = "pso2_shape_sliders"
 
+# Scene property holding every adjustment a loaded _sa.aqm carried, keyed by
+# node index. The sliders only reach a handful of bones, but real files also
+# scale knees, fingers, the neck and the spine - arm thickness and height are
+# built out of those - so an export that only wrote the slider bones would
+# quietly drop the rest. Kept here so it can be written back out.
+CARRIED = "pso2_shape_carried"
+
 
 class Group:
     """One slider group: a property prefix and the bones it drives.
@@ -105,12 +112,51 @@ GROUPS = [
 
 GROUPS_BY_KEY = {g.key: g for g in GROUPS}
 
-# Bones a loaded file may carry that no slider covers. Warned about on
-# load so a round trip never silently drops data.
-UNCOVERED_BONES = {"c_breast"}
-
 IDENTITY_SCALE = (1.0, 1.0, 1.0)
 IDENTITY_VEC = (0.0, 0.0, 0.0)
+
+
+def store_carried(context, deltas: dict) -> int:
+    """Remember every adjustment a loaded file made, slider or not."""
+    kept = {}
+    for index, entry in deltas.items():
+        if not (entry.get("scale") or entry.get("pos") or entry.get("rotQuat")):
+            continue
+        kept[str(index)] = {
+            "name": entry.get("name") or "",
+            "scale": list(entry["scale"] or IDENTITY_SCALE),
+            "pos": list(entry["pos"] or IDENTITY_VEC),
+            "quat": list(entry["rotQuat"] or (0.0, 0.0, 0.0, 1.0)),
+        }
+
+    context.scene[CARRIED] = kept
+    return len(kept)
+
+
+def get_carried(context) -> dict[int, dict]:
+    """The stored adjustments, keyed by node index."""
+    stored = context.scene.get(CARRIED)
+    if not stored:
+        return {}
+
+    out = {}
+    for index, entry in dict(stored).items():
+        try:
+            out[int(index)] = {
+                "name": str(entry["name"]),
+                "scale": tuple(entry["scale"]),
+                "pos": tuple(entry["pos"]),
+                "quat": tuple(entry["quat"]),
+            }
+        except (KeyError, TypeError, ValueError):
+            continue
+
+    return out
+
+
+def clear_carried(context) -> None:
+    if CARRIED in context.scene:
+        del context.scene[CARRIED]
 
 
 def euler_deg_to_quat(deg) -> tuple[float, float, float, float]:
@@ -218,7 +264,9 @@ class Pso2ShapeSliders(bpy.types.PropertyGroup):
         )
 
     def reset(self):
-        for prop in self.bl_rna.properties.keys():
+        # keys() is required here: iterating an RNA collection directly
+        # yields property objects, and property_unset() wants the name.
+        for prop in self.bl_rna.properties.keys():  # noqa: SIM118
             if prop not in {"rna_type", "name"}:
                 self.property_unset(prop)
 
@@ -344,7 +392,9 @@ def apply_sliders(context) -> dict:
 
 @classes.register
 class PSO2_OT_ShapeSlidersReset(bpy.types.Operator):
-    """Reset all shape sliders to neutral, restoring the base pose"""
+    """Reset all shape sliders to neutral, restoring the base pose. Also
+    forgets a loaded file's other adjustments, so the next export starts
+    from nothing"""
 
     bl_label = "Reset Sliders"
     bl_idname = "pso2.shape_sliders_reset"
@@ -356,6 +406,7 @@ class PSO2_OT_ShapeSlidersReset(bpy.types.Operator):
             return {"CANCELLED"}
 
         settings.reset()
+        clear_carried(context)
         apply_sliders(context)
         return {"FINISHED"}
 
@@ -438,22 +489,25 @@ class PSO2_OT_ShapeSlidersFromAqm(  # type: ignore https://github.com/nutti/fake
                 mirrored = mirror_pos(pos)
                 if any(
                     abs(a - b) > 1e-4
-                    for a, b in zip(other["scale"] or IDENTITY_SCALE, scale)
+                    for a, b in zip(
+                        other["scale"] or IDENTITY_SCALE, scale, strict=True
+                    )
                 ) or any(
                     abs(a - b) > 1e-4
-                    for a, b in zip(other["pos"] or IDENTITY_VEC, mirrored)
+                    for a, b in zip(other["pos"] or IDENTITY_VEC, mirrored, strict=True)
                 ):
                     warnings.append(f"{group.label} L/R differ, left side used")
 
-        dropped = sorted(UNCOVERED_BONES & set(by_name))
-        if dropped:
-            warnings.append(
-                f"no slider for {', '.join(dropped)} (will not be exported)"
-            )
+        # Everything the file touched is kept, so exporting later writes the
+        # bones the sliders cannot reach back out unchanged.
+        carried = store_carried(context, deltas)
 
         apply_sliders(context)
 
-        message = f"Loaded {loaded} slider groups from {path.name}"
+        message = (
+            f"Loaded {loaded} slider groups from {path.name}"
+            f"; {carried} adjusted bones kept for export"
+        )
         if warnings:
             message += " - " + "; ".join(warnings)
         self.report({"WARNING" if warnings else "INFO"}, message)
@@ -494,7 +548,14 @@ class PSO2_OT_ExportShapeAdjust(  # type: ignore https://github.com/nutti/fake-b
             }
         ids_by_name = {name: index for index, name in names.items()}
 
-        adjusted: dict[int, dict] = {}
+        # Start from whatever a loaded file adjusted - knees, fingers, neck,
+        # spine and so on - then let the sliders override their own bones.
+        adjusted: dict[int, dict] = {
+            index: {"scale": entry["scale"], "pos": entry["pos"], "quat": entry["quat"]}
+            for index, entry in get_carried(context).items()
+        }
+        carried = len(adjusted)
+
         for group in GROUPS:
             if settings.is_neutral(group.key):
                 continue
@@ -511,17 +572,26 @@ class PSO2_OT_ExportShapeAdjust(  # type: ignore https://github.com/nutti/fake-b
                 }
 
         if not adjusted:
-            self.report({"ERROR"}, "All sliders are neutral; nothing to export")
+            self.report(
+                {"ERROR"},
+                "All sliders are neutral and no file has been loaded;"
+                " nothing to export",
+            )
             return {"CANCELLED"}
+
+        from_sliders = len(adjusted) - carried
 
         motion = self._build_motion(names, adjusted)
         path = Path(self.filepath)  # type: ignore
         aqm.write_aqm(path, motion)
 
-        self.report(
-            {"INFO"},
-            f"Exported shape adjust for {len(adjusted)} bones to {path.name}",
-        )
+        message = f"Exported shape adjust for {len(adjusted)} bones to {path.name}"
+        if carried:
+            message += (
+                f" ({carried} kept from the loaded file,"
+                f" {from_sliders} added by the sliders)"
+            )
+        self.report({"INFO"}, message)
         return {"FINISHED"}
 
     def _build_motion(self, names: dict[int, str], adjusted: dict[int, dict]):
