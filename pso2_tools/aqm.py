@@ -68,6 +68,29 @@ class AqmKeySet:
         mult = self.time_multiplier
         return [t // mult for t in self.timings]
 
+    def is_constant(self) -> bool:
+        """Does the channel hold one value, however many keys it stores?
+
+        Pose mods write the same value at every frame they key, so counting
+        keys alone says nothing about whether a channel moves.
+        """
+        for keys in (self.vec4_keys, self.float_keys, self.int_keys):
+            if len(keys) < 2:
+                continue
+
+            first = keys[0]
+            if isinstance(first, tuple):
+                if any(
+                    abs(a - b) > 1e-6
+                    for key in keys[1:]
+                    for a, b in zip(first, key, strict=True)
+                ):
+                    return False
+            elif any(abs(first - key) > 1e-6 for key in keys[1:]):
+                return False
+
+        return True
+
 
 @dataclass
 class AqmNode:
@@ -121,20 +144,27 @@ class AqmMotion:
         if self.variant == VARIANT_PLAYER_ANIM:
             return False
 
-        static = animated = 0
+        static = adjusted = 0
         for node in self.nodes:
             for key_set in node.key_sets:
                 if not key_set.key_count:
                     continue
-                if key_set.key_count > 1:
-                    animated += 1
-                else:
+                if key_set.is_constant():
                     static += 1
+                else:
+                    adjusted += 1
 
-        # A shape adjust always keys something twice: frame 0 carries the rest
-        # value and frame 1 the adjusted one. A one-frame pose has no two-key
-        # channel at all, so however static it looks, it is still a motion.
-        return animated > 0 and static > animated
+        # A shape adjust puts the rest value at frame 0 and the adjusted one
+        # at frame 1, so something has to change between the two. A pose mod
+        # writes the same value at both frames - on hundreds of channels in
+        # some files - which counting keys alone read as an adjustment.
+        #
+        # What is left moves a handful of channels against a whole skeleton:
+        # the files in use move between 0.8% and 7% of theirs, while the two
+        # frame emotes that look the same move a fifth at the very least. A
+        # tenth sits in that gap. Guessing motion on a borderline file only
+        # costs a warning; guessing shape adjust turns a motion away.
+        return adjusted > 0 and adjusted * 10 < static + adjusted
 
     def max_key_frame(self) -> int:
         """Highest frame number found in any node's decoded keyframes.
