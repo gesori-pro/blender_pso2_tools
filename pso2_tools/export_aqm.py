@@ -288,15 +288,23 @@ def build_motion(
             for index, name in enumerate(export_bones, start=1):
                 pose_bone = armature.pose.bones[name]
 
+                # The bone's transform relative to its parent is the rest
+                # offset with the pose basis on top. Dividing the posed world
+                # matrices instead gives the same thing only while nothing up
+                # the chain is scaled unevenly: that puts a scale between two
+                # rotations, which is a shear, and the position and rotation
+                # read back off a shear are approximations. Rest matrices
+                # carry no scale, so this way there is nothing to shear.
+                basis = pose_bone.matrix_basis
                 if pose_bone.parent is not None:
-                    # Motions hide a bone by scaling it to zero, and a zero
-                    # scale leaves the parent's matrix with no inverse.
-                    # inverted_safe falls back instead of throwing, which
-                    # otherwise took the whole export down.
-                    local = pose_bone.parent.matrix.inverted_safe() @ pose_bone.matrix
+                    rest = (
+                        pose_bone.parent.bone.matrix_local.inverted_safe()
+                        @ pose_bone.bone.matrix_local
+                    )
+                    local = rest @ basis
                     parent_correction = correction
                 else:
-                    local = pose_bone.matrix
+                    local = pose_bone.bone.matrix_local @ basis
                     # Parented to the armature object, which is not a bone
                     # and so carries no correction.
                     parent_correction = Matrix.Identity(4)
