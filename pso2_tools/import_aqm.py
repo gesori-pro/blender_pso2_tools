@@ -73,6 +73,18 @@ class PSO2_OT_ImportAqm(  # type: ignore https://github.com/nutti/fake-bpy-modul
         ),
         default=False,
     )
+    ignore_scale_keys: bpy.props.BoolProperty(
+        name="Ignore Scale Keys",
+        description=(
+            "Drop the motion's scale keys and keep the armature at its own"
+            " size. A pose exported from Blender takes the scale straight off"
+            " the bones, so an author who had a body shape loaded writes"
+            " their proportions into the file - one arm thicker than the"
+            " other is the usual sign. Turn this on to take the pose without"
+            " the body it was made on"
+        ),
+        default=False,
+    )
     disconnect_bones: bpy.props.BoolProperty(
         name="Disconnect Animated Bones",
         description=(
@@ -97,6 +109,7 @@ class PSO2_OT_ImportAqm(  # type: ignore https://github.com/nutti/fake-bpy-modul
         layout.prop(self, "set_frame_range")
         layout.prop(self, "set_fps")
         layout.prop(self, "ignore_translation_keys")
+        layout.prop(self, "ignore_scale_keys")
         layout.prop(self, "disconnect_bones")
 
         from . import bake_rest
@@ -162,6 +175,7 @@ class PSO2_OT_ImportAqm(  # type: ignore https://github.com/nutti/fake-bpy-modul
                 name=path.stem,
                 summary=summary,
                 ignore_translation_keys=self.ignore_translation_keys,
+                ignore_scale_keys=self.ignore_scale_keys,
             )
 
             if self.set_frame_range:
@@ -344,6 +358,7 @@ def apply_motion(
     name: str,
     summary: ImportSummary | None = None,
     ignore_translation_keys=False,
+    ignore_scale_keys=False,
 ):
     """Create an action from a motion and assign it to the armature."""
     summary = summary if summary is not None else ImportSummary()
@@ -390,7 +405,14 @@ def apply_motion(
             continue
 
         ignore_translation = ignore_translation_keys and index >= _ROOT_NODE_COUNT
-        _apply_bone_motion(pose_bone, node, channelbag, ignore_translation, correction)
+        _apply_bone_motion(
+            pose_bone,
+            node,
+            channelbag,
+            ignore_translation,
+            correction,
+            ignore_scale_keys,
+        )
         summary.matched += 1
 
     animation_data = armature.animation_data_create()
@@ -506,6 +528,7 @@ def _apply_bone_motion(
     channelbag,
     ignore_translation: bool,
     correction: Matrix,
+    ignore_scale: bool = False,
 ):
     """Convert a node's local-space keys to pose-space keyframes.
 
@@ -591,7 +614,7 @@ def _apply_bone_motion(
             4,
         )
 
-    if key_set := node.get_key_set(aqm.KEY_TYPE_SCALE):
+    if not ignore_scale and (key_set := node.get_key_set(aqm.KEY_TYPE_SCALE)):
         values = [
             (
                 correction3_inv @ Matrix.Diagonal(Vector(key[:3])) @ correction3
