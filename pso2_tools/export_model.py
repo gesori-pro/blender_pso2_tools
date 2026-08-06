@@ -265,6 +265,7 @@ def restore_bone_flags(context: bpy.types.Context, aqn) -> int:
 def _include_parents(context: bpy.types.Context, fbx_options: ExportOptions):
     shown_objects: set[bpy.types.Object] = set()
     viewport_shown_objects: set[bpy.types.Object] = set()
+    restore: list[tuple] = []
 
     use_visible = fbx_options.get("use_visible", False)
     use_selection = fbx_options.get("use_selection", False)
@@ -278,7 +279,21 @@ def _include_parents(context: bpy.types.Context, fbx_options: ExportOptions):
     if ctx_objects is None:
         raise TypeError()
 
+    if use_selection:
+        meshes = list(_get_selected_meshes(ctx_objects))
+    elif use_visible:
+        meshes = list(_get_visible_meshes(ctx_objects))
+    else:
+        meshes = [obj for obj in ctx_objects if obj.type == "MESH"]
+
+    parents = set()
+    for mesh in meshes:
+        obj = mesh
+        while obj := obj.parent:
+            parents.add(obj)
+
     try:
+        _reveal_collections(context, parents, restore)
         # If we are only including visible objects, make sure the parents of any
         # visible objects are also visible.
         if use_visible:
@@ -311,6 +326,55 @@ def _include_parents(context: bpy.types.Context, fbx_options: ExportOptions):
 
         for obj in viewport_shown_objects:
             obj.hide_viewport = True
+
+        for target, attribute in reversed(restore):
+            setattr(target, attribute, True)
+
+
+def _reveal_collections(
+    context: bpy.types.Context, objects: Iterable[bpy.types.Object], restore: list
+):
+    """Put the collections these objects live in back in the view layer.
+
+    Hiding a collection is not the same as hiding an object: an excluded
+    collection drops its objects out of the view layer entirely, so the FBX
+    exporter never sees them however the include options are set. Someone
+    who sorts a character into collections and switches the rig's off gets
+    a model exported with no skeleton - and the export reports success,
+    since a file is written either way. It reads back as 974 KB of nothing
+    where a whole one is 1.06 MB.
+
+    Only the collections holding the objects passed in are touched, which
+    is the parents of what is being exported. A collection switched off to
+    leave its meshes out stays off.
+    """
+    view_layer = getattr(context, "view_layer", None)
+    if view_layer is None:
+        return
+
+    for obj in objects:
+        for layer in _layer_chain(view_layer.layer_collection, obj) or ():
+            for target, attribute in (
+                (layer, "exclude"),
+                (layer, "hide_viewport"),
+                (layer.collection, "hide_viewport"),
+            ):
+                if getattr(target, attribute, False):
+                    setattr(target, attribute, False)
+                    restore.append((target, attribute))
+
+
+def _layer_chain(layer_collection, obj, chain: list | None = None) -> list | None:
+    """The view layer's collections from the root down to the one holding obj."""
+    chain = (chain or []) + [layer_collection]
+    if obj.name in layer_collection.collection.objects:
+        return chain
+
+    for child in layer_collection.children:
+        if found := _layer_chain(child, obj, chain):
+            return found
+
+    return None
 
 
 def _get_visible_meshes(objects: Iterable[bpy.types.Object]):
