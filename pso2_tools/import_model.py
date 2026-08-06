@@ -12,6 +12,7 @@ from . import (
     datafile,
     fbx_wrapper,
     ice,
+    import_fnp,
     material,
     objects,
     objects_aqp,
@@ -400,9 +401,14 @@ def _import_aqp(
                 fbx_options.get("primary_bone_axis", "X"),
                 fbx_options.get("secondary_bone_axis", "Y"),
             )
+        # The import does not leave the skeleton at its rest pose - the
+        # fingertip bones arrive with real transforms on them. Recording that
+        # as the baseline gives export somewhere to put the pose back to, and
+        # tells a body shape loaded later apart from what was always there.
         for obj in context.selected_objects:
             if obj.type == "ARMATURE":
                 obj[scene_props.BONE_AXES] = bone_axes
+                import_fnp.store_model_pose(obj)
 
         if get_preferences(context).hide_armature:
             for obj in context.selected_objects:

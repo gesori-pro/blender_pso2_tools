@@ -8,6 +8,7 @@ rotation as local-to-parent transforms and scale as absolute scale, which
 is what PSO2 expects (bones do not inherit scale).
 """
 
+import re
 from math import radians
 from pathlib import Path
 
@@ -22,6 +23,9 @@ from .util import OperatorResult
 _CONVERSION = Matrix.Rotation(radians(90), 4, "X")
 
 _TRAILING_EXCLUDE_FLAG = 0x400
+
+# The bone name out of an f-curve path, `pose.bones["hip#3C6#0"].location`.
+_BONE_PATH = re.compile(r'pose\.bones\["(.+)"\]\.')
 
 
 class ExportError(Exception):
@@ -58,6 +62,17 @@ class PSO2_OT_ExportAqm(  # type: ignore https://github.com/nutti/fake-bpy-modul
         ),
         default=False,
     )
+    ignore_applied_shape: bpy.props.BoolProperty(
+        name="Ignore Applied Shape",
+        description=(
+            "Sample the motion from the skeleton as it was before Apply Shape"
+            " to Rest Pose. Keys carry each bone's offset from its parent, so"
+            " a body shape in the rest pose is written into every frame and"
+            " every character playing the motion takes on that body. Has no"
+            " effect on a skeleton that was never baked"
+        ),
+        default=True,
+    )
 
     # Captured at invoke time: the file browser's context has no armature
     # to inspect by the time draw() runs.
@@ -80,6 +95,7 @@ class PSO2_OT_ExportAqm(  # type: ignore https://github.com/nutti/fake-bpy-modul
 
         layout.prop(self, "frame_source")
         layout.prop(self, "player_anim")
+        layout.prop(self, "ignore_applied_shape")
 
         from . import bake_rest
 
@@ -95,15 +111,20 @@ class PSO2_OT_ExportAqm(  # type: ignore https://github.com/nutti/fake-bpy-modul
             )
             return {"CANCELLED"}
 
+        from . import bake_rest
+
+        unbaked = armature if self.ignore_applied_shape else None
+
         try:
             frame_start, frame_end = self._get_frame_range(context, armature)
-            motion = build_motion(
-                context,
-                armature,
-                frame_start=frame_start,
-                frame_end=frame_end,
-                player_anim=self.player_anim,
-            )
+            with bake_rest.bake_suspended(unbaked):
+                motion = build_motion(
+                    context,
+                    armature,
+                    frame_start=frame_start,
+                    frame_end=frame_end,
+                    player_anim=self.player_anim,
+                )
         except ExportError as ex:
             self.report({"ERROR"}, str(ex))
             return {"CANCELLED"}
@@ -116,18 +137,18 @@ class PSO2_OT_ExportAqm(  # type: ignore https://github.com/nutti/fake-bpy-modul
             f" frames 0-{motion.end_frame}, {size:,} bytes"
         )
 
-        # The exporter samples the posed transforms, so a body shape sitting
-        # in the pose layer ends up baked into the motion (SPEC §6-8).
-        from . import bake_rest
-
-        if (
-            armature.animation_data is None or armature.animation_data.action is None
-        ) and bake_rest.pose_is_modified(armature):
+        # The exporter samples the posed transforms, so anything sitting in
+        # the pose layer that the action does not drive - a body shape, most
+        # often - ends up baked into the motion (SPEC §6-8).
+        if stuck := _unkeyed_posed_bones(armature):
+            shown = ", ".join(sorted(stuck)[:4])
+            more = f" and {len(stuck) - 4} more" if len(stuck) > 4 else ""
             self.report(
                 {"WARNING"},
-                message + ". The pose holds a body shape and no action, so"
-                " that shape is now part of this motion - apply it to the"
-                " rest pose first if that was not intended.",
+                message + f". {len(stuck)} bones are posed but not animated"
+                f" ({shown}{more}), so whatever holds them - a body shape,"
+                " most often - is now part of this motion. Reset the pose on"
+                " those bones if that was not intended.",
             )
             return {"FINISHED"}
 
@@ -145,6 +166,71 @@ class PSO2_OT_ExportAqm(  # type: ignore https://github.com/nutti/fake-bpy-modul
             return round(start), round(end)
 
         return context.scene.frame_start, context.scene.frame_end
+
+
+def _keyed_bones(armature: bpy.types.Object) -> set[str]:
+    """Bone names the active action drives.
+
+    Actions held their curves in a flat `fcurves` list up to 4.3 and in
+    slotted channelbags after; 5.0 dropped the flat list. Both are read so
+    the check works either way. The armature's own slot is preferred, since
+    one action can hold curves for several data-blocks at once.
+    """
+    animation_data = armature.animation_data
+    action = animation_data.action if animation_data else None
+    if action is None:
+        return set()
+
+    slot = getattr(animation_data, "action_slot", None)
+    curves = list(getattr(action, "fcurves", ()))
+    for layer in getattr(action, "layers", ()):
+        for strip in getattr(layer, "strips", ()):
+            bags = [strip.channelbag(slot)] if slot else list(strip.channelbags)
+            curves.extend(curve for bag in bags if bag for curve in bag.fcurves)
+
+    return {
+        match.group(1)
+        for curve in curves
+        if (match := _BONE_PATH.match(curve.data_path))
+    }
+
+
+def _unkeyed_posed_bones(
+    armature: bpy.types.Object, epsilon: float = 1e-4
+) -> list[str]:
+    """Posed bones the action leaves alone, so their pose is a constant.
+
+    A motion carries every bone at every frame, so a bone the action never
+    touches is still written out - holding whatever the pose layer had on
+    it. That is where a loaded body shape goes.
+
+    The comparison is against the pose the import left (import_fnp
+    .store_model_pose), not the rest pose: the fingertip bones come in
+    already transformed, and measuring those against rest would report ten
+    bones on every export of an untouched model.
+    """
+    from . import import_fnp
+
+    keyed = _keyed_bones(armature)
+    out = []
+
+    for pose_bone in armature.pose.bones:
+        if pose_bone.name in keyed:
+            continue
+
+        baseline = pose_bone.get(import_fnp.MODEL_POSE_PROP)
+        if baseline is None or len(baseline) != 10:
+            continue
+
+        current = (
+            *pose_bone.location,
+            *pose_bone.matrix_basis.to_quaternion(),
+            *pose_bone.scale,
+        )
+        if any(abs(a - b) > epsilon for a, b in zip(current, baseline, strict=True)):
+            out.append(pose_bone.name.split("#")[0])
+
+    return out
 
 
 def build_motion(

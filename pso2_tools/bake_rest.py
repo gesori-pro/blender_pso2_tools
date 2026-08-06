@@ -19,8 +19,10 @@ file is the way back.
 """
 
 import contextlib
+from collections.abc import Iterable
 
 import bpy
+from mathutils import Matrix
 
 from . import classes, import_aqm, import_fnp, shape_sliders
 from .util import OperatorResult
@@ -308,15 +310,27 @@ def _freeze_deformation(
     bpy.ops.object.modifier_apply(modifier=copied.name)
 
 
-def pose_is_modified(armature: bpy.types.Object, epsilon: float = 1e-6) -> bool:
-    """Is any pose bone transformed away from its rest position?"""
-    for pose_bone in armature.pose.bones:
-        if any(abs(v) > epsilon for v in pose_bone.location):
-            return True
-        if any(abs(v - 1.0) > epsilon for v in pose_bone.scale):
-            return True
-        quaternion = pose_bone.rotation_quaternion
-        if abs(abs(quaternion.w) - 1.0) > epsilon:
+def pose_is_modified(
+    armature: bpy.types.Object,
+    epsilon: float = 1e-6,
+    bones: Iterable[bpy.types.PoseBone] | None = None,
+) -> bool:
+    """Is any pose bone transformed away from its rest position?
+
+    Pass `bones` to ask about part of the skeleton rather than all of it.
+
+    The basis matrix is what gets compared, rather than the location,
+    rotation and scale fields: a bone posed in euler mode leaves
+    rotation_quaternion at identity, and reading that field alone would call
+    the bone unposed.
+    """
+    identity = Matrix.Identity(4)
+    for pose_bone in armature.pose.bones if bones is None else bones:
+        if any(
+            abs(a - b) > epsilon
+            for row, rest in zip(pose_bone.matrix_basis, identity, strict=True)
+            for a, b in zip(row, rest, strict=True)
+        ):
             return True
 
     return False
