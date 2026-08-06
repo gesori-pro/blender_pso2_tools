@@ -24,8 +24,9 @@ _CONVERSION = Matrix.Rotation(radians(90), 4, "X")
 
 _TRAILING_EXCLUDE_FLAG = 0x400
 
-# The bone name out of an f-curve path, `pose.bones["hip#3C6#0"].location`.
-_BONE_PATH = re.compile(r'pose\.bones\["(.+)"\]\.')
+# The bone and channel out of an f-curve path, as in
+# `pose.bones["hip#3C6#0"].location`.
+_BONE_PATH = re.compile(r'pose\.bones\["(.+)"\]\.(\w+)$')
 
 
 class ExportError(Exception):
@@ -63,13 +64,15 @@ class PSO2_OT_ExportAqm(  # type: ignore https://github.com/nutti/fake-bpy-modul
         default=False,
     )
     ignore_applied_shape: bpy.props.BoolProperty(
-        name="Ignore Applied Shape",
+        name="Ignore Body Shape",
         description=(
-            "Sample the motion from the skeleton as it was before Apply Shape"
-            " to Rest Pose. Keys carry each bone's offset from its parent, so"
-            " a body shape in the rest pose is written into every frame and"
-            " every character playing the motion takes on that body. Has no"
-            " effect on a skeleton that was never baked"
+            "Leave the character's proportions out of the motion. Keys carry"
+            " each bone's size and its offset from its parent, so a body"
+            " shape - whether applied to the rest pose or sitting in the pose"
+            " layer - is written into every frame, and every character"
+            " playing the motion then takes on that body on top of their own."
+            " Channels the action drives are kept: those are the pose. Has no"
+            " effect without a character file loaded"
         ),
         default=True,
     )
@@ -113,11 +116,15 @@ class PSO2_OT_ExportAqm(  # type: ignore https://github.com/nutti/fake-bpy-modul
 
         from . import bake_rest
 
-        unbaked = armature if self.ignore_applied_shape else None
+        shaped = armature if self.ignore_applied_shape else None
+        keyed = _keyed_channels(armature) if self.ignore_applied_shape else None
 
         try:
             frame_start, frame_end = self._get_frame_range(context, armature)
-            with bake_rest.bake_suspended(unbaked):
+            with (
+                bake_rest.bake_suspended(shaped),
+                bake_rest.shape_in_pose_suspended(shaped, keyed),
+            ):
                 motion = build_motion(
                     context,
                     armature,
@@ -168,8 +175,8 @@ class PSO2_OT_ExportAqm(  # type: ignore https://github.com/nutti/fake-bpy-modul
         return context.scene.frame_start, context.scene.frame_end
 
 
-def _keyed_bones(armature: bpy.types.Object) -> set[str]:
-    """Bone names the active action drives.
+def _keyed_channels(armature: bpy.types.Object) -> dict[str, set[str]]:
+    """Bone name -> the transform channels the active action drives.
 
     Actions held their curves in a flat `fcurves` list up to 4.3 and in
     slotted channelbags after; 5.0 dropped the flat list. Both are read so
@@ -179,7 +186,7 @@ def _keyed_bones(armature: bpy.types.Object) -> set[str]:
     animation_data = armature.animation_data
     action = animation_data.action if animation_data else None
     if action is None:
-        return set()
+        return {}
 
     slot = getattr(animation_data, "action_slot", None)
     curves = list(getattr(action, "fcurves", ()))
@@ -188,11 +195,12 @@ def _keyed_bones(armature: bpy.types.Object) -> set[str]:
             bags = [strip.channelbag(slot)] if slot else list(strip.channelbags)
             curves.extend(curve for bag in bags if bag for curve in bag.fcurves)
 
-    return {
-        match.group(1)
-        for curve in curves
-        if (match := _BONE_PATH.match(curve.data_path))
-    }
+    driven: dict[str, set[str]] = {}
+    for curve in curves:
+        if match := _BONE_PATH.match(curve.data_path):
+            driven.setdefault(match.group(1), set()).add(match.group(2))
+
+    return driven
 
 
 def _unkeyed_posed_bones(
@@ -211,7 +219,7 @@ def _unkeyed_posed_bones(
     """
     from . import import_fnp
 
-    keyed = _keyed_bones(armature)
+    keyed = _keyed_channels(armature)
     out = []
 
     for pose_bone in armature.pose.bones:

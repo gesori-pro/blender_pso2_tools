@@ -337,6 +337,77 @@ def pose_is_modified(
 
 
 @contextlib.contextmanager
+def shape_in_pose_suspended(
+    armature: bpy.types.Object | None, keyed: dict[str, set[str]] | None
+):
+    """Take a body shape back off the channels an action does not drive.
+
+    A character file writes the body's proportions into the pose layer, and
+    a motion exported from there carries them - the file then reshapes
+    every character that plays it, on top of their own proportions.
+
+    An action loaded over the top hides most of this, because its keys win
+    on the channels it covers. Only most: a pose mod keys scale on the
+    bones it moves and leaves the rest alone, so whatever the shape put on
+    those bones is what gets written out. Measured with a character file
+    loaded and a pose mod over it, nine finger bones came through carrying
+    the character's proportions - which is enough to put a fingertip
+    somewhere else in game than it sits on screen.
+
+    The channels the action drives are left alone: those are the pose, and
+    for a motion the pose is the point. Everything else goes back to what
+    the model import stored, which is the body before any character file
+    (import_fnp.store_model_pose).
+
+    Does nothing without that baseline, so a model that never had a
+    character file applied is untouched.
+    """
+    if armature is None or keyed is None or not import_fnp.has_model_pose(armature):
+        yield
+        return
+
+    saved = []
+    channels = (
+        ("location", slice(0, 3)),
+        ("rotation_quaternion", slice(3, 7)),
+        ("scale", slice(7, 10)),
+    )
+
+    try:
+        for pose_bone in armature.pose.bones:
+            baseline = pose_bone.get(import_fnp.MODEL_POSE_PROP)
+            if baseline is None or len(baseline) != 10:
+                continue
+
+            driven = keyed.get(pose_bone.name, set())
+            for name, part in channels:
+                if name in driven:
+                    continue
+
+                current = getattr(pose_bone, name).copy()
+                wanted = list(baseline)[part]
+                if all(abs(a - b) < 1e-6 for a, b in zip(current, wanted, strict=True)):
+                    continue
+
+                saved.append((pose_bone, name, current))
+                if name == "rotation_quaternion":
+                    pose_bone.rotation_mode = "QUATERNION"
+                setattr(pose_bone, name, wanted)
+
+        _update()
+        yield
+    finally:
+        for pose_bone, name, value in reversed(saved):
+            setattr(pose_bone, name, value)
+        _update()
+
+
+def _update():
+    if view_layer := getattr(bpy.context, "view_layer", None):
+        view_layer.update()
+
+
+@contextlib.contextmanager
 def pose_suspended(armature: bpy.types.Object | None):
     """Put the skeleton back the way the model import left it, for a while.
 
