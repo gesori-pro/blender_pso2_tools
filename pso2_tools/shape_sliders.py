@@ -308,9 +308,20 @@ def clear_base(armature: bpy.types.Object):
             del pose_bone[BASE_PROP]
 
 
-def _apply_to_bone(pose_bone, scale, pos, quat):
-    """pose = base ∘ delta, through the verified axis conversion."""
-    base_loc, base_rot, base_scale = _ensure_base(pose_bone)
+def delta_to_blender(pose_bone, scale, pos, quat):
+    """One PSO2 shape delta as Blender pose-channel terms.
+
+    Returns (scale multiplier, location offset, local rotation delta), the
+    three pieces `_apply_to_bone` composes onto the base pose. Export needs
+    the same pieces to take a delta back off a sampled key, so the axis
+    conversion lives here once rather than in both directions.
+
+    Scale swaps components 0/1 into Blender order (SPEC §6-2). Position is
+    the (x,y,z) -> (y,x,-z) permutation carried into bone-local space by
+    the rest rotation (SPEC §6-3). Rotation is the same permutation as a
+    right-side delta in the bone's own frame, verified against the game's
+    composed bone array.
+    """
     bone = pose_bone.bone
 
     if bone.parent is not None:
@@ -319,25 +330,27 @@ def _apply_to_bone(pose_bone, scale, pos, quat):
         rest = bone.matrix_local.copy()
     rest_rotation = rest.to_quaternion()
 
-    # SPEC §6-2: swap components 0/1 into Blender order, multiply.
+    return (
+        (scale[1], scale[0], scale[2]),
+        rest_rotation.inverted() @ Vector((pos[1], pos[0], -pos[2])),
+        Quaternion((quat[3], quat[1], quat[0], -quat[2])),
+    )
+
+
+def _apply_to_bone(pose_bone, scale, pos, quat):
+    """pose = base ∘ delta, through the verified axis conversion."""
+    base_loc, base_rot, base_scale = _ensure_base(pose_bone)
+    scale_mul, loc_off, delta_local = delta_to_blender(pose_bone, scale, pos, quat)
+
     pose_bone.scale = (
-        base_scale[0] * scale[1],
-        base_scale[1] * scale[0],
-        base_scale[2] * scale[2],
+        base_scale[0] * scale_mul[0],
+        base_scale[1] * scale_mul[1],
+        base_scale[2] * scale_mul[2],
     )
+    pose_bone.location = base_loc + loc_off
 
-    # SPEC §6-3: permutation + Z flip, rest rotation into bone-local space.
-    pose_bone.location = base_loc + (
-        rest_rotation.inverted() @ Vector((pos[1], pos[0], -pos[2]))
-    )
-
-    # The game applies shape-adjust rotations in the bone's own frame
-    # (right delta, verified against its composed bone array), where the
-    # PSO2 -> Blender axis change is the fixed (x,y,z) -> (y,x,-z) swap.
-    # The preview does the same, so what is on screen is what the
-    # exported file will do in game.
-    delta_local = Quaternion((quat[3], quat[1], quat[0], -quat[2]))
-
+    # The preview composes the same way the game does, so what is on
+    # screen is what the exported file will do in game.
     pose_bone.rotation_mode = "QUATERNION"
     pose_bone.rotation_quaternion = base_rot @ delta_local
 

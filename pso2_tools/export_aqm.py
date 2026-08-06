@@ -118,6 +118,13 @@ class PSO2_OT_ExportAqm(  # type: ignore https://github.com/nutti/fake-bpy-modul
 
         shaped = armature if self.ignore_applied_shape else None
         keyed = _keyed_channels(armature) if self.ignore_applied_shape else None
+        # Only keys someone added over the imported motion can hold the
+        # shape - the file's own curves never did.
+        user_keyed = (
+            _keyed_channels(armature, exclude_imported=True)
+            if self.ignore_applied_shape
+            else None
+        )
 
         try:
             frame_start, frame_end = self._get_frame_range(context, armature)
@@ -131,7 +138,7 @@ class PSO2_OT_ExportAqm(  # type: ignore https://github.com/nutti/fake-bpy-modul
                     frame_start=frame_start,
                     frame_end=frame_end,
                     player_anim=self.player_anim,
-                    shape_scale=bake_rest.keyed_shape_scale(shaped, keyed),
+                    shape=bake_rest.keyed_shape_deltas(shaped, user_keyed),
                 )
         except ExportError as ex:
             self.report({"ERROR"}, str(ex))
@@ -147,8 +154,10 @@ class PSO2_OT_ExportAqm(  # type: ignore https://github.com/nutti/fake-bpy-modul
 
         # The exporter samples the posed transforms, so anything sitting in
         # the pose layer that the action does not drive - a body shape, most
-        # often - ends up baked into the motion (SPEC §6-8).
-        if stuck := _unkeyed_posed_bones(armature):
+        # often - ends up baked into the motion (SPEC §6-8). With Ignore
+        # Body Shape on, those channels were just sampled at their baseline
+        # instead, so there is nothing left to warn about.
+        if not self.ignore_applied_shape and (stuck := _unkeyed_posed_bones(armature)):
             shown = ", ".join(sorted(stuck)[:4])
             more = f" and {len(stuck) - 4} more" if len(stuck) > 4 else ""
             self.report(
@@ -176,8 +185,17 @@ class PSO2_OT_ExportAqm(  # type: ignore https://github.com/nutti/fake-bpy-modul
         return context.scene.frame_start, context.scene.frame_end
 
 
-def _keyed_channels(armature: bpy.types.Object) -> dict[str, set[str]]:
+def _keyed_channels(
+    armature: bpy.types.Object, exclude_imported=False
+) -> dict[str, set[str]]:
     """Bone name -> the transform channels the active action drives.
+
+    With `exclude_imported`, channels the motion import created are left
+    out (import_aqm.IMPORTED_CHANNELS_PROP), keeping only the ones someone
+    keyframed afterwards. The difference matters for a loaded body shape:
+    an imported curve holds the file's own values, but a new keyframe
+    records the pose, and the pose is where the shape sits - so only the
+    keys someone added can be carrying it.
 
     Actions held their curves in a flat `fcurves` list up to 4.3 and in
     slotted channelbags after; 5.0 dropped the flat list. Both are read so
@@ -196,8 +214,14 @@ def _keyed_channels(armature: bpy.types.Object) -> dict[str, set[str]]:
             bags = [strip.channelbag(slot)] if slot else list(strip.channelbags)
             curves.extend(curve for bag in bags if bag for curve in bag.fcurves)
 
+    imported: set[str] = set()
+    if exclude_imported:
+        imported = set(action.get(import_aqm.IMPORTED_CHANNELS_PROP, ()))
+
     driven: dict[str, set[str]] = {}
     for curve in curves:
+        if curve.data_path in imported:
+            continue
         if match := _BONE_PATH.match(curve.data_path):
             driven.setdefault(match.group(1), set()).add(match.group(2))
 
@@ -248,9 +272,14 @@ def build_motion(
     frame_start: int,
     frame_end: int,
     player_anim=False,
-    shape_scale: dict | None = None,
+    shape: dict | None = None,
 ) -> aqm.AqmMotion:
-    """Bake the armature's animation into a motion, one key per frame."""
+    """Bake the armature's animation into a motion, one key per frame.
+
+    `shape` maps bone names to body-shape deltas the action keyed along
+    with the pose (bake_rest.keyed_shape_deltas); they are taken back off
+    each sample so the motion stays body-neutral.
+    """
     if frame_end < frame_start:
         raise ExportError("Invalid frame range")
 
@@ -295,7 +324,7 @@ def build_motion(
                 # rotations, which is a shear, and the position and rotation
                 # read back off a shear are approximations. Rest matrices
                 # carry no scale, so this way there is nothing to shear.
-                basis = pose_bone.matrix_basis
+                basis = _shape_free_basis(pose_bone, shape)
                 if pose_bone.parent is not None:
                     rest = (
                         pose_bone.parent.bone.matrix_local.inverted_safe()
@@ -309,7 +338,7 @@ def build_motion(
                     # and so carries no correction.
                     parent_correction = Matrix.Identity(4)
 
-                scale = _absolute_scale(pose_bone, absolute, shape_scale)
+                scale = _absolute_scale(pose_bone, absolute, shape)
                 _sample_matrix(
                     samples[index],
                     parent_correction @ local @ correction_inv,
@@ -359,6 +388,31 @@ def build_motion(
     return motion
 
 
+def _shape_free_basis(pose_bone, shape: dict | None) -> Matrix:
+    """The pose basis with any keyed body-shape deltas taken back off.
+
+    The basis is the pose channels as a matrix, T @ R @ S, so each delta
+    comes off its own channel exactly: the shape's location offset was
+    added, subtract it; its rotation delta was composed innermost,
+    multiply the inverse on the right. Scale is left alone here - the
+    scale channel is written from _absolute_scale, which does its own
+    division, and the basis scale never reaches the position or rotation
+    of rest @ basis.
+    """
+    basis = pose_bone.matrix_basis
+    entry = shape.get(pose_bone.name) if shape else None
+    if not entry or (entry["location"] is None and entry["rotation"] is None):
+        return basis
+
+    location, rotation, scale = basis.decompose()
+    if entry["location"] is not None:
+        location = location - entry["location"]
+    if entry["rotation"] is not None:
+        rotation = rotation @ entry["rotation"].inverted()
+
+    return Matrix.LocRotScale(location, rotation, scale)
+
+
 def _absolute_scale(pose_bone, memo: dict, shape: dict | None = None) -> Vector:
     """A bone's scale with its parents' folded back in.
 
@@ -380,7 +434,7 @@ def _absolute_scale(pose_bone, memo: dict, shape: dict | None = None) -> Vector:
 
     # A body shape the action keyed along with the pose cannot be taken off
     # the pose - stepping the frame puts it back - so it comes off here.
-    if shape and (own := shape.get(pose_bone.name)):
+    if shape and (own := (shape.get(pose_bone.name) or {}).get("scale")):
         scale = Vector(
             c / s if abs(s) > 1e-9 else c for c, s in zip(scale, own, strict=True)
         )
@@ -397,13 +451,11 @@ def _sample_matrix(node_samples: list, local: Matrix, bone_scale: Vector | None)
     """Decompose one frame's transforms into (pos, rot, scale) vec4 keys.
 
     Position and rotation come out of the local matrix, but scale does not:
-    a bone that inherits its parent's scale has that scale sitting between
-    two rotations in its matrix, which is a shear, and decomposing a shear
-    spreads one number across three. A head scaled evenly to 1.030 read back
-    as (0.975, 1.047, 1.101) that way.
-
-    Pass the bone's own scale instead - the same channel motion import
-    writes to - and the two are exact inverses.
+    scale sitting between two rotations in a matrix is a shear, and
+    decomposing a shear spreads one number across three - a head scaled
+    evenly to 1.030 read back as (0.975, 1.047, 1.101) that way. The scale
+    passed in is accumulated per channel instead (_absolute_scale), never
+    having been inside a matrix with a rotation.
     """
     location, rotation, local_scale = local.decompose()
     scale = local_scale if bone_scale is None else bone_scale

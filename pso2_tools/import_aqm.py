@@ -24,6 +24,11 @@ _LINEAR = 1  # bpy.types.Keyframe.interpolation enum value for 'LINEAR'
 # enabled: root, body_root, hip.
 _ROOT_NODE_COUNT = 3
 
+# Set on an action by apply_motion: the f-curve data paths the import
+# created. Motion export uses it to tell file-borne keys, which are
+# body-neutral, from keys someone added later off the pose.
+IMPORTED_CHANNELS_PROP = "pso2_imported_channels"
+
 
 @dataclass
 class ImportSummary:
@@ -414,6 +419,15 @@ def apply_motion(
             ignore_scale_keys,
         )
         summary.matched += 1
+
+    # Every curve on the action right now came from the file, so its keyed
+    # values are the motion's own, with no body shape in them. A channel
+    # keyframed later starts from the pose instead, and the pose is where a
+    # loaded shape lives - motion export tells the two apart by this stamp
+    # to know which keys carry the shape (SPEC §6-8).
+    action[IMPORTED_CHANNELS_PROP] = sorted(
+        {curve.data_path for curve in channelbag.fcurves}
+    )
 
     animation_data = armature.animation_data_create()
     animation_data.action = action

@@ -402,26 +402,41 @@ def shape_in_pose_suspended(
         _update()
 
 
-def keyed_shape_scale(
+def keyed_shape_deltas(
     armature: bpy.types.Object | None, keyed: dict[str, set[str]] | None
-) -> dict[str, tuple[float, float, float]]:
-    """The shape's own scale on bones whose scale the action also keys.
+) -> dict[str, dict]:
+    """The shape's own deltas on channels the action also keys.
 
     Putting a channel back to its baseline only works while the action
     leaves that channel alone. Someone who turns a bone and presses the
     keyframe button keys location, rotation and scale together, so the
-    shape's scale on that bone becomes a key and reads as part of the pose.
+    shape's deltas on that bone become keys and read as part of the pose.
     Move the arm on a body whose file thickens the arms, and the arm goes
     out thickened - and every bone below it with it, since a child's
-    absolute scale is its parents' multiplied through.
+    absolute scale is its parents' multiplied through. The position deltas
+    are worse than the scale ones: one file on hand carries 100 mm on the
+    hip twists and 50 mm on the breasts.
 
-    Nor can it be corrected on the pose: sampling steps the frame, which
-    re-runs the action and puts the keyed value straight back. It has to
-    come off the sampled number instead, which is what this feeds.
+    Nor can any of it be corrected on the pose: sampling steps the frame,
+    which re-runs the action and puts the keyed values straight back. It
+    has to come off the sampled numbers instead, which is what this feeds.
 
-    The scale a loaded file asked for is known exactly - shape_sliders
-    keeps it, in PSO2's own component order - so it is divided out rather
-    than guessed at from what is or is not keyed.
+    The deltas a loaded file asked for are known exactly - shape_sliders
+    keeps them - so they are taken off rather than guessed at from what is
+    or is not keyed. Scale divides and location subtracts, both exact.
+    Rotation multiplies the delta's inverse on the right, exact because
+    the delta went on innermost and later edits compose outside it.
+
+    `keyed` must be the channels someone keyframed over the imported
+    motion (export_aqm._keyed_channels with exclude_imported), not
+    everything the action drives: the file's own curves hold the motion's
+    values with no shape in them, and taking a delta off those would put
+    the error in rather than out. A channel keyed before the shape was
+    loaded is indistinguishable from one keyed after and is treated as
+    carrying it.
+
+    Returns bone name -> {"scale", "location", "rotation"}, each None when
+    that channel is unkeyed or the delta is identity.
     """
     if armature is None or keyed is None:
         return {}
@@ -431,20 +446,40 @@ def keyed_shape_scale(
         return {}
 
     bones_by_id, bones_by_name = import_aqm._get_bone_maps(armature)
-    out: dict[str, tuple[float, float, float]] = {}
+    out: dict[str, dict] = {}
 
     for index, entry in carried.items():
         name = bones_by_id.get(index) or bones_by_name.get(entry["name"].lower())
-        if name is None or "scale" not in keyed.get(name, set()):
+        pose_bone = armature.pose.bones.get(name) if name else None
+        if pose_bone is None:
             continue
 
-        # The file's order is swapped into Blender's on the way in
-        # (shape_sliders._apply_to_bone), so swap it back the same way.
-        x, y, z = entry["scale"]
-        if abs(y - 1.0) < 1e-6 and abs(x - 1.0) < 1e-6 and abs(z - 1.0) < 1e-6:
+        driven = keyed.get(name, set())
+        if not driven:
             continue
 
-        out[name] = (y, x, z)
+        scale_mul, loc_off, delta_local = shape_sliders.delta_to_blender(
+            pose_bone, entry["scale"], entry["pos"], entry["quat"]
+        )
+
+        piece = {
+            "scale": (
+                scale_mul
+                if "scale" in driven and any(abs(v - 1.0) > 1e-6 for v in scale_mul)
+                else None
+            ),
+            "location": (
+                loc_off if "location" in driven and loc_off.length > 1e-9 else None
+            ),
+            "rotation": (
+                delta_local
+                if "rotation_quaternion" in driven
+                and abs(abs(delta_local.w) - 1.0) > 1e-9
+                else None
+            ),
+        }
+        if any(piece.values()):
+            out[name] = piece
 
     return out
 
