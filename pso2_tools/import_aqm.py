@@ -29,6 +29,11 @@ _ROOT_NODE_COUNT = 3
 # body-neutral, from keys someone added later off the pose.
 IMPORTED_CHANNELS_PROP = "pso2_imported_channels"
 
+# Set on an action whose curves had the loaded body composed into them:
+# bone name -> the packed delta that went in (shape_sliders.pack_pieces).
+# Export takes exactly this back off every keyed channel.
+COMPOSED_BODY_PROP = "pso2_composed_body"
+
 
 @dataclass
 class ImportSummary:
@@ -207,12 +212,18 @@ class PSO2_OT_ImportAqm(  # type: ignore https://github.com/nutti/fake-bpy-modul
         if summary.disconnected:
             message += f", {len(summary.disconnected)} bones disconnected"
 
-        # An action drives the same pose channels the body shape lives in,
-        # so playing it will discard the shape unless it has been baked
-        # into the rest pose first (SPEC §6-8).
+        # An action drives the same pose channels the body shape lives in.
+        # When the body was recorded, it has been composed into the curves
+        # and the screen shows what the game will; otherwise the animation
+        # simply discards whatever sat in the pose (SPEC §6-8).
         from . import bake_rest
 
-        if bake_rest.pose_is_modified(armature):
+        composed_bones = sum(
+            len(action.get(COMPOSED_BODY_PROP, ())) for action in summary.actions
+        )
+        if composed_bones:
+            message += f", body kept on {composed_bones} bones"
+        elif bake_rest.pose_is_modified(armature):
             self.report(
                 {"WARNING"},
                 message + ". The armature has a body shape in its pose, which"
@@ -429,12 +440,100 @@ def apply_motion(
         {curve.data_path for curve in channelbag.fcurves}
     )
 
+    # The game keeps the loaded body under every frame of every motion -
+    # proportions reshape the skeleton and shape adjusts are composed onto
+    # the animation. An action that overwrites the body's channels shows a
+    # different figure than the game will: on one body the fingertip sat
+    # 6.5 cm from where the game puts it. Compose the body into the curves
+    # so the screen matches, and stamp what went in so export can take
+    # exactly that back off.
+    composed = _compose_body_into_curves(channelbag, armature)
+    if composed:
+        action[COMPOSED_BODY_PROP] = composed
+
     animation_data = armature.animation_data_create()
     animation_data.action = action
     animation_data.action_slot = slot
 
     summary.actions.append(action)
     return action
+
+
+def _compose_body_into_curves(channelbag, armature) -> dict:
+    """Multiply the loaded body into every curve it affects.
+
+    Scale multiplies, location adds, rotation composes as a right delta in
+    the bone's own frame - the same pieces the preview put on the pose,
+    now applied to each keyframe so the animation plays on the shaped
+    body. Returns what went in, bone name -> packed delta, for the export
+    stamp; empty when no body is loaded.
+    """
+    from . import shape_sliders
+
+    body = shape_sliders.get_body_deltas(armature)
+    if not body:
+        return {}
+
+    curves: dict[tuple[str, int], object] = {}
+    for curve in channelbag.fcurves:
+        curves[(curve.data_path, curve.array_index)] = curve
+
+    def edit(curve, change):
+        points = curve.keyframe_points
+        values = [0.0] * (len(points) * 2)
+        points.foreach_get("co", values)
+        values[1::2] = [change(v) for v in values[1::2]]
+        points.foreach_set("co", values)
+        curve.update()
+
+    stamped = {}
+    for name, entry in body.items():
+        prefix = f'pose.bones["{name}"]'
+        touched = False
+
+        for index in range(3):
+            if curve := curves.get((f"{prefix}.scale", index)):
+                factor = entry["scale"][index]
+                edit(curve, lambda v, f=factor: v * f)
+                touched = True
+
+        for index in range(3):
+            if curve := curves.get((f"{prefix}.location", index)):
+                offset = entry["location"][index]
+                edit(curve, lambda v, o=offset: v + o)
+                touched = True
+
+        rotation = [
+            curves.get((f"{prefix}.rotation_quaternion", index)) for index in range(4)
+        ]
+        if all(rotation):
+            counts = {len(c.keyframe_points) for c in rotation}
+            if len(counts) == 1:
+                delta = entry["rotation"]
+                columns = []
+                for curve in rotation:
+                    values = [0.0] * (len(curve.keyframe_points) * 2)
+                    curve.keyframe_points.foreach_get("co", values)
+                    columns.append(values)
+                for key in range(len(columns[0]) // 2):
+                    at = key * 2 + 1
+                    q = Quaternion(
+                        (columns[0][at], columns[1][at], columns[2][at], columns[3][at])
+                    )
+                    q = q @ delta
+                    for axis, value in enumerate((q.w, q.x, q.y, q.z)):
+                        columns[axis][at] = value
+                for curve, values in zip(rotation, columns, strict=True):
+                    curve.keyframe_points.foreach_set("co", values)
+                    curve.update()
+                touched = True
+
+        if touched:
+            stamped[name] = shape_sliders.pack_pieces(
+                entry["scale"], entry["location"], entry["rotation"]
+            )
+
+    return stamped
 
 
 def bone_correction(armature: bpy.types.Object) -> Matrix:

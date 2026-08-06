@@ -324,6 +324,13 @@ class PSO2_OT_UnloadCharacterFile(bpy.types.Operator):
             )
             return {"CANCELLED"}
 
+        # Local import: shape_sliders imports this module at load time.
+        from . import shape_sliders as sliders_mod
+
+        for prop in (sliders_mod.BODY_FNP_PROP, sliders_mod.BODY_SA_PROP):
+            if prop in armature:
+                del armature[prop]
+
         restored = restore_model_pose(armature)
         clear_model_pose(armature)
 
@@ -342,6 +349,13 @@ class PSO2_OT_UnloadCharacterFile(bpy.types.Operator):
         return {"FINISHED"}
 
 
+def _shape_sliders():
+    """Local import: shape_sliders imports this module at load time."""
+    from . import shape_sliders
+
+    return shape_sliders
+
+
 def apply_proportions(armature: bpy.types.Object, bones: dict) -> dict:
     """Write computed proportion deltas (PSO2 axis order) into the pose."""
     store_model_pose(armature)
@@ -352,6 +366,7 @@ def apply_proportions(armature: bpy.types.Object, bones: dict) -> dict:
 
     applied = 0
     missing: list[str] = []
+    record: dict[str, list[float]] = {}
 
     for name, delta in bones.items():
         index = delta.get("index")
@@ -395,7 +410,18 @@ def apply_proportions(armature: bpy.types.Object, bones: dict) -> dict:
                 @ rest_rotation.to_matrix()
             ).to_quaternion()
 
+        # The pose was reset first, so what was just written IS the delta
+        # from neutral. Recorded so motion import can keep the body
+        # composed under an animation the way the game does.
+        packed = _shape_sliders().pack_pieces(
+            pose_bone.scale, pose_bone.location, pose_bone.rotation_quaternion
+        )
+        if not _shape_sliders().pieces_are_identity(packed):
+            record[bone_name] = packed
+
         applied += 1
+
+    armature[_shape_sliders().BODY_FNP_PROP] = record
 
     bpy.context.view_layer.update()
 

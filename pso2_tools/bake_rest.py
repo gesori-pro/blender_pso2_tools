@@ -22,7 +22,7 @@ import contextlib
 from collections.abc import Iterable
 
 import bpy
-from mathutils import Matrix
+from mathutils import Matrix, Quaternion, Vector
 
 from . import classes, import_aqm, import_fnp, shape_sliders
 from .util import OperatorResult
@@ -400,6 +400,60 @@ def shape_in_pose_suspended(
         for pose_bone, name, value in reversed(saved):
             setattr(pose_bone, name, value)
         _update()
+
+
+def composed_body_deltas(
+    armature: bpy.types.Object | None, keyed: dict[str, set[str]] | None
+) -> dict[str, dict] | None:
+    """The body the motion import composed into the active action's curves.
+
+    Returns the same shape build_motion consumes - bone name to per-channel
+    deltas, gated to the channels the action drives - or None when the
+    action carries no composition stamp, in which case the caller falls
+    back to the user-keyed guesswork. Taking off exactly what the stamp
+    says went in keeps the pair exact whatever the body was.
+    """
+    if armature is None or keyed is None:
+        return None
+
+    animation_data = armature.animation_data
+    action = animation_data.action if animation_data else None
+    stamped = action.get(import_aqm.COMPOSED_BODY_PROP) if action else None
+    if not stamped:
+        return None
+
+    out: dict[str, dict] = {}
+    for name, packed in dict(stamped).items():
+        if len(packed) != 10:
+            continue
+        driven = keyed.get(name, set())
+        if not driven:
+            continue
+
+        scale = tuple(packed[0:3])
+        location = Vector(packed[3:6])
+        rotation = Quaternion(packed[6:10])
+
+        piece = {
+            "scale": (
+                scale
+                if "scale" in driven and any(abs(v - 1.0) > 1e-9 for v in scale)
+                else None
+            ),
+            "location": (
+                location if "location" in driven and location.length > 1e-9 else None
+            ),
+            "rotation": (
+                rotation
+                if "rotation_quaternion" in driven
+                and abs(abs(rotation.w) - 1.0) > 1e-12
+                else None
+            ),
+        }
+        if any(v is not None for v in piece.values()):
+            out[name] = piece
+
+    return out
 
 
 def keyed_shape_deltas(

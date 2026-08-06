@@ -132,13 +132,21 @@ class PSO2_OT_ExportAqm(  # type: ignore https://github.com/nutti/fake-bpy-modul
                 bake_rest.bake_suspended(shaped),
                 bake_rest.shape_in_pose_suspended(shaped, keyed),
             ):
+                # An action the import stamped carries the body in every
+                # keyed channel; strip exactly what the stamp says went in.
+                # Without a stamp, only keys someone added over the motion
+                # can hold the body.
+                shape = bake_rest.composed_body_deltas(shaped, keyed)
+                if shape is None:
+                    shape = bake_rest.keyed_shape_deltas(shaped, user_keyed)
+
                 motion = build_motion(
                     context,
                     armature,
                     frame_start=frame_start,
                     frame_end=frame_end,
                     player_anim=self.player_anim,
-                    shape=bake_rest.keyed_shape_deltas(shaped, user_keyed),
+                    shape=shape,
                 )
         except ExportError as ex:
             self.report({"ERROR"}, str(ex))

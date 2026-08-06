@@ -43,6 +43,78 @@ SHAPE_SLIDERS = "pso2_shape_sliders"
 # quietly drop the rest. Kept here so it can be written back out.
 CARRIED = "pso2_shape_carried"
 
+# Armature custom properties recording the body as Blender-space deltas,
+# bone name -> [sx,sy,sz, lx,ly,lz, qw,qx,qy,qz]. One for the character
+# file's proportions, one for the sliders and the shape file, so either
+# can be redone without recomputing the other. Motion import composes
+# their product into the action's curves - the game keeps the body under
+# every frame of every motion, and a preview that loses it on the keyed
+# channels puts the hand somewhere the game does not (measured: 6.5 cm at
+# the fingertip on one body).
+BODY_FNP_PROP = "pso2_body_fnp"
+BODY_SA_PROP = "pso2_body_sa"
+
+_IDENTITY_PIECES = (1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0)
+
+
+def pack_pieces(scale_mul, loc_off, delta_local) -> list[float]:
+    """One bone's body delta as the flat list the records store."""
+    return [
+        scale_mul[0],
+        scale_mul[1],
+        scale_mul[2],
+        loc_off[0],
+        loc_off[1],
+        loc_off[2],
+        delta_local.w,
+        delta_local.x,
+        delta_local.y,
+        delta_local.z,
+    ]
+
+
+def pieces_are_identity(packed) -> bool:
+    return all(abs(a - b) < 1e-9 for a, b in zip(packed, _IDENTITY_PIECES, strict=True))
+
+
+def get_body_deltas(armature) -> dict[str, dict]:
+    """The whole loaded body, bone name -> composed Blender-space delta.
+
+    The character file's part and the shape file's part are composed the
+    way they were applied: character first, shape on top, each a right
+    delta in the bone's own frame.
+    """
+    out: dict[str, dict] = {}
+
+    for prop in (BODY_FNP_PROP, BODY_SA_PROP):
+        stored = armature.get(prop)
+        if not stored:
+            continue
+        for name, packed in dict(stored).items():
+            if name not in armature.pose.bones or len(packed) != 10:
+                continue
+            scale = (packed[0], packed[1], packed[2])
+            loc = Vector((packed[3], packed[4], packed[5]))
+            quat = Quaternion((packed[6], packed[7], packed[8], packed[9]))
+
+            entry = out.get(name)
+            if entry is None:
+                out[name] = {"scale": scale, "location": loc, "rotation": quat}
+            else:
+                entry["scale"] = tuple(
+                    a * b for a, b in zip(entry["scale"], scale, strict=True)
+                )
+                entry["location"] = entry["location"] + loc
+                entry["rotation"] = entry["rotation"] @ quat
+
+    return {
+        name: entry
+        for name, entry in out.items()
+        if not pieces_are_identity(
+            pack_pieces(entry["scale"], entry["location"], entry["rotation"])
+        )
+    }
+
 
 class Group:
     """One slider group: a property prefix and the bones it drives.
@@ -354,6 +426,8 @@ def _apply_to_bone(pose_bone, scale, pos, quat):
     pose_bone.rotation_mode = "QUATERNION"
     pose_bone.rotation_quaternion = base_rot @ delta_local
 
+    return scale_mul, loc_off, delta_local
+
 
 def _sides(group, values):
     """(bone name, position, quaternion) for each side of a group."""
@@ -387,13 +461,19 @@ def apply_sliders(context) -> dict:
 
     applied = 0
     covered: set[str] = set()
+    record: dict[str, list[float]] = {}
     for group in GROUPS:
         values = settings.group_values(group.key)
         for bone_name, pos, quat in _sides(group, values):
             name = bones_by_name.get(bone_name)
             if name is None:
                 continue
-            _apply_to_bone(armature.pose.bones[name], values["scale"], pos, quat)
+            pieces = _apply_to_bone(
+                armature.pose.bones[name], values["scale"], pos, quat
+            )
+            packed = pack_pieces(*pieces)
+            if not pieces_are_identity(packed):
+                record[name] = packed
             covered.add(name)
             applied += 1
 
@@ -410,10 +490,17 @@ def apply_sliders(context) -> dict:
         if name is None or name in covered:
             continue
 
-        _apply_to_bone(
+        pieces = _apply_to_bone(
             armature.pose.bones[name], entry["scale"], entry["pos"], entry["quat"]
         )
+        packed = pack_pieces(*pieces)
+        if not pieces_are_identity(packed):
+            record[name] = packed
         carried += 1
+
+    # What this pass put on the pose, for motion import to keep composed
+    # under any animation the way the game does.
+    armature[BODY_SA_PROP] = record
 
     bpy.context.view_layer.update()
     return {"applied": applied, "carried": carried, "disconnected": disconnected}
