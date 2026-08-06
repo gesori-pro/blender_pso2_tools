@@ -373,6 +373,7 @@ def apply_sliders(context) -> dict:
     disconnected = import_aqm.disconnect_bones(context, armature, targets)
 
     applied = 0
+    covered: set[str] = set()
     for group in GROUPS:
         values = settings.group_values(group.key)
         for bone_name, pos, quat in _sides(group, values):
@@ -380,10 +381,29 @@ def apply_sliders(context) -> dict:
             if name is None:
                 continue
             _apply_to_bone(armature.pose.bones[name], values["scale"], pos, quat)
+            covered.add(name)
             applied += 1
 
+    # The rest of what a loaded file adjusted - arms, knees, fingers, neck -
+    # has no slider, and was kept for export without ever reaching the pose.
+    # The body on screen was then not the body in the game, so a pose built
+    # against it does not land where it looked like it would: one file on
+    # hand thickens the arms by a tenth, and that is what an author sees as
+    # a hand coming out fatter in game than it went in.
+    bones_by_id, _ = import_aqm._get_bone_maps(armature)
+    carried = 0
+    for index, entry in get_carried(context).items():
+        name = bones_by_id.get(index) or bones_by_name.get(entry["name"].lower())
+        if name is None or name in covered:
+            continue
+
+        _apply_to_bone(
+            armature.pose.bones[name], entry["scale"], entry["pos"], entry["quat"]
+        )
+        carried += 1
+
     bpy.context.view_layer.update()
-    return {"applied": applied, "disconnected": disconnected}
+    return {"applied": applied, "carried": carried, "disconnected": disconnected}
 
 
 # ---------------------------------------------------------------------------

@@ -131,6 +131,7 @@ class PSO2_OT_ExportAqm(  # type: ignore https://github.com/nutti/fake-bpy-modul
                     frame_start=frame_start,
                     frame_end=frame_end,
                     player_anim=self.player_anim,
+                    shape_scale=bake_rest.keyed_shape_scale(shaped, keyed),
                 )
         except ExportError as ex:
             self.report({"ERROR"}, str(ex))
@@ -247,6 +248,7 @@ def build_motion(
     frame_start: int,
     frame_end: int,
     player_anim=False,
+    shape_scale: dict | None = None,
 ) -> aqm.AqmMotion:
     """Bake the armature's animation into a motion, one key per frame."""
     if frame_end < frame_start:
@@ -299,7 +301,7 @@ def build_motion(
                     # and so carries no correction.
                     parent_correction = Matrix.Identity(4)
 
-                scale = _absolute_scale(pose_bone, absolute)
+                scale = _absolute_scale(pose_bone, absolute, shape_scale)
                 _sample_matrix(
                     samples[index],
                     parent_correction @ local @ correction_inv,
@@ -349,7 +351,7 @@ def build_motion(
     return motion
 
 
-def _absolute_scale(pose_bone, memo: dict) -> Vector:
+def _absolute_scale(pose_bone, memo: dict, shape: dict | None = None) -> Vector:
     """A bone's scale with its parents' folded back in.
 
     A PSO2 scale key is absolute, where a Blender bone's is relative to its
@@ -367,8 +369,16 @@ def _absolute_scale(pose_bone, memo: dict) -> Vector:
         return cached
 
     scale = Vector(pose_bone.scale)
+
+    # A body shape the action keyed along with the pose cannot be taken off
+    # the pose - stepping the frame puts it back - so it comes off here.
+    if shape and (own := shape.get(pose_bone.name)):
+        scale = Vector(
+            c / s if abs(s) > 1e-9 else c for c, s in zip(scale, own, strict=True)
+        )
+
     if pose_bone.parent is not None:
-        parent = _absolute_scale(pose_bone.parent, memo)
+        parent = _absolute_scale(pose_bone.parent, memo, shape)
         scale = Vector((scale.x * parent.x, scale.y * parent.y, scale.z * parent.z))
 
     memo[pose_bone.name] = scale

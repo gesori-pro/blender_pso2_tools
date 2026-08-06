@@ -402,6 +402,53 @@ def shape_in_pose_suspended(
         _update()
 
 
+def keyed_shape_scale(
+    armature: bpy.types.Object | None, keyed: dict[str, set[str]] | None
+) -> dict[str, tuple[float, float, float]]:
+    """The shape's own scale on bones whose scale the action also keys.
+
+    Putting a channel back to its baseline only works while the action
+    leaves that channel alone. Someone who turns a bone and presses the
+    keyframe button keys location, rotation and scale together, so the
+    shape's scale on that bone becomes a key and reads as part of the pose.
+    Move the arm on a body whose file thickens the arms, and the arm goes
+    out thickened - and every bone below it with it, since a child's
+    absolute scale is its parents' multiplied through.
+
+    Nor can it be corrected on the pose: sampling steps the frame, which
+    re-runs the action and puts the keyed value straight back. It has to
+    come off the sampled number instead, which is what this feeds.
+
+    The scale a loaded file asked for is known exactly - shape_sliders
+    keeps it, in PSO2's own component order - so it is divided out rather
+    than guessed at from what is or is not keyed.
+    """
+    if armature is None or keyed is None:
+        return {}
+
+    carried = shape_sliders.get_carried(bpy.context)
+    if not carried:
+        return {}
+
+    bones_by_id, bones_by_name = import_aqm._get_bone_maps(armature)
+    out: dict[str, tuple[float, float, float]] = {}
+
+    for index, entry in carried.items():
+        name = bones_by_id.get(index) or bones_by_name.get(entry["name"].lower())
+        if name is None or "scale" not in keyed.get(name, set()):
+            continue
+
+        # The file's order is swapped into Blender's on the way in
+        # (shape_sliders._apply_to_bone), so swap it back the same way.
+        x, y, z = entry["scale"]
+        if abs(y - 1.0) < 1e-6 and abs(x - 1.0) < 1e-6 and abs(z - 1.0) < 1e-6:
+            continue
+
+        out[name] = (y, x, z)
+
+    return out
+
+
 def _update():
     if view_layer := getattr(bpy.context, "view_layer", None):
         view_layer.update()
