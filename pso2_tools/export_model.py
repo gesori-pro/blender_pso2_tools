@@ -286,35 +286,28 @@ def _include_parents(context: bpy.types.Context, fbx_options: ExportOptions):
     else:
         meshes = [obj for obj in ctx_objects if obj.type == "MESH"]
 
-    parents = set()
+    required: set[bpy.types.Object] = set()
     for mesh in meshes:
-        obj = mesh
-        while obj := obj.parent:
-            parents.add(obj)
+        required |= _required_objects(mesh)
 
     try:
-        _reveal_collections(context, parents, restore)
-        # If we are only including visible objects, make sure the parents of any
-        # visible objects are also visible.
+        _reveal_collections(context, required, restore)
+
+        # If we are only including visible objects, make sure everything the
+        # exported meshes need is visible too.
         if use_visible:
-            for obj in _get_visible_meshes(ctx_objects):
-                while obj := obj.parent:
-                    if obj.hide_get():
-                        obj.hide_set(False)
-                        shown_objects.add(obj)
+            for obj in required:
+                if obj.hide_get():
+                    obj.hide_set(False)
+                    shown_objects.add(obj)
 
-                    if obj.hide_viewport:
-                        obj.hide_viewport = False
-                        viewport_shown_objects.add(obj)
+                if obj.hide_viewport:
+                    obj.hide_viewport = False
+                    viewport_shown_objects.add(obj)
 
-        # If we are only including selected objects, make sure the parents of any
-        # selected objects are also selected.
+        # Same for selection.
         if use_selection:
-            selection = set(context.selected_objects or [])
-            for obj in _get_selected_meshes(ctx_objects):
-                while obj := obj.parent:
-                    if not obj.select_get():
-                        selection.add(obj)
+            selection = set(context.selected_objects or []) | required
 
             with context.temp_override(selected_objects=list(selection)):  # type: ignore
                 yield
@@ -329,6 +322,35 @@ def _include_parents(context: bpy.types.Context, fbx_options: ExportOptions):
 
         for target, attribute in reversed(restore):
             setattr(target, attribute, True)
+
+
+def _required_objects(mesh: bpy.types.Object) -> set[bpy.types.Object]:
+    """What has to go into the file alongside this mesh.
+
+    Parents, and the armatures that deform it. A mesh imported by this
+    add-on is parented to its armature, but a mesh does not have to be: an
+    Armature modifier binds it just as well, and one that has been joined,
+    duplicated or rebuilt in Blender often ends up bound that way with no
+    parent at all. Following only the parent link then finds nothing, the
+    rig is left out of the export, and the model is written with no
+    skeleton - which is the shape of "it exported without the armature".
+    """
+    found: set[bpy.types.Object] = set()
+    queue = [mesh]
+
+    while queue:
+        obj = queue.pop()
+        related = [obj.parent]
+        related += [
+            modifier.object for modifier in obj.modifiers if modifier.type == "ARMATURE"
+        ]
+
+        for other in related:
+            if other is not None and other not in found:
+                found.add(other)
+                queue.append(other)
+
+    return found
 
 
 def _reveal_collections(
