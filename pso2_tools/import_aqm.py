@@ -144,7 +144,7 @@ class PSO2_OT_ImportAqm(  # type: ignore https://github.com/nutti/fake-bpy-modul
             # browser. Loading one as a motion keys every bone to its static
             # value and twists the legs, and the damage is easy to mistake
             # for the shape itself being wrong.
-            if motion.is_shape_adjust:
+            if aqm.is_shape_adjust_file(path, motion):
                 self.report(
                     {"ERROR"},
                     f"{path.name} looks like a shape adjust, not a motion."

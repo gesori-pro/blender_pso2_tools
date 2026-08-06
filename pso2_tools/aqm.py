@@ -28,6 +28,9 @@ VARIANT_PLAYER_ANIM = 0x10012
 VARIANT_CAMERA_ANIM = 0x10004
 VARIANT_MATERIAL_ANIM = 0x20
 
+# The game's own name for a shape adjust; nothing else uses the suffix.
+SHAPE_ADJUST_SUFFIX = "_sa.aqm"
+
 NODE_TYPE_STANDARD = 0x2
 NODE_TYPE_NODE_TREE_FLAG = 0x10
 NODE_TYPE_MATERIAL = 0x20
@@ -130,11 +133,12 @@ class AqmMotion:
     def is_shape_adjust(self) -> bool:
         """Does this look like a shape adjust rather than a motion?
 
-        Shape adjusts share the standard animation variant, so the giveaway
-        is the shape of the data: they park most channels on one static key
-        and animate a handful, across a single frame. Files in use carry
-        around 500 static channels against a dozen animated, where a real
-        motion - even a two-frame one - animates every channel it writes.
+        Shape adjusts share the standard animation variant and cover the
+        whole skeleton, so the giveaway is how little of it moves: a handful
+        of channels change between the two frames and the rest sit still.
+
+        This is only needed for files that do not say so themselves - see
+        is_shape_adjust_file(), which trusts the game's own naming first.
         """
         if self.end_frame > 1 or self.is_camera_motion or self.is_material_motion:
             return False
@@ -339,6 +343,21 @@ def _to_dotnet(motion: AqmMotion):
 
 
 # ---- Plain-Python motion logic (none of this exists in AquaMotion) --------
+
+
+def is_shape_adjust_file(path: Path | str, motion: AqmMotion) -> bool:
+    """Is this file a shape adjust rather than a motion?
+
+    The game names them <model>_sa.aqm and reads them by that name, so the
+    suffix settles it whatever the contents look like - a few carry their
+    adjustment as static values, or run past the two frames the game reads.
+    Anything else, including shape adjusts renamed by hand, has to be judged
+    on its shape.
+    """
+    if Path(path).name.lower().endswith(SHAPE_ADJUST_SUFFIX):
+        return True
+
+    return motion.is_shape_adjust
 
 
 def make_baked_timings(end_frame: int, multiplier: int = 0x10) -> list[int]:
