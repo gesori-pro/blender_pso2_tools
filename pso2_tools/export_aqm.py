@@ -14,7 +14,7 @@ from pathlib import Path
 
 import bpy
 from bpy_extras.io_utils import ExportHelper
-from mathutils import Matrix
+from mathutils import Matrix, Vector
 
 from . import aqm, classes, import_aqm, scene_props
 from .util import OperatorResult
@@ -251,6 +251,8 @@ def build_motion(
     # import_aqm.bone_correction). Keys have to go back the way they came.
     correction = import_aqm.bone_correction(armature)
     correction_inv = correction.inverted()
+    correction3 = correction.to_3x3()
+    correction3_inv = correction_inv.to_3x3()
 
     end_frame = frame_end - frame_start
     frame_count = end_frame + 1
@@ -265,6 +267,7 @@ def build_motion(
     try:
         for frame in range(frame_start, frame_end + 1):
             scene.frame_set(frame)
+            absolute: dict[str, Vector] = {}
 
             # Node 0 is the skeleton root: the armature object itself,
             # relative to the FBX axis conversion.
@@ -276,7 +279,11 @@ def build_motion(
                 pose_bone = armature.pose.bones[name]
 
                 if pose_bone.parent is not None:
-                    local = pose_bone.parent.matrix.inverted() @ pose_bone.matrix
+                    # Motions hide a bone by scaling it to zero, and a zero
+                    # scale leaves the parent's matrix with no inverse.
+                    # inverted_safe falls back instead of throwing, which
+                    # otherwise took the whole export down.
+                    local = pose_bone.parent.matrix.inverted_safe() @ pose_bone.matrix
                     parent_correction = correction
                 else:
                     local = pose_bone.matrix
@@ -284,10 +291,11 @@ def build_motion(
                     # and so carries no correction.
                     parent_correction = Matrix.Identity(4)
 
+                scale = _absolute_scale(pose_bone, absolute)
                 _sample_matrix(
                     samples[index],
                     parent_correction @ local @ correction_inv,
-                    pose_bone.matrix @ correction_inv,
+                    (correction3 @ Matrix.Diagonal(scale) @ correction3_inv).to_scale(),
                 )
     finally:
         scene.frame_set(current_frame)
@@ -333,13 +341,46 @@ def build_motion(
     return motion
 
 
-def _sample_matrix(node_samples: list, local: Matrix, world: Matrix | None):
-    """Decompose one frame's transforms into (pos, rot, scale) vec4 keys."""
-    location, rotation, local_scale = local.decompose()
+def _absolute_scale(pose_bone, memo: dict) -> Vector:
+    """A bone's scale with its parents' folded back in.
 
-    # PSO2 bones do not inherit scale, so the scale channel holds the
-    # absolute scale rather than the local one.
-    scale = world.to_scale() if world is not None else local_scale
+    A PSO2 scale key is absolute, where a Blender bone's is relative to its
+    parent, so motion import divides each bone's key by its parent's
+    (aqm.prepare_scaling, which hands the work to AquaMotion
+    .PrepareScalingForExport - a plain component-wise divide, one level).
+    Multiplying back up the chain is the way out.
+
+    Reading the scale off the bone's world matrix instead looks equivalent
+    and is not: a scaled parent puts the scale between two rotations, which
+    is a shear, and decomposing a shear spreads one number across three.
+    """
+    cached = memo.get(pose_bone.name)
+    if cached is not None:
+        return cached
+
+    scale = Vector(pose_bone.scale)
+    if pose_bone.parent is not None:
+        parent = _absolute_scale(pose_bone.parent, memo)
+        scale = Vector((scale.x * parent.x, scale.y * parent.y, scale.z * parent.z))
+
+    memo[pose_bone.name] = scale
+    return scale
+
+
+def _sample_matrix(node_samples: list, local: Matrix, bone_scale: Vector | None):
+    """Decompose one frame's transforms into (pos, rot, scale) vec4 keys.
+
+    Position and rotation come out of the local matrix, but scale does not:
+    a bone that inherits its parent's scale has that scale sitting between
+    two rotations in its matrix, which is a shear, and decomposing a shear
+    spreads one number across three. A head scaled evenly to 1.030 read back
+    as (0.975, 1.047, 1.101) that way.
+
+    Pass the bone's own scale instead - the same channel motion import
+    writes to - and the two are exact inverses.
+    """
+    location, rotation, local_scale = local.decompose()
+    scale = local_scale if bone_scale is None else bone_scale
 
     # Keep consecutive quaternions on the same hemisphere.
     if node_samples:
