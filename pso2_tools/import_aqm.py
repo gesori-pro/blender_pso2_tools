@@ -544,38 +544,36 @@ def _compose_body_into_curves(channelbag, armature) -> dict:
 
 
 def bone_correction(armature: bpy.types.Object) -> Matrix:
-    """The rotation io_scene_fbx put on every bone's local axes, if any.
+    """The rotation the FBX importer put on every bone's local axes.
 
-    A PSO2 node runs down its own +X, and so do the bones in the FBX the
-    model importer hands to io_scene_fbx. Asking that importer for a
-    primary bone axis of X therefore asks for the orientation the data
-    already has, and it builds the bones unrotated: a bone's rest matrix
-    comes out equal to the skeleton file's own node matrix.
+    A Blender bone always runs down its own +Y, while a PSO2 node runs down
+    +X, so io_scene_fbx rotates each bone as it builds the armature. Motion
+    keys are written in PSO2's axes, so reading one back has to undo the same
+    rotation - otherwise a key that only restates the bind offset comes out
+    as a translation of root(2) times the bone's length, and the model tears
+    itself apart.
 
-    Measured on pl_rbd_205990_bw against its .aqn, all 172 nodes: rest
-    position matches to 0.0001 cm and rest rotation to 0.000 degrees (the
-    file stores Euler angles in XZY order). Rotating by the axis swap on
-    top of that is a second correction the data never had, and it used to
-    put the exported neutral pose 89.8 cm and 120 degrees off at the hip.
-    Motions hid it, because the same swap was undone on the way back in.
+    This mirrors io_scene_fbx.import_fbx's own bone_correction_matrix, built
+    from the axes the model importer recorded on the armature.
     """
     axes = str(armature.get(scene_props.BONE_AXES) or scene_props.DEFAULT_BONE_AXES)
     parts = axes.split(",")
     if len(parts) != 2:
         # "AUTO", or a rig from somewhere else: bones point at their
-        # children, one rotation each, and no single matrix undoes that.
-        # Exporting such a rig writes a skeleton the game does not have -
-        # see the warning the model importer raises.
+        # children and no fixed correction applies.
         return Matrix.Identity(4)
 
     primary, secondary = (part.strip() for part in parts)
+    if (primary, secondary) == ("Y", "X"):
+        # What io_scene_fbx treats as no correction at all.
+        return Matrix.Identity(4)
 
     try:
         return axis_conversion(
             from_forward="X",
             from_up="Y",
-            to_forward=primary,
-            to_up=secondary,
+            to_forward=secondary,
+            to_up=primary,
         ).to_4x4()
     except ValueError:
         return Matrix.Identity(4)
