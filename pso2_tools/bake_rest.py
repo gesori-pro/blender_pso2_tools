@@ -3,14 +3,17 @@ Bake the current body shape into the armature's rest pose.
 
 Blender bones carry two layers: the rest pose the mesh is bound to, and a
 pose transform on top of it. Body proportions and shape adjustments are
-written to the pose layer - and so are imported animations, as actions.
-Playing an animation therefore overwrites the body shape, and exporting a
-motion bakes the body shape into it.
+written to the pose layer, and so is an animation. Moving the shape down
+into the skeleton frees the pose layer, which is what model (AQP) export
+needs - the pose would otherwise be written into the exported mesh.
 
-The game does not have this problem: proportions reshape the skeleton
-itself and motions play on top of the reshaped skeleton. Applying the pose
-as the rest pose reproduces that, freeing the pose layer for animation
-(SPEC §6-8).
+It is no longer the answer for animation. Motion import composes the body
+into the imported curves (import_aqm._compose_body_into_curves), so the
+shape survives an animation without being baked. Baking first is in fact
+worse: a motion's keys are absolute local transforms, so its position keys
+replace the very bone offsets the bake wrote into the skeleton, and the
+shape is lost again - measured 8.7 cm at the fingertip against the
+composed path on one body.
 
 This is deliberately a button rather than something the character import
 does on its own: once baked, the shape is part of the skeleton and the
@@ -40,28 +43,36 @@ SNAPSHOT_PROP = "pso2_prebake"
 # Pose bone properties the bake clears, kept so a revert can restore them.
 _SNAPSHOT_BONE_PROPS = (import_fnp.MODEL_POSE_PROP, shape_sliders.BASE_PROP)
 
+# Armature properties recording the body as pose-layer deltas. The bake
+# moves the body into the skeleton itself, so they stop being true the
+# moment it runs - motion import would compose a body that is already
+# there, putting the position deltas on twice. Kept in the snapshot so a
+# revert brings them back with everything else.
+_BODY_PROPS = (shape_sliders.BODY_FNP_PROP, shape_sliders.BODY_SA_PROP)
+
 # Panel help. Blender labels do not wrap, so these are pre-wrapped;
 # an empty string draws as a separator.
 WORKFLOW_HELP = (
     "A Blender skeleton has two layers: the rest pose",
     "the mesh is built on, and a pose on top of it.",
     "",
-    "The sliders write the body shape into the pose.",
-    "Animations use that same pose, so importing one",
-    "overwrites the shape, and exporting one bakes the",
-    "shape into the motion.",
-    "",
-    "Apply Shape to Rest Pose moves the shape down into",
-    "the skeleton itself, leaving the pose free for",
-    "animation. That is how the game works: proportions",
-    "reshape the skeleton, motions play on top of it.",
+    "The sliders write the body shape into the pose, and",
+    "so does an animation. Importing a motion used to",
+    "overwrite the shape; now the shape is composed into",
+    "the motion instead, so the body stays on screen and",
+    "export still writes a body-neutral file.",
     "",
     "Order of work:",
     "     1.  Import a character file",
-    "     2.  Adjust the sliders",
-    "     3.  Export AQM  (only for a shape mod)",
-    "     4.  Apply Shape to Rest Pose",
-    "     5.  Import or export animations",
+    "     2.  Load a shape adjust, or use the sliders",
+    "     3.  Import the motion",
+    "     4.  Pose, then export AQM",
+    "",
+    "Apply Shape to Rest Pose is for model (AQP) export,",
+    "where the pose would otherwise be written into the",
+    "mesh. Animation no longer needs it - and a motion's",
+    "position keys replace the bone offsets a bake put in",
+    "the skeleton, so baking first loses the shape again.",
 )
 
 
@@ -111,6 +122,11 @@ def take_snapshot(armature: bpy.types.Object, meshes) -> None:
         "meshes": mesh_copies,
         "pose": pose,
         "bone_props": bone_props,
+        "body": {
+            prop: {name: list(values) for name, values in dict(stored).items()}
+            for prop in _BODY_PROPS
+            if (stored := armature.get(prop))
+        },
     }
 
 
@@ -185,6 +201,9 @@ def restore_snapshot(armature: bpy.types.Object) -> list[str]:
         if stale is not None and stale.users == 0:
             bpy.data.armatures.remove(stale)  # type: ignore
         rest.name = original_name
+
+    for prop, stored in dict(snapshot.get("body", {})).items():
+        armature[prop] = {name: list(values) for name, values in dict(stored).items()}
 
     pose = dict(snapshot["pose"])
     bone_props = dict(snapshot["bone_props"])
@@ -763,14 +782,20 @@ class PSO2_OT_BakeShapeToRest(bpy.types.Operator):
         # it back on top would double it.
         shape_sliders.clear_base(armature)
         import_fnp.clear_model_pose(armature)
+        for prop in _BODY_PROPS:
+            if prop in armature:
+                del armature[prop]
         settings = shape_sliders.get_settings(context)
         if settings is not None:
             settings.reset()
 
         self.report(
             {"INFO"},
-            "Body shape applied to the rest pose. Animations can now be"
-            " imported without losing it. Revert Applied Shape puts it back.",
+            "Body shape applied to the rest pose - use this for model (AQP)"
+            " export. Motions keep the shape on their own now, and a"
+            " motion's position keys overwrite the offsets this put in the"
+            " skeleton, so import animations without it. Revert Applied"
+            " Shape puts it back.",
         )
         return {"FINISHED"}
 
