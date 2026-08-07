@@ -158,15 +158,18 @@ class PSO2_OT_ImportFnp(  # type: ignore https://github.com/nutti/fake-bpy-modul
             summary["ground"] = solve_ground_contact(armature)
 
         # The pose was rebuilt, so the shape sliders' stored baseline is
-        # stale and their values belong to whatever character was loaded
-        # before. Clear both, or the next slider touch would apply the old
-        # character's shape all at once.
+        # stale - clear it, or the next slider touch would apply the old
+        # character's shape all at once. The slider values themselves are
+        # kept: they describe the outfit, not the character, and the game
+        # puts the outfit's shape on top of whichever body is wearing it.
+        # Dropping them here undid the shape a costume import had just
+        # applied, which is the order most people work in.
         # Local import: shape_sliders imports this module at load time.
         from . import shape_sliders
 
         shape_sliders.clear_base(armature)
-        if (sliders := shape_sliders.get_settings(context)) is not None:
-            sliders.reset()
+        if shape_sliders.has_shape(context):
+            shape_sliders.apply_sliders(context, armature)
 
         colors_applied = 0
         if self.import_colors:
@@ -335,12 +338,14 @@ class PSO2_OT_UnloadCharacterFile(bpy.types.Operator):
         clear_model_pose(armature)
 
         # The sliders were sitting on top of the character's pose, so their
-        # stored base and values belong to a body that is no longer here.
+        # stored base belongs to a body that is no longer here. The values
+        # stay - they came with the outfit, which is still on - and go back
+        # onto the model's own pose.
         from . import shape_sliders
 
         shape_sliders.clear_base(armature)
-        if (sliders := shape_sliders.get_settings(context)) is not None:
-            sliders.reset()
+        if shape_sliders.has_shape(context):
+            shape_sliders.apply_sliders(context, armature)
 
         if view_layer := getattr(context, "view_layer", None):
             view_layer.update()

@@ -8,6 +8,7 @@ from typing import TypedDict, cast, get_type_hints
 import bpy
 
 from . import (
+    aqm,
     colors,
     datafile,
     fbx_wrapper,
@@ -18,6 +19,7 @@ from . import (
     objects_aqp,
     scene_props,
     shaders,
+    shape_sliders,
 )
 from .debug import debug_pprint, debug_print
 from .preferences import get_preferences
@@ -50,6 +52,7 @@ class FbxImportOptions(TypedDict, total=False):
 
 class ImportOptions(FbxImportOptions, total=False):
     include_tangent_binormal: bool
+    apply_shape_adjust: bool
     colors: dict[str, colors.Color]
 
 
@@ -159,6 +162,7 @@ class ModelFiles:
     texture_files: list[datafile.DataFile] = field(default_factory=list)
     model_files: list[datafile.DataFile] = field(default_factory=list)
     node_files: list[datafile.DataFile] = field(default_factory=list)
+    shape_files: list[datafile.DataFile] = field(default_factory=list)
 
 
 def collect_model_files(sources: Iterable[datafile.DataFileSource]):
@@ -168,6 +172,11 @@ def collect_model_files(sources: Iterable[datafile.DataFileSource]):
         result.model_files.extend(source.glob("*.aqp"))
         result.node_files.extend(source.glob("*.aqn"))
         result.texture_files.extend(source.glob("*.dds"))
+        # Outfits carry their own body shape next to the model. The game
+        # always poses the body with it, so a scene that skips it is a
+        # different body than the one on screen - measured at 3.7 cm across
+        # the hips on one outfit, enough to sink a hand into the thigh.
+        result.shape_files.extend(source.glob("*_sa.aqm"))
 
     return result
 
@@ -190,6 +199,10 @@ def _import_models(
     original_mat_keys = set(bpy.data.materials.keys())
     materials: list[material.Material] = []
 
+    # Which armature each model brought in, so an outfit's shape adjust goes
+    # onto the body it belongs to and not onto whatever was imported last.
+    armatures: dict[str, bpy.types.Object] = {}
+
     for model in files.model_files:
         debug_print("Importing", model.name)
         name = model.name.removesuffix(".aqp")
@@ -207,7 +220,15 @@ def _import_models(
         if "FINISHED" not in result:
             return result
 
+        for obj in context.selected_objects or []:
+            if obj.type == "ARMATURE":
+                armatures[name] = obj
+                break
+
         materials.extend(new_materials)
+
+    if options is None or options.get("apply_shape_adjust", True):
+        _apply_shape_adjust(operator, context, files.shape_files, armatures)
 
     new_mat_keys = set(bpy.data.materials.keys()).difference(original_mat_keys)
 
@@ -264,6 +285,43 @@ def _import_models(
         shaders.build_material(context, bpy.data.materials[key], data)
 
     return {"FINISHED"}
+
+
+def _apply_shape_adjust(
+    operator: bpy.types.Operator,
+    context: bpy.types.Context,
+    shape_files: list[datafile.DataFile],
+    armatures: dict[str, bpy.types.Object],
+) -> None:
+    """Pose the freshly imported body with the outfit's shape adjust.
+
+    Only one file is applied: the sliders hold a single shape, so a second
+    would replace the first rather than add to it. The one that names a
+    model imported here wins, since that is the body it describes.
+    """
+    if not shape_files:
+        return
+
+    shape = next(
+        (f for f in shape_files if f.name.removesuffix("_sa.aqm") in armatures),
+        shape_files[0],
+    )
+    armature = armatures.get(shape.name.removesuffix("_sa.aqm"))
+
+    try:
+        motion = aqm.parse_aqm(shape.data)
+    except aqm.AqmError as ex:
+        operator.report({"WARNING"}, f"{shape.name}: {ex}")
+        return
+
+    loaded = shape_sliders.load_shape_adjust(context, motion, shape.name, armature)
+    if loaded is None:
+        return
+
+    debug_print(
+        f"Applied {shape.name}: {loaded['applied']} bones,"
+        f" {loaded['carried']} kept for export"
+    )
 
 
 def _set_scene_colors(

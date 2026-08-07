@@ -438,9 +438,21 @@ def _sides(group, values):
     return out
 
 
-def apply_sliders(context) -> dict:
+def has_shape(context) -> bool:
+    """Is there a body shape to put back on a pose that was rebuilt?"""
+    if get_carried(context):
+        return True
+
     settings = get_settings(context)
-    armature = import_aqm._find_target_armature(context)
+    return settings is not None and not all(
+        settings.is_neutral(group.key) for group in GROUPS
+    )
+
+
+def apply_sliders(context, armature=None) -> dict:
+    settings = get_settings(context)
+    if armature is None:
+        armature = import_aqm._find_target_armature(context)
     if settings is None or armature is None:
         return {"applied": 0}
 
@@ -510,6 +522,64 @@ def apply_sliders(context) -> dict:
 # Operators
 
 
+def load_shape_adjust(context, motion, source_name: str, armature=None) -> dict | None:
+    """Put a shape adjust's values on the sliders and onto the pose.
+
+    Shared by the Load AQM button and by model import, which finds the
+    outfit's own _sa.aqm sitting in the same archive and names the armature
+    it belongs to. Returns None when there is nowhere to put the values.
+    """
+    settings = get_settings(context)
+    if settings is None:
+        return None
+
+    deltas = import_shape_adjust.extract_frame1_deltas(motion)
+    by_name = {
+        entry["name"].lower(): entry for entry in deltas.values() if entry["name"]
+    }
+
+    settings.reset()
+    groups = 0
+    warnings: list[str] = []
+
+    for group in GROUPS:
+        entry = by_name.get(group.left)
+        if entry is None:
+            continue
+
+        scale = entry["scale"] or IDENTITY_SCALE
+        pos = entry["pos"] or IDENTITY_VEC
+        rot = quat_to_euler_deg(entry["rotQuat"]) if entry["rotQuat"] else IDENTITY_VEC
+        settings.set_group_values(group.key, scale=scale, pos=pos, rot=rot)
+        groups += 1
+
+        # The sliders are symmetric; note when the file is not.
+        other = by_name.get(group.right) if group.right else None
+        if other is not None:
+            mirrored = mirror_pos(pos)
+            if any(
+                abs(a - b) > 1e-4
+                for a, b in zip(other["scale"] or IDENTITY_SCALE, scale, strict=True)
+            ) or any(
+                abs(a - b) > 1e-4
+                for a, b in zip(other["pos"] or IDENTITY_VEC, mirrored, strict=True)
+            ):
+                warnings.append(f"{group.label} L/R differ, left side used")
+
+    # Everything the file touched is kept, so exporting later writes the
+    # bones the sliders cannot reach back out unchanged.
+    carried = store_carried(context, deltas)
+    applied = apply_sliders(context, armature)
+
+    return {
+        "groups": groups,
+        "carried": carried,
+        "warnings": warnings,
+        "source": source_name,
+        "applied": applied.get("applied", 0),
+    }
+
+
 @classes.register
 class PSO2_OT_ShapeSlidersReset(bpy.types.Operator):
     """Reset all shape sliders to neutral, restoring the base pose. Also
@@ -568,10 +638,6 @@ class PSO2_OT_ShapeSlidersFromAqm(  # type: ignore https://github.com/nutti/fake
     filter_glob: bpy.props.StringProperty(default="*.aqm", options={"HIDDEN"})
 
     def execute(self, context) -> OperatorResult:
-        settings = get_settings(context)
-        if settings is None:
-            return {"CANCELLED"}
-
         path = Path(self.filepath)  # type: ignore
         try:
             motion = aqm.read_aqm(path)
@@ -579,58 +645,17 @@ class PSO2_OT_ShapeSlidersFromAqm(  # type: ignore https://github.com/nutti/fake
             self.report({"ERROR"}, f"{path.name}: {ex}")
             return {"CANCELLED"}
 
-        deltas = import_shape_adjust.extract_frame1_deltas(motion)
-        by_name = {
-            entry["name"].lower(): entry for entry in deltas.values() if entry["name"]
-        }
-
-        settings.reset()
-        loaded = 0
-        warnings: list[str] = []
-
-        for group in GROUPS:
-            entry = by_name.get(group.left)
-            if entry is None:
-                continue
-
-            scale = entry["scale"] or IDENTITY_SCALE
-            pos = entry["pos"] or IDENTITY_VEC
-            rot = (
-                quat_to_euler_deg(entry["rotQuat"])
-                if entry["rotQuat"]
-                else IDENTITY_VEC
-            )
-            settings.set_group_values(group.key, scale=scale, pos=pos, rot=rot)
-            loaded += 1
-
-            # The sliders are symmetric; note when the file is not.
-            other = by_name.get(group.right) if group.right else None
-            if other is not None:
-                mirrored = mirror_pos(pos)
-                if any(
-                    abs(a - b) > 1e-4
-                    for a, b in zip(
-                        other["scale"] or IDENTITY_SCALE, scale, strict=True
-                    )
-                ) or any(
-                    abs(a - b) > 1e-4
-                    for a, b in zip(other["pos"] or IDENTITY_VEC, mirrored, strict=True)
-                ):
-                    warnings.append(f"{group.label} L/R differ, left side used")
-
-        # Everything the file touched is kept, so exporting later writes the
-        # bones the sliders cannot reach back out unchanged.
-        carried = store_carried(context, deltas)
-
-        apply_sliders(context)
+        loaded = load_shape_adjust(context, motion, path.name)
+        if loaded is None:
+            return {"CANCELLED"}
 
         message = (
-            f"Loaded {loaded} slider groups from {path.name}"
-            f"; {carried} adjusted bones kept for export"
+            f"Loaded {loaded['groups']} slider groups from {path.name}"
+            f"; {loaded['carried']} adjusted bones kept for export"
         )
-        if warnings:
-            message += " - " + "; ".join(warnings)
-        self.report({"WARNING" if warnings else "INFO"}, message)
+        if loaded["warnings"]:
+            message += " - " + "; ".join(loaded["warnings"])
+        self.report({"WARNING" if loaded["warnings"] else "INFO"}, message)
         return {"FINISHED"}
 
 

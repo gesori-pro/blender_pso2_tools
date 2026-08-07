@@ -74,6 +74,15 @@ class CommonImportProps:
         default=True,
     )
 
+    apply_shape_adjust: bpy.props.BoolProperty(
+        name="Apply Outfit Body Shape",
+        description=(
+            "Pose the body with the outfit's own shape adjust, the way the "
+            "game does. Turning this off leaves the base body shape"
+        ),
+        default=True,
+    )
+
     def get_options(self, ignore: Iterable[str] | None = None) -> ImportOptions:
         operator = cast("bpy.types.Operator", self)
         ignore = ignore or ()
@@ -115,6 +124,7 @@ class CommonImportProps:
             col.prop(self, "include_tangent_binormal")
 
             col.label(text="Armature", icon="ARMATURE_DATA")
+            col.prop(self, "apply_shape_adjust")
             col.prop(self, "ignore_leaf_bones")
             col.prop(self, "force_connect_children")
             col.prop(self, "automatic_bone_orientation")
@@ -161,6 +171,7 @@ def import_panel_armature(layout: bpy.types.UILayout, operator: bpy.types.Operat
     header, body = layout.panel("PSO2_import_armature", default_closed=False)
     header.label(text="Armature")
     if body:
+        body.prop(operator, "apply_shape_adjust")
         body.prop(operator, "ignore_leaf_bones")
         body.prop(operator, "force_connect_children")
         body.prop(operator, "automatic_bone_orientation")
