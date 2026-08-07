@@ -452,12 +452,19 @@ def _import_aqp(
 
         # Record how the bones were oriented on the way in. Motion keys are
         # in PSO2's own axes, so importing one has to undo this rotation.
-        if fbx_options.get("automatic_bone_orientation"):
+        #
+        # The fallbacks have to be io_scene_fbx's own, not this add-on's
+        # preferred X,Y: a caller that leaves the axes out gets the FBX
+        # importer's defaults, and recording anything else describes a rig
+        # that was never built. That mismatch does not fail - it quietly
+        # rotates every motion key, and the model comes out with its limbs
+        # stretched away from the body.
+        if fbx_options.get("automatic_bone_orientation", False):
             bone_axes = "AUTO"
         else:
             bone_axes = "{},{}".format(
-                fbx_options.get("primary_bone_axis", "X"),
-                fbx_options.get("secondary_bone_axis", "Y"),
+                fbx_options["primary_bone_axis"],
+                fbx_options["secondary_bone_axis"],
             )
         # The import does not leave the skeleton at its rest pose - the
         # fingertip bones arrive with real transforms on them. Recording that
@@ -548,8 +555,21 @@ def _get_uv_map(obj: objects.CmxBodyObject):
             return None
 
 
+# PSO2 nodes run down their own +X, and so do the bones in the FBX built
+# from an AQP, so that is what the importer is asked for and what every
+# motion this add-on reads or writes assumes. io_scene_fbx would default
+# to Y instead, so a caller that left the axes out silently got a rig no
+# motion here can pose - limbs stretched away from the body - while the
+# armature still claimed to be X,Y.
+_BONE_AXIS_DEFAULTS: FbxImportOptions = {
+    "automatic_bone_orientation": False,
+    "primary_bone_axis": "X",
+    "secondary_bone_axis": "Y",
+}
+
+
 def _get_fbx_options(options: ImportOptions):
-    result = FbxImportOptions()
+    result = FbxImportOptions(**_BONE_AXIS_DEFAULTS)
 
     for key in get_type_hints(FbxImportOptions):
         if key in options:
