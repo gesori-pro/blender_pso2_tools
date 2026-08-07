@@ -468,6 +468,20 @@ def _import_aqp(
                 obj[scene_props.BONE_AXES] = bone_axes
                 import_fnp.store_model_pose(obj)
 
+        # Automatic Bone Orientation points every bone at its children, so
+        # the rest pose stops being the skeleton the game has. Motions
+        # exported from such a rig carry that made-up skeleton instead -
+        # measured 111 cm off at the worst node. Nothing downstream can
+        # undo it, so say so at the point it happens.
+        if bone_axes == "AUTO":
+            operator.report(
+                {"WARNING"},
+                "Imported with Automatic Bone Orientation. The bones no"
+                " longer match the game's skeleton, so a motion exported"
+                " from this armature will carry the wrong bone lengths."
+                " Re-import with that option off before posing.",
+            )
+
         if get_preferences(context).hide_armature:
             for obj in context.selected_objects:
                 if obj.type == "ARMATURE":
