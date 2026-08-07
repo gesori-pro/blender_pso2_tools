@@ -165,6 +165,27 @@ class PSO2_OT_ExportAqm(  # type: ignore https://github.com/nutti/fake-bpy-modul
         # often - ends up baked into the motion (SPEC §6-8). With Ignore
         # Body Shape on, those channels were just sampled at their baseline
         # instead, so there is nothing left to warn about.
+        # Position keys carry each bone's offset from its parent, so they
+        # are where the skeleton's proportions and the character's placement
+        # live - not just movement. An action that only rotates writes the
+        # armature's rest offsets instead, which silently swaps the source
+        # motion's limb lengths and root height for the model's own. One
+        # file built this way put the hips 31 cm low and both shins at an
+        # identical 1.92 cm short of the rig they were meant to match.
+        if missing := _bones_missing_location(armature):
+            shown = ", ".join(sorted(missing)[:4])
+            more = f" and {len(missing) - 4} more" if len(missing) > 4 else ""
+            self.report(
+                {"WARNING"},
+                message + f". {len(missing)} bones have no position keys"
+                f" ({shown}{more}), so this motion carries the skeleton's"
+                " own rest offsets for them. If you started from an existing"
+                " motion, its root placement and bone lengths have been"
+                " lost - re-import it and pose on top rather than posing"
+                " from the rest pose.",
+            )
+            return {"FINISHED"}
+
         if not self.ignore_applied_shape and (stuck := _unkeyed_posed_bones(armature)):
             shown = ", ".join(sorted(stuck)[:4])
             more = f" and {len(stuck) - 4} more" if len(stuck) > 4 else ""
@@ -234,6 +255,21 @@ def _keyed_channels(
             driven.setdefault(match.group(1), set()).add(match.group(2))
 
     return driven
+
+
+def _bones_missing_location(armature) -> set[str]:
+    """Export bones the action moves without ever keying their position.
+
+    A motion imported by this add-on keys every channel, so an animated
+    bone with no position keys means the source motion's own values were
+    dropped somewhere along the way.
+    """
+    keyed = _keyed_channels(armature)
+    return {
+        name
+        for name, channels in keyed.items()
+        if channels and "location" not in channels
+    }
 
 
 def _unkeyed_posed_bones(
