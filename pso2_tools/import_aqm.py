@@ -215,7 +215,7 @@ class PSO2_OT_ImportAqm(  # type: ignore https://github.com/nutti/fake-bpy-modul
         # An action drives the same pose channels the body shape lives in.
         # When the body was recorded, it has been composed into the curves
         # and the screen shows what the game will; otherwise the animation
-        # simply discards whatever sat in the pose (SPEC §6-8).
+        # discards whatever sat in the pose (SPEC §6-8).
         from . import bake_rest
 
         composed_bones = sum(
@@ -224,11 +224,18 @@ class PSO2_OT_ImportAqm(  # type: ignore https://github.com/nutti/fake-bpy-modul
         if composed_bones:
             message += f", body kept on {composed_bones} bones"
         elif bake_rest.pose_is_modified(armature):
+            # Something is in the pose but the body was never recorded, so
+            # there is nothing to compose and this animation just discarded
+            # it. A file loaded by a version that predates the recording is
+            # the usual reason, and nothing else in the scene shows it.
             self.report(
                 {"WARNING"},
-                message + ". The armature has a body shape in its pose, which"
-                " this animation will override - use Apply Shape to Rest Pose"
-                " (PSO2 Appearance panel) first.",
+                message + ". Something is posing this armature but no body"
+                " was recorded, so the animation has overwritten it - the"
+                " figure on screen is not the one the game will show. If a"
+                " character file or shape adjust is loaded, load it again"
+                " and re-import this motion; the import then reports"
+                " 'body kept on N bones'.",
             )
             return {"FINISHED"}
 

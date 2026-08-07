@@ -647,17 +647,20 @@ def pose_suspended(armature: bpy.types.Object | None):
 def shape_state(armature: bpy.types.Object | None) -> str:
     """Which layer the body shape lives in, for the UI to report.
 
-    An action owning the pose means the shape is either already baked or
-    was never there, so only an actionless modified pose is a warning.
+    An action owning the pose is only fine when the body was composed into
+    it. Without a record there is nothing to compose, so the action has
+    quietly overwritten whatever body was there - the same warning applies
+    as for an unbaked shape, and re-loading the body is the way out.
     """
     if armature is None:
         return STATE_REST
 
-    if (
-        armature.animation_data is not None
-        and armature.animation_data.action is not None
-    ):
-        return STATE_ANIMATED
+    animation_data = armature.animation_data
+    action = animation_data.action if animation_data else None
+    if action is not None:
+        if action.get(import_aqm.COMPOSED_BODY_PROP):
+            return STATE_ANIMATED
+        return STATE_SHAPE_IN_POSE if pose_is_modified(armature) else STATE_ANIMATED
 
     if pose_is_modified(armature):
         return STATE_SHAPE_IN_POSE
@@ -678,14 +681,18 @@ def draw_shape_state(layout, state: str, *, hint: str = "location") -> None:
 
     box = layout.box()
     column = box.column(align=True)
-    column.label(text="Body shape is in the pose layer.", icon="ERROR")
-    column.label(text="Animation uses that same layer and")
-    column.label(text="will overwrite the shape.")
+    column.label(text="Body is in the pose layer, unrecorded.", icon="ERROR")
+    column.label(text="An animation uses that same layer, so")
+    column.label(text="it overwrites the body instead of")
+    column.label(text="keeping it - the figure on screen is")
+    column.label(text="not the one the game will show.")
 
     if hint == "location":
         column.separator()
-        column.label(text="Apply Shape to Rest Pose first:", icon="ARMATURE_DATA")
-        column.label(text="Scene > PSO2 Appearance > Shape Adjust")
+        column.label(text="Load the character file and shape", icon="FILE_REFRESH")
+        column.label(text="adjust again, then re-import the")
+        column.label(text="motion. The import then says")
+        column.label(text='"body kept on N bones".')
 
 
 @classes.register
