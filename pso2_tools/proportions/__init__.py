@@ -34,9 +34,15 @@ IDENTITY_QUAT = (0.0, 0.0, 0.0, 1.0)
 # character-file fields are paths ("baseFIGR.bodyVerts.X"). These are the
 # fields that live at the top level rather than under baseFIGR (SPEC §2-2).
 _TOP_LEVEL_FIELDS = {
-    "neckVerts.X", "neckVerts.Y", "neckVerts.Z",
-    "waistVerts.X", "waistVerts.Y", "waistVerts.Z",
-    "hands.X", "hands.Y", "hands.Z",
+    "neckVerts.X",
+    "neckVerts.Y",
+    "neckVerts.Z",
+    "waistVerts.X",
+    "waistVerts.Y",
+    "waistVerts.Z",
+    "hands.X",
+    "hands.Y",
+    "hands.Z",
     "neckAngle",
 }
 
@@ -218,7 +224,14 @@ def compute(
 
             if "rotDeltaQuat" in lo:
                 q = blend_quat(value, lo["rotDeltaQuat"], hi["rotDeltaQuat"])
-                slot["rotQuat"] = list(quat_mul(q, tuple(slot["rotQuat"])))
+                # Sliders compose in table order: each new delta multiplies
+                # on the right of what is already there, so the first slider
+                # listed is applied first. The other way round (new delta on
+                # the left) only shows on a bone three sliders drive with
+                # different axes - the clavicles - where it left the shoulder
+                # 0.28 deg off the game, ~6 mm at the fingertip. One-slider
+                # bones are unaffected, which is why it read as 132/134.
+                slot["rotQuat"] = list(quat_mul(tuple(slot["rotQuat"]), q))
 
     # Frame 1 of the motion is not a slider: it multiplies into every
     # character no matter what (SPEC §6-1-1). Skipping it puts a 5-10%
