@@ -179,7 +179,42 @@ GROUPS = [
     Group(
         "hiptw", "Hip Twist", "l_hip_tw", "r_hip_tw", {"l_hip_tw": 50, "r_hip_tw": 51}
     ),
+    # The rest of the leg. Outfit shape adjusts drive these on every file
+    # checked, but the panel could not reach them: they were kept by
+    # store_carried and written back out unchanged, so a file could shape a
+    # calf that no slider could edit. The _alt bones are the ones the shape
+    # adjusts use - l_calf (id 6) is the character file's bone, not this one.
+    Group(
+        "thightw2",
+        "Thigh Twist 2",
+        "l_thigh_tw2_alt",
+        "r_thigh_tw2_alt",
+        {"l_thigh_tw2_alt": 54, "r_thigh_tw2_alt": 65},
+    ),
+    Group(
+        "calf",
+        "Calf",
+        "l_calf_alt",
+        "r_calf_alt",
+        {"l_calf_alt": 56, "r_calf_alt": 67},
+    ),
+    Group(
+        "calf0",
+        "Calf Upper",
+        "l_calf0_alt",
+        "r_calf0_alt",
+        {"l_calf0_alt": 55, "r_calf0_alt": 66},
+    ),
+    Group(
+        "foot",
+        "Foot",
+        "l_foot_alt",
+        "r_foot_alt",
+        {"l_foot_alt": 57, "r_foot_alt": 68},
+    ),
+    Group("knee", "Knee", "l_knee", "r_knee", {"l_knee": 10, "r_knee": 17}),
     Group("pelvis", "Pelvis", "pelvis", None, {"pelvis": 3}),
+    Group("hip", "Hip", "hip", None, {"hip": 2}),
 ]
 
 GROUPS_BY_KEY = {g.key: g for g in GROUPS}
