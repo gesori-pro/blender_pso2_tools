@@ -51,21 +51,29 @@ def read_chains(data: bytes) -> dict[str, list[str]]:
         return {}
 
     return {
-        chain["name"]: _chain_bones(chain["name"])
+        chain["name"]: _chain_stems(chain)
         for chain in parsed
         if chain["name"] and chain["name"] != "None"
     }
 
 
-def _chain_bones(root: str) -> list[str]:
-    """The bones a chain covers, from its root's naming.
+def _chain_stems(chain) -> list[str]:
+    """The name stems a chain covers, one per strand.
 
-    A chain root is the first link of a numbered strip - drs2_tube_skirt_000_00
-    heads drs2_tube_skirt_000_10, _020_00 and the rest. The file only names
-    the root, so the members are found on the armature by prefix instead.
+    Every strand root is named in the file - drs2_tube_skirt_000_00 through
+    _110_00 for a twelve-strand skirt. Only the root is named, though: its
+    links (_000_10, _000_20 ...) are found on the armature by prefix, so the
+    strand's trailing link number is dropped to get the stem. A name that
+    does not end in a number is left whole rather than cut at its last
+    underscore, which would leave a stem short enough to match anything.
     """
-    head = root.rsplit("_", 2)[0]
-    return [head] if head else []
+    stems = []
+    for strand in chain.get("strands") or [chain["name"]]:
+        head, sep, tail = strand.rpartition("_")
+        stem = head if sep and tail.isdigit() and head else strand
+        if stem not in stems:
+            stems.append(stem)
+    return stems
 
 
 def mark_armature(
@@ -73,17 +81,16 @@ def mark_armature(
 ) -> dict[str, str]:
     """Record which bones the game swings, and collect them for the user.
 
-    Matching is by prefix: the file names one root per chain, and the
-    armature holds the whole strip under the same stem.
+    Matching is by prefix on each strand's stem: the file names every
+    strand root, and the armature holds that strand's links under it.
     """
     if not chains:
         return {}
 
     prefixes = {}
-    for root in chains:
-        head = root.rsplit("_", 2)[0]
-        if head:
-            prefixes[head] = root
+    for root, stems in chains.items():
+        for stem in stems:
+            prefixes.setdefault(stem, root)
 
     found: dict[str, str] = {}
     for bone in armature.data.bones:  # type: ignore[union-attr]
