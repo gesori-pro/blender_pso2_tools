@@ -13,10 +13,12 @@ from . import (
     datafile,
     fbx_wrapper,
     ice,
+    import_aqm,
     import_fnp,
     material,
     objects,
     objects_aqp,
+    physics,
     scene_props,
     shaders,
     shape_sliders,
@@ -163,6 +165,7 @@ class ModelFiles:
     model_files: list[datafile.DataFile] = field(default_factory=list)
     node_files: list[datafile.DataFile] = field(default_factory=list)
     shape_files: list[datafile.DataFile] = field(default_factory=list)
+    physics_files: list[datafile.DataFile] = field(default_factory=list)
 
 
 def collect_model_files(sources: Iterable[datafile.DataFileSource]):
@@ -177,6 +180,11 @@ def collect_model_files(sources: Iterable[datafile.DataFileSource]):
         # different body than the one on screen - measured at 3.7 cm across
         # the hips on one outfit, enough to sink a hand into the thigh.
         result.shape_files.extend(source.glob("*_sa.aqm"))
+        # Cloth the game swings at runtime. Blender does not simulate it,
+        # so those bones sit still here and move in game - worth saying so
+        # rather than letting a pose be built against a skirt that is not
+        # where it looks.
+        result.physics_files.extend(source.glob("*.fltd"))
 
     return result
 
@@ -229,6 +237,8 @@ def _import_models(
 
     if options is None or options.get("apply_shape_adjust", True):
         _apply_shape_adjust(operator, context, files.shape_files, armatures)
+
+    _mark_physics(operator, context, files.physics_files, armatures)
 
     new_mat_keys = set(bpy.data.materials.keys()).difference(original_mat_keys)
 
@@ -322,6 +332,47 @@ def _apply_shape_adjust(
         f"Applied {shape.name}: {loaded['applied']} bones,"
         f" {loaded['carried']} kept for export"
     )
+
+
+def _mark_physics(
+    operator: bpy.types.Operator,
+    context: bpy.types.Context,
+    physics_files: list[datafile.DataFile],
+    armatures: dict[str, bpy.types.Object],
+) -> None:
+    """Record which bones the game's cloth simulation drives."""
+    if not physics_files:
+        return
+
+    for entry in physics_files:
+        stem = entry.name.removesuffix(".fltd")
+        armature = armatures.get(stem)
+        if armature is None and armatures:
+            armature = next(iter(armatures.values()))
+        if armature is None:
+            # The per-model map is only filled when the importer leaves the
+            # new objects selected, which not every caller does. Fall back to
+            # the same lookup the rest of the add-on uses.
+            armature = import_aqm._find_target_armature(context)
+        if armature is None:
+            continue
+
+        chains = physics.read_chains(entry.data)
+        if not chains:
+            continue
+
+        marked = physics.mark_armature(armature, chains)
+        if marked:
+            debug_print(
+                f"{entry.name}: {len(chains)} cloth chains, {len(marked)} bones marked"
+            )
+            operator.report(
+                {"INFO"},
+                f"{len(marked)} bones are cloth the game simulates"
+                f" ({', '.join(sorted(chains)[:3])}"
+                f"{'...' if len(chains) > 3 else ''}). Blender shows them"
+                " at rest, so they will sit differently in game.",
+            )
 
 
 def _set_scene_colors(
