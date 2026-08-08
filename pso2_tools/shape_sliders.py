@@ -182,8 +182,15 @@ GROUPS = [
     # The rest of the leg. Outfit shape adjusts drive these on every file
     # checked, but the panel could not reach them: they were kept by
     # store_carried and written back out unchanged, so a file could shape a
-    # calf that no slider could edit. The _alt bones are the ones the shape
-    # adjusts use - l_calf (id 6) is the character file's bone, not this one.
+    # calf that no slider could edit.
+    #
+    # Only the _alt bones are here, because only they move the NGS body:
+    # measured on pl_rbd_205990_bw, l_calf_alt (56) has 1450 weighted
+    # vertices while l_calf (6) has none - the low-numbered leg bones are
+    # the classic skeleton's and drive nothing. l_knee (10) is one of those,
+    # which is why a slider on it moved the mesh 0.00 mm. hip (2) has no
+    # left/right pair; it is one bone carrying 19622 vertices, and l/r_hip_tw
+    # (50/51) are the separate buttock volume either side of it.
     Group(
         "thightw2",
         "Thigh Twist 2",
@@ -212,7 +219,6 @@ GROUPS = [
         "r_foot_alt",
         {"l_foot_alt": 57, "r_foot_alt": 68},
     ),
-    Group("knee", "Knee", "l_knee", "r_knee", {"l_knee": 10, "r_knee": 17}),
     Group("pelvis", "Pelvis", "pelvis", None, {"pelvis": 3}),
     Group("hip", "Hip", "hip", None, {"hip": 2}),
 ]
