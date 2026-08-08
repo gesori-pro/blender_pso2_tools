@@ -361,6 +361,7 @@ def _mark_physics(
         if not chains:
             continue
 
+        physics.store_source(armature, entry.data)
         marked = physics.mark_armature(armature, chains)
         if marked:
             debug_print(

@@ -1,6 +1,6 @@
 import bpy
 
-from .. import bake_rest, classes, import_aqm, import_fnp, shape_sliders
+from .. import bake_rest, classes, import_aqm, import_fnp, physics, shape_sliders
 
 
 @classes.register
@@ -57,6 +57,10 @@ class PSO2ShapeAdjustPanel(bpy.types.Panel):
         layout.operator(
             import_fnp.PSO2_OT_UnloadCharacterFile.bl_idname, icon="LOOP_BACK"
         )
+
+        # Only offered when the imported outfit actually shipped cloth.
+        if physics.get_source(armature):
+            layout.operator(physics.PSO2_OT_ExportPhysics.bl_idname, icon="MOD_CLOTH")
 
         layout.operator(
             bake_rest.PSO2_OT_BakeShapeToRest.bl_idname, icon="ARMATURE_DATA"

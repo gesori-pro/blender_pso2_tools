@@ -16,10 +16,15 @@ appear there because cloth hits them, not because they swing.
 
 from __future__ import annotations
 
-import bpy
+import base64
+from pathlib import Path
 
-from . import datafile
+import bpy
+from bpy_extras.io_utils import ExportHelper
+
+from . import classes, datafile, fltd
 from .debug import debug_print
+from .util import OperatorResult
 
 # Armature custom property: the names of every bone a .fltd swings, and
 # the chain each one belongs to. {bone name: chain name}
@@ -29,6 +34,9 @@ PHYSICS_BONES_PROP = "pso2_physics_bones"
 # visible in the outliner without opening a panel.
 PHYSICS_COLLECTION = "PSO2 Physics"
 
+# The file's own bytes, kept so an edited copy can be written back.
+PHYSICS_SOURCE_PROP = "pso2_physics_source"
+
 
 def read_chains(data: bytes) -> dict[str, list[str]]:
     """Chain root -> the bone names that chain drives.
@@ -37,24 +45,16 @@ def read_chains(data: bytes) -> dict[str, list[str]]:
     no cloth is normal and must not fail the import.
     """
     try:
-        from System import Array, Byte  # type: ignore
-
-        from AquaModelLibrary.Data.PSO2.Aqua import FLTDPhysics  # type: ignore
-
-        physics = FLTDPhysics(Array[Byte](data))
+        parsed = fltd.chains(data)
     except Exception as ex:  # any parse failure is non-fatal
         debug_print("fltd: could not parse:", ex)
         return {}
 
-    chains: dict[str, list[str]] = {}
-    for index in range(physics.mainNodes.Count):
-        node = physics.mainNodes[index]
-        name = str(node.name) if node.name else ""
-        if not name or name == "None":
-            continue
-        chains[name] = _chain_bones(name)
-
-    return chains
+    return {
+        chain["name"]: _chain_bones(chain["name"])
+        for chain in parsed
+        if chain["name"] and chain["name"] != "None"
+    }
 
 
 def _chain_bones(root: str) -> list[str]:
@@ -128,3 +128,109 @@ def collect_physics_files(sources) -> list[datafile.DataFile]:
     for source in sources:
         files.extend(source.glob("*.fltd"))
     return files
+
+
+# ---------------------------------------------------------------------------
+# Editing
+
+
+def scale_chain(raw: bytearray, chain_name: str, factor: float) -> int:
+    """Multiply every non-zero parameter of one chain. Returns values changed.
+
+    The sixteen floats per sub-node are the chain's simulation settings.
+    What each one means is not documented anywhere and has not been pinned
+    down, so this scales them together rather than pretending to label
+    them: larger values swing further on the outfits tested. Zeros are left
+    alone, since a zero is a switch rather than an amount.
+    """
+    changed = 0
+    for chain in fltd.chains(bytes(raw)):
+        if chain["name"] != chain_name:
+            continue
+        for sub in chain["subs"]:
+            values = sub["floats"]
+            scaled = [v * factor if abs(v) > 1e-9 else v for v in values]
+            if scaled != values:
+                fltd.write_floats(raw, sub["offset"], scaled)
+                changed += sum(1 for a, b in zip(values, scaled, strict=True) if a != b)
+    return changed
+
+
+@classes.register
+class PSO2_OT_ExportPhysics(  # type: ignore https://github.com/nutti/fake-bpy-module/issues/376
+    bpy.types.Operator, ExportHelper
+):
+    """Write the outfit's cloth physics out, optionally scaled"""
+
+    bl_label = "Export Cloth Physics"
+    bl_idname = "pso2.export_physics"
+    bl_options = {"PRESET"}
+
+    filename_ext = ".fltd"
+    filter_glob: bpy.props.StringProperty(default="*.fltd", options={"HIDDEN"})
+
+    factor: bpy.props.FloatProperty(
+        name="Swing",
+        description=(
+            "Multiply every cloth setting by this. Above 1 swings further,"
+            " below 1 stiffens. 1.0 writes the file back unchanged"
+        ),
+        default=1.0,
+        min=0.1,
+        max=5.0,
+    )
+
+    def execute(self, context) -> OperatorResult:
+        armature = _find_armature(context)
+        source = get_source(armature)
+        if not source:
+            self.report(
+                {"ERROR"},
+                "No cloth physics on this armature. Import a model that has"
+                " a .fltd first.",
+            )
+            return {"CANCELLED"}
+
+        raw = bytearray(source)
+        chains = fltd.chains(bytes(raw))
+        changed = 0
+        if abs(self.factor - 1.0) > 1e-6:
+            for chain in chains:
+                changed += scale_chain(raw, chain["name"], self.factor)
+
+        path = Path(self.filepath)  # type: ignore
+        path.write_bytes(bytes(raw))
+
+        self.report(
+            {"INFO"},
+            f"Wrote {path.name}: {len(chains)} chains, {len(raw):,} bytes"
+            + (f", {changed} settings scaled by {self.factor:g}" if changed else ""),
+        )
+        return {"FINISHED"}
+
+
+def _find_armature(context):
+    from . import import_aqm
+
+    return import_aqm._find_target_armature(context)
+
+
+def store_source(armature: bpy.types.Object, data: bytes) -> None:
+    """Keep the file's bytes so it can be written back out with edits.
+
+    Base64 rather than a byte list: a custom property holding a list of
+    ints comes back four times the size and no longer parses.
+    """
+    armature[PHYSICS_SOURCE_PROP] = base64.b64encode(bytes(data)).decode("ascii")
+
+
+def get_source(armature: bpy.types.Object | None) -> bytes:
+    if armature is None:
+        return b""
+    stored = armature.get(PHYSICS_SOURCE_PROP)
+    if not stored:
+        return b""
+    try:
+        return base64.b64decode(str(stored))
+    except (ValueError, TypeError):
+        return b""
