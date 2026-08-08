@@ -138,6 +138,10 @@ class Group:
 
 # Order here is the panel order. c_breast is intentionally absent: it
 # barely deforms anything in practice, so it only added clutter.
+# Panel order, and the order these are written out. Top of the body to the
+# bottom, so a slider is where the part it moves is - the arrangement Tae
+# asked for after working with the first version, where the leg groups sat
+# in the order they happened to be added.
 GROUPS = [
     Group("breast", "Breast", "l_breast", "r_breast", {"l_breast": 41, "r_breast": 43}),
     Group(
@@ -154,6 +158,8 @@ GROUPS = [
         None,
         {"c_breast_scale": 130},
     ),
+    # Shoulder width, really: the collarbone carries l_upperarm and the arm
+    # with it, and 2760 chest vertices ride along at up to 0.45 weight.
     Group(
         "clav",
         "Clavicle",
@@ -161,6 +167,14 @@ GROUPS = [
         "r_clavicle",
         {"l_clavicle": 22, "r_clavicle": 30},
         rotate=False,
+    ),
+    # hip (2) is the parent of pelvis (3), so it comes first. hip carries
+    # 19622 vertices of its own; pelvis has none but every leg bone inherits
+    # its scale, which makes it the whole-leg control.
+    Group("hip", "Hip", "hip", None, {"hip": 2}),
+    Group("pelvis", "Pelvis", "pelvis", None, {"pelvis": 3}),
+    Group(
+        "hiptw", "Hip Twist", "l_hip_tw", "r_hip_tw", {"l_hip_tw": 50, "r_hip_tw": 51}
     ),
     Group(
         "thigh",
@@ -177,33 +191,11 @@ GROUPS = [
         {"l_thigh_tw_alt": 53, "r_thigh_tw_alt": 64},
     ),
     Group(
-        "hiptw", "Hip Twist", "l_hip_tw", "r_hip_tw", {"l_hip_tw": 50, "r_hip_tw": 51}
-    ),
-    # The rest of the leg. Outfit shape adjusts drive these on every file
-    # checked, but the panel could not reach them: they were kept by
-    # store_carried and written back out unchanged, so a file could shape a
-    # calf that no slider could edit.
-    #
-    # Only the _alt bones are here, because only they move the NGS body:
-    # measured on pl_rbd_205990_bw, l_calf_alt (56) has 1450 weighted
-    # vertices while l_calf (6) has none - the low-numbered leg bones are
-    # the classic skeleton's and drive nothing. l_knee (10) is one of those,
-    # which is why a slider on it moved the mesh 0.00 mm. hip (2) has no
-    # left/right pair; it is one bone carrying 19622 vertices, and l/r_hip_tw
-    # (50/51) are the separate buttock volume either side of it.
-    Group(
         "thightw2",
         "Thigh Twist 2",
         "l_thigh_tw2_alt",
         "r_thigh_tw2_alt",
         {"l_thigh_tw2_alt": 54, "r_thigh_tw2_alt": 65},
-    ),
-    Group(
-        "calf",
-        "Calf",
-        "l_calf_alt",
-        "r_calf_alt",
-        {"l_calf_alt": 56, "r_calf_alt": 67},
     ),
     Group(
         "calf0",
@@ -213,14 +205,19 @@ GROUPS = [
         {"l_calf0_alt": 55, "r_calf0_alt": 66},
     ),
     Group(
+        "calf",
+        "Calf",
+        "l_calf_alt",
+        "r_calf_alt",
+        {"l_calf_alt": 56, "r_calf_alt": 67},
+    ),
+    Group(
         "foot",
         "Foot",
         "l_foot_alt",
         "r_foot_alt",
         {"l_foot_alt": 57, "r_foot_alt": 68},
     ),
-    Group("pelvis", "Pelvis", "pelvis", None, {"pelvis": 3}),
-    Group("hip", "Hip", "hip", None, {"hip": 2}),
 ]
 
 GROUPS_BY_KEY = {g.key: g for g in GROUPS}
