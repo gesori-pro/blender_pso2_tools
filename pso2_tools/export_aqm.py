@@ -641,7 +641,16 @@ def _get_export_bones(armature: bpy.types.Object) -> list[str]:
 def _make_node_tree_flag(
     node_id: int, frame_count: int, multiplier: int, data_type_flag: int
 ) -> aqm.AqmNode:
-    """The __NodeTreeFlag__ pseudo-node official player animations carry."""
+    """The __NodeTreeFlag__ pseudo-node official player animations carry.
+
+    Two channels, not three. Both forms ship: over a 250 motion sample,
+    140 lobby actions carry 0x10 and 0x11 and 33 carry 0x12 as well, and
+    nothing about the file says which - node count, frame count and the
+    camera variants all appear on both sides. Two is the common form and
+    the one the emotes people replace use, among them pl_hum_lacf_004_yes,
+    so an export that always wrote three put a channel into a slot that
+    never had one.
+    """
     timings = [0x8 | 0x1]
     timings += [frame * multiplier + 0x8 for frame in range(1, frame_count - 1)]
     if frame_count > 1:
@@ -653,7 +662,7 @@ def _make_node_tree_flag(
         name="__NodeTreeFlag__",
     )
 
-    for key_type in (0x10, 0x11, 0x12):
+    for key_type in (0x10, 0x11):
         node.key_sets.append(
             aqm.AqmKeySet(
                 key_type=key_type,
