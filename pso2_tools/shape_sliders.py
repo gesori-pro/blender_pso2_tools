@@ -168,6 +168,12 @@ GROUPS = [
         {"l_clavicle": 22, "r_clavicle": 30},
         rotate=False,
     ),
+    # The one spine bone that moves the midriff and nothing else. Its parent
+    # spine1_efce and its sibling spine2 both carry the clavicles and the
+    # breasts, so scaling either takes the whole upper body along, and spine0
+    # has no weighted vertices at all. spine1_2 has no children and 4239
+    # vertices of its own.
+    Group("waist", "Waist", "spine1_2", None, {"spine1_2": 132}),
     # hip (2) is the parent of pelvis (3), so it comes first. hip carries
     # 19622 vertices of its own; pelvis has none but every leg bone inherits
     # its scale, which makes it the whole-leg control.
