@@ -202,6 +202,24 @@ class PSO2_OT_ExportAqm(  # type: ignore https://github.com/nutti/fake-bpy-modul
         # often - ends up baked into the motion (SPEC §6-8). With Ignore
         # Body Shape on, those channels were just sampled at their baseline
         # instead, so there is nothing left to warn about.
+        # A baked simulation keys every channel it touched, scale included,
+        # so the posed-but-unkeyed check above walks straight past it. The
+        # game multiplies a motion's scale onto the character's own body, so
+        # any bone that leaves here at other than 1 resizes whoever plays it.
+        if scaled := _bones_with_scale(motion):
+            shown = ", ".join(name for name, _ in sorted(scaled)[:4])
+            more = f" and {len(scaled) - 4} more" if len(scaled) > 4 else ""
+            worst = max(dev for _, dev in scaled)
+            self.report(
+                {"WARNING"},
+                message + f". {len(scaled)} bones carry a scale other than 1"
+                f" ({shown}{more}, up to {worst:+.0%}), and the game applies"
+                " that on top of the character's own body. Official motions"
+                " keep every bone at 1 - clear the scale, or bake a"
+                " simulation onto rotation only.",
+            )
+            return {"FINISHED"}
+
         if not self.ignore_applied_shape and (stuck := _unkeyed_posed_bones(armature)):
             shown = ", ".join(sorted(stuck)[:4])
             more = f" and {len(stuck) - 4} more" if len(stuck) > 4 else ""
@@ -323,6 +341,27 @@ def _pose_touches_physics(context, armature, limit: float = 0.005) -> set[str]:
         if distance is not None and distance < limit:
             touching.add(cloth_points[index][1])
     return touching
+
+
+def _bones_with_scale(motion, limit: float = 0.002) -> list[tuple[str, float]]:
+    """(bone, worst deviation) for every node the motion resizes.
+
+    Read off the built motion rather than the pose, so it catches the scale
+    whatever put it there - a body shape, a baked simulation, a stray S in
+    the viewport. Measured across the game's own player animations, every
+    scale key is exactly 1.
+    """
+    found = []
+    for node in motion.nodes:
+        key_set = node.get_key_set(aqm.KEY_TYPE_SCALE)
+        if key_set is None:
+            continue
+        worst = 0.0
+        for x, y, z, _ in key_set.vec4_keys:
+            worst = max(worst, abs(x - 1.0), abs(y - 1.0), abs(z - 1.0))
+        if worst > limit:
+            found.append((node.name, worst))
+    return found
 
 
 def _bones_missing_location(armature) -> set[str]:
