@@ -63,6 +63,19 @@ class PSO2_OT_ExportAqm(  # type: ignore https://github.com/nutti/fake-bpy-modul
         ),
         default=False,
     )
+    drop_bone_scale: bpy.props.BoolProperty(
+        name="Drop Bone Scale",
+        description=(
+            "Write every bone's scale as 1. A jiggle add-on baked to"
+            " keyframes keys scale alongside rotation, and the scale then"
+            " travels with the motion and resizes the body of whoever plays"
+            " it. The bounce itself is in the rotation and survives; only"
+            " the swelling goes. Every scale key in the game's own player"
+            " animations is 1. Turned off automatically for a shape adjust,"
+            " whose whole content is scale"
+        ),
+        default=True,
+    )
     ignore_applied_shape: bpy.props.BoolProperty(
         name="Ignore Body Shape",
         description=(
@@ -98,6 +111,7 @@ class PSO2_OT_ExportAqm(  # type: ignore https://github.com/nutti/fake-bpy-modul
 
         layout.prop(self, "frame_source")
         layout.prop(self, "player_anim")
+        layout.prop(self, "drop_bone_scale")
         layout.prop(self, "ignore_applied_shape")
 
         from . import bake_rest
@@ -153,12 +167,20 @@ class PSO2_OT_ExportAqm(  # type: ignore https://github.com/nutti/fake-bpy-modul
             return {"CANCELLED"}
 
         path = Path(self.filepath)  # type: ignore
+
+        # A shape adjust is nothing but scale, so leave that one alone.
+        dropped = 0
+        if self.drop_bone_scale and not path.name.endswith(aqm.SHAPE_ADJUST_SUFFIX):
+            dropped = _drop_bone_scale(motion)
+
         size = aqm.write_aqm(path, motion)
 
         message = (
             f"Exported {path.name}: {len(motion.nodes)} nodes,"
             f" frames 0-{motion.end_frame}, {size:,} bytes"
         )
+        if dropped:
+            message += f", scale reset to 1 on {dropped} bones"
 
         # Cloth the game swings is the one thing no accuracy here can
         # match: Blender holds it at its bind position, the game does not.
@@ -213,10 +235,11 @@ class PSO2_OT_ExportAqm(  # type: ignore https://github.com/nutti/fake-bpy-modul
             self.report(
                 {"WARNING"},
                 message + f". {len(scaled)} bones carry a scale other than 1"
-                f" ({shown}{more}, up to {worst:+.0%}), and the game applies"
-                " that on top of the character's own body. Official motions"
-                " keep every bone at 1 - clear the scale, or bake a"
-                " simulation onto rotation only.",
+                f" ({shown}{more}, up to {worst:+.0%}), which travels with"
+                " the motion and resizes the body of whoever plays it."
+                " Every scale key in the game's own player animations is 1"
+                " - turn on Drop Bone Scale, or clear the scale before"
+                " exporting.",
             )
             return {"FINISHED"}
 
@@ -343,13 +366,34 @@ def _pose_touches_physics(context, armature, limit: float = 0.005) -> set[str]:
     return touching
 
 
+def _drop_bone_scale(motion) -> int:
+    """Reset every scale key to 1. Returns how many bones were changed.
+
+    Only the scale channel: the rotation and position keys are the motion,
+    and a jiggle add-on's bounce lives in the rotation, so it comes through
+    intact. What goes is the swelling that rides along with it.
+    """
+    changed = 0
+    for node in motion.nodes:
+        key_set = node.get_key_set(aqm.KEY_TYPE_SCALE)
+        if key_set is None or not key_set.vec4_keys:
+            continue
+        reset = [(1.0, 1.0, 1.0, w) for _, _, _, w in key_set.vec4_keys]
+        if reset != key_set.vec4_keys:
+            key_set.vec4_keys = reset
+            changed += 1
+    return changed
+
+
 def _bones_with_scale(motion, limit: float = 0.002) -> list[tuple[str, float]]:
     """(bone, worst deviation) for every node the motion resizes.
 
     Read off the built motion rather than the pose, so it catches the scale
     whatever put it there - a body shape, a baked simulation, a stray S in
     the viewport. Measured across the game's own player animations, every
-    scale key is exactly 1.
+    scale key is exactly 1; whether the game composes a motion's scale with
+    the character's own proportions or replaces them has not been pinned
+    down, and either way the body on screen is not the one that was built.
     """
     found = []
     for node in motion.nodes:
