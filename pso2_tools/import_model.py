@@ -280,6 +280,14 @@ def _import_models(
     if model_materials.has_decal_texture:
         model_materials.extra_textures.extend(material.find_textures("bp"))
 
+    # An innerwear item is textures with no model, so this import builds no
+    # material of its own - the set goes onto the skin materials the body
+    # already brought in.
+    if inner_count := material.update_innerwear_slots(model_materials.textures):
+        operator.report(
+            {"INFO"}, f"Applied innerwear textures to {inner_count} materials"
+        )
+
     _delete_empty_images()
 
     debug_print("IMPORT MATERIALS:")

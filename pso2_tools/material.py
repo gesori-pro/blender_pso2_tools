@@ -231,6 +231,51 @@ def find_texture(*parts: str, images: Iterable[bpy.types.Image] | None = None):
     return None
 
 
+# The texture nodes a skin material reserves for innerwear, by the names the
+# shader builders give them, and the name part that fills each one.
+_INNERWEAR_SLOTS = {
+    "Innerwear Diffuse": "d",
+    "Innerwear Color Mask": "m",
+    "Innerwear Multi Map": "s",
+    "Innerwear Normal Map": "n",
+    "Layer": "l",
+}
+
+
+def update_innerwear_slots(images: Iterable[bpy.types.Image]) -> int:
+    """Point every built material's innerwear nodes at this innerwear set.
+
+    A material only picks its innerwear textures up while it is being
+    built, so importing an innerwear item after the body did nothing you
+    could see: the textures loaded, but the slots on the existing skin
+    materials stayed empty, and with no Layer mask the innerwear shader
+    mixes in at zero. Returns how many materials were re-pointed.
+    """
+    found = {
+        node_name: find_texture("iw", part, images=images)
+        for node_name, part in _INNERWEAR_SLOTS.items()
+    }
+    if not any(found.values()):
+        return 0
+
+    updated = 0
+    for mat in bpy.data.materials:
+        if not mat.use_nodes or mat.node_tree is None:
+            continue
+        nodes = mat.node_tree.nodes
+        if "Innerwear Diffuse" not in nodes:
+            continue
+        changed = False
+        for node_name, image in found.items():
+            node = nodes.get(node_name)
+            if node is not None and image is not None and node.image is not image:
+                node.image = image
+                changed = True
+        if changed:
+            updated += 1
+    return updated
+
+
 @dataclass
 class ModelMaterials:
     materials: dict[str, Material] = field(default_factory=dict)
