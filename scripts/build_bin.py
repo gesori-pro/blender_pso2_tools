@@ -119,7 +119,11 @@ def copy_package_dlls():
 def call_msbuild(args: list[Path | str]):
     vs = json.loads(
         subprocess.check_output(
-            [VSWHERE, "-latest", "-format", "json"], encoding="utf-8"
+            # vswhere localizes text in the console code page, which need
+            # not be valid UTF-8. Every field read here is ASCII.
+            [VSWHERE, "-latest", "-format", "json"],
+            encoding="utf-8",
+            errors="replace",
         )
     )
     msbuild = Path(vs[0]["installationPath"]) / "Msbuild/Current/Bin/MSBuild.exe"
