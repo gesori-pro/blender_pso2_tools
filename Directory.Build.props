@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The libxml2-md.lib bundled with FBX SDK 2020.3.x calls BCryptGenRandom,
+     which the aqua library's native project predates. MSBuild finds this file
+     by walking up from every project under PSO2-Aqua-Library, so the linker
+     input can be added without touching the submodule. C# projects carry no
+     Link items, so the metadata is inert for them. -->
+<Project>
+  <ItemDefinitionGroup>
+    <Link>
+      <AdditionalDependencies>bcrypt.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+</Project>
