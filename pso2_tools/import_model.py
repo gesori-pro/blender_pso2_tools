@@ -282,8 +282,12 @@ def _import_models(
 
     # An innerwear item is textures with no model, so this import builds no
     # material of its own - the set goes onto the skin materials the body
-    # already brought in.
-    if inner_count := material.update_innerwear_slots(model_materials.textures):
+    # already brought in. Only for model-less imports: an outfit that carries
+    # linked innerwear dresses its own body when its materials are built, and
+    # should not restyle every other body in the scene.
+    if not files.model_files and (
+        inner_count := material.update_innerwear_slots(model_materials.textures)
+    ):
         operator.report(
             {"INFO"}, f"Applied innerwear textures to {inner_count} materials"
         )
