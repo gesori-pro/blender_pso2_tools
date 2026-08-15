@@ -129,6 +129,7 @@ def export(
         )
 
     restore_bone_flags(context, aqn)
+    clean_effect_nodes(context, aqn)
     name_root_node(context, aqn, path.stem)
 
     if options.get("override_bounding_radius"):
@@ -259,6 +260,57 @@ def restore_bone_flags(context: bpy.types.Context, aqn) -> int:
         fixed += 1
 
     return fixed
+
+
+def clean_effect_nodes(context: bpy.types.Context, aqn) -> tuple[int, int]:
+    """Rebuild the NODO list from the bones that actually belong in it.
+
+    The FBX conversion files every scene node it does not take for a bone
+    into the effect-node list, so an export picks up one entry per mesh
+    object plus the model empty - a body that left with 10 effect nodes
+    comes back with 30. It also keeps the raw Blender names on the real
+    ones, "l_finger_03#2#0" instead of "l_finger_03", which is why
+    restore_bone_flags never matched them. Re-importing such a file turns
+    the junk entries into the whole skeleton: 20 bones instead of 232.
+
+    Effect nodes that map to a Blender bone are kept, renamed to their
+    stem, and get their flags back; everything else is dropped. Returns
+    (kept, dropped).
+    """
+    from AquaModelLibrary.Data.DataTypes.SetLengthStrings import PSO2String
+
+    bone_flags: dict[str, tuple[int, int]] = {}
+    for obj in bpy.data.objects:
+        if obj.type != "ARMATURE":
+            continue
+        for bone in obj.data.bones:  # type: ignore
+            parts = bone.name.split("#")
+            if len(parts) < 3:
+                continue
+            try:
+                bone_flags.setdefault(
+                    parts[0], (int(parts[1], 16), int(parts[2], 16))
+                )
+            except ValueError:
+                continue
+
+    keep = []
+    dropped = 0
+    for node in aqn.nodoList:
+        stem = str(node.boneName.GetString()).split("#")[0]
+        flags = bone_flags.get(stem)
+        if flags is None:
+            dropped += 1
+            continue
+        node.boneName = PSO2String.GeneratePSO2String(stem)
+        node.boneShort1, node.boneShort2 = flags
+        keep.append(node)
+
+    aqn.nodoList.Clear()
+    for node in keep:
+        aqn.nodoList.Add(node)
+
+    return len(keep), dropped
 
 
 @contextmanager
