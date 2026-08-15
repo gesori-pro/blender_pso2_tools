@@ -92,6 +92,16 @@ class PSO2_OT_ExportAqm(  # type: ignore https://github.com/nutti/fake-bpy-modul
 
     # Captured at invoke time: the file browser's context has no armature
     # to inspect by the time draw() runs.
+    target_armature: bpy.props.EnumProperty(
+        name="Character",
+        description=(
+            "Which armature's motion to export. With two characters in the"
+            " scene, export each one's half of a paired animation to its own"
+            " file"
+        ),
+        items=lambda self, context: import_aqm._target_armature_items(context),
+    )
+
     shape_state: bpy.props.StringProperty(options={"HIDDEN", "SKIP_SAVE"})
 
     def invoke(self, context, event):  # type: ignore https://github.com/nutti/fake-bpy-module/issues/376
@@ -109,6 +119,7 @@ class PSO2_OT_ExportAqm(  # type: ignore https://github.com/nutti/fake-bpy-modul
         layout.use_property_split = True
         layout.use_property_decorate = False
 
+        layout.prop(self, "target_armature")
         layout.prop(self, "frame_source")
         layout.prop(self, "player_anim")
         layout.prop(self, "drop_bone_scale")
@@ -119,7 +130,17 @@ class PSO2_OT_ExportAqm(  # type: ignore https://github.com/nutti/fake-bpy-modul
         bake_rest.draw_shape_state(layout, self.shape_state)
 
     def execute(self, context) -> OperatorResult:
-        armature = import_aqm._find_target_armature(context)
+        if self.target_armature and self.target_armature != import_aqm._FROM_SELECTION:
+            armature = context.scene.objects.get(self.target_armature)
+            if armature is None or armature.type != "ARMATURE":
+                self.report(
+                    {"ERROR"},
+                    f"Armature '{self.target_armature}' is no longer in the"
+                    " scene.",
+                )
+                return {"CANCELLED"}
+        else:
+            armature = import_aqm._find_target_armature(context)
         if armature is None:
             self.report(
                 {"ERROR"},
