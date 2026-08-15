@@ -14,9 +14,9 @@ from pathlib import Path
 
 import bpy
 from bpy_extras.io_utils import ExportHelper
-from mathutils import Matrix, Vector, kdtree
+from mathutils import Matrix, Vector
 
-from . import aqm, classes, import_aqm, physics, scene_props
+from . import aqm, classes, import_aqm, scene_props
 from .util import OperatorResult
 
 # FBX to Blender axis conversion baked into the armature object on import.
@@ -203,22 +203,6 @@ class PSO2_OT_ExportAqm(  # type: ignore https://github.com/nutti/fake-bpy-modul
         if dropped:
             message += f", scale reset to 1 on {dropped} bones"
 
-        # Cloth the game swings is the one thing no accuracy here can
-        # match: Blender holds it at its bind position, the game does not.
-        # A hand lined up against a skirt or a frill is therefore lined up
-        # against something that will not be there.
-        if touching := _pose_touches_physics(context, armature):
-            shown = ", ".join(sorted(touching)[:3])
-            more = f" and {len(touching) - 3} more" if len(touching) > 3 else ""
-            self.report(
-                {"WARNING"},
-                message + f". The pose puts a hand on cloth the game"
-                f" simulates ({shown}{more}). Blender shows that cloth at"
-                " rest, so it sits somewhere else in game - place the hand"
-                " against the body, not against the cloth.",
-            )
-            return {"FINISHED"}
-
         # Position keys carry each bone's offset from its parent, so they
         # are where the skeleton's proportions and the character's placement
         # live - not just movement. An action that only rotates writes the
@@ -333,58 +317,6 @@ def _keyed_channels(
             driven.setdefault(match.group(1), set()).add(match.group(2))
 
     return driven
-
-
-def _pose_touches_physics(context, armature, limit: float = 0.005) -> set[str]:
-    """Cloth bones a hand is resting on.
-
-    The game swings these; Blender does not. A pose lined up against a
-    skirt or a frill therefore lands somewhere else in game, which is the
-    one difference no amount of accuracy in this add-on can close.
-    Reported in cm terms: anything within 5 mm counts as touching.
-    """
-    marked = physics.get_physics_bones(armature)
-    if not marked:
-        return set()
-
-    depsgraph = context.evaluated_depsgraph_get()
-    hand = re.compile(r"(^|_)(hand|finger|thumb)")
-
-    hand_points: list = []
-    cloth_points: list[tuple] = []
-    for obj in bpy.data.objects:
-        if obj.type != "MESH" or obj.find_armature() is not armature:
-            continue
-        groups = {g.index: g.name for g in obj.vertex_groups}
-        evaluated = obj.evaluated_get(depsgraph)
-        mesh = evaluated.to_mesh()
-        matrix = evaluated.matrix_world
-        for vertex in mesh.vertices:
-            best = max(vertex.groups, key=lambda g: g.weight, default=None)
-            if best is None or best.weight < 0.5:
-                continue
-            name = groups.get(best.group, "")
-            stem = name.split("#")[0]
-            if name in marked:
-                cloth_points.append((matrix @ vertex.co, marked[name]))
-            elif hand.search(stem):
-                hand_points.append(matrix @ vertex.co)
-        evaluated.to_mesh_clear()
-
-    if not hand_points or not cloth_points:
-        return set()
-
-    tree = kdtree.KDTree(len(cloth_points))
-    for index, (point, _) in enumerate(cloth_points):
-        tree.insert(point, index)
-    tree.balance()
-
-    touching: set[str] = set()
-    for point in hand_points:
-        _, index, distance = tree.find(point)
-        if distance is not None and distance < limit:
-            touching.add(cloth_points[index][1])
-    return touching
 
 
 def _drop_bone_scale(motion) -> int:
