@@ -14,9 +14,11 @@ Sub-nodes are colliders - position, radius and the bones the cloth hits
 - and a chain with none simply never collides: pl_rbd_201630_bw has
 seven chains and no colliders at all.
 
-AquaModelLibrary reads this format too, but its field mapping drops a
-value - on pl_rbd_205990_bw it reports 0.0 where the file holds 0.11 -
-so parameters are read here directly.
+AquaModelLibrary reads this format too, and would be preferred, but it
+cannot serve this module's purpose: FLTDPhysics has no writer, and
+editing a chain's parameters in place needs the byte offset of each
+value, which the library does not expose. Its reader also drops a value
+- on pl_rbd_205990_bw it reports 0.0 where the file holds 0.11.
 """
 
 import struct

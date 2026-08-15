@@ -20,6 +20,9 @@ class IceDataFile:
         name = InternalIceFile.getFileName(array)
         data = bytes(array)
 
+        # ZamboniLib hands an entry back with its own header still on the
+        # front and offers nothing to strip it, so the header's size field
+        # is read here.
         header_size = struct.unpack_from("i", data, offset=0xC)[0]
 
         return IceDataFile(name=name, data=data[header_size:])
