@@ -65,6 +65,16 @@ class PSO2_OT_ImportFnp(  # type: ignore https://github.com/nutti/fake-bpy-modul
         options={"HIDDEN"},
     )
 
+    target_armature: bpy.props.EnumProperty(
+        name="Character",
+        description=(
+            "Which armature takes this character's proportions. With two"
+            " characters in the scene, load each character file onto its own"
+            " armature"
+        ),
+        items=lambda self, context: import_aqm._target_armature_items(context),
+    )
+
     ground_contact: bpy.props.BoolProperty(
         name="Ground Contact",
         description=(
@@ -108,13 +118,24 @@ class PSO2_OT_ImportFnp(  # type: ignore https://github.com/nutti/fake-bpy-modul
         layout.use_property_split = True
         layout.use_property_decorate = False
 
+        layout.prop(self, "target_armature")
         layout.prop(self, "ground_contact")
         layout.prop(self, "outfit_adjust")
         layout.prop(self, "import_colors")
         layout.prop(self, "set_muscularity")
 
     def execute(self, context) -> OperatorResult:
-        armature = import_aqm._find_target_armature(context)
+        if self.target_armature and self.target_armature != import_aqm._FROM_SELECTION:
+            armature = context.scene.objects.get(self.target_armature)
+            if armature is None or armature.type != "ARMATURE":
+                self.report(
+                    {"ERROR"},
+                    f"Armature '{self.target_armature}' is no longer in the"
+                    " scene.",
+                )
+                return {"CANCELLED"}
+        else:
+            armature = import_aqm._find_target_armature(context)
         if armature is None:
             self.report(
                 {"ERROR"},
