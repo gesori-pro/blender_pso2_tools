@@ -661,6 +661,12 @@ class PSO2_UL_ModelList(bpy.types.UIList):
     bl_idname = "PSO2_UL_ModelList"
     layout_type = "DEFAULT"
 
+    # Blender calls filter_items on every redraw, and a dialog redraws on
+    # every mouse move. Sorting all 28k items each time is what makes the
+    # search lag, so the result is cached and only recomputed when an input
+    # that affects it changes.
+    _cache: dict = {}
+
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.use_filter_show = True
@@ -671,6 +677,20 @@ class PSO2_UL_ModelList(bpy.types.UIList):
 
         preferences = get_preferences(context)
         items: Sequence[ListItem] = getattr(data, property)
+
+        key = (
+            id(data),
+            len(items),
+            self.filter_name,
+            self.use_filter_invert,
+            tuple(sorted(preferences.model_search_versions)),
+            tuple(sorted(preferences.model_search_body_types)),
+            tuple(sorted(preferences.model_search_categories)),
+            preferences.model_search_sort,
+        )
+        cached = PSO2_UL_ModelList._cache.get("result")
+        if cached is not None and PSO2_UL_ModelList._cache.get("key") == key:
+            return cached
 
         if self.filter_name:
             # https://github.com/nutti/fake-bpy-module/issues/376
@@ -758,6 +778,7 @@ class PSO2_UL_ModelList(bpy.types.UIList):
                     _sort, lambda e: e[1]
                 )
 
+        PSO2_UL_ModelList._cache = {"key": key, "result": (flt_flags, flt_neworder)}
         return flt_flags, flt_neworder
 
     def draw_filter(self, context, layout):
