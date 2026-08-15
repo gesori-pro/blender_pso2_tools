@@ -105,6 +105,16 @@ class PSO2_OT_ImportAqm(  # type: ignore https://github.com/nutti/fake-bpy-modul
         default=True,
     )
 
+    target_armature: bpy.props.EnumProperty(
+        name="Character",
+        description=(
+            "Which armature receives this motion. With two characters in the"
+            " scene, import each one's motion onto its own armature to line"
+            " up a paired animation"
+        ),
+        items=lambda self, context: _target_armature_items(context),
+    )
+
     # Captured at invoke time: the file browser's context has no armature
     # to inspect by the time draw() runs.
     shape_state: bpy.props.StringProperty(options={"HIDDEN", "SKIP_SAVE"})
@@ -116,6 +126,7 @@ class PSO2_OT_ImportAqm(  # type: ignore https://github.com/nutti/fake-bpy-modul
         layout.use_property_split = True
         layout.use_property_decorate = False
 
+        layout.prop(self, "target_armature")
         layout.prop(self, "set_frame_range")
         layout.prop(self, "set_fps")
         layout.prop(self, "ignore_translation_keys")
@@ -127,7 +138,17 @@ class PSO2_OT_ImportAqm(  # type: ignore https://github.com/nutti/fake-bpy-modul
         bake_rest.draw_shape_state(layout, self.shape_state)
 
     def execute(self, context) -> OperatorResult:
-        armature = _find_target_armature(context)
+        if self.target_armature and self.target_armature != _FROM_SELECTION:
+            armature = context.scene.objects.get(self.target_armature)
+            if armature is None or armature.type != "ARMATURE":
+                self.report(
+                    {"ERROR"},
+                    f"Armature '{self.target_armature}' is no longer in the"
+                    " scene.",
+                )
+                return {"CANCELLED"}
+        else:
+            armature = _find_target_armature(context)
         if armature is None:
             self.report(
                 {"ERROR"},
@@ -248,6 +269,34 @@ class PSO2_OT_ImportAqm(  # type: ignore https://github.com/nutti/fake-bpy-modul
 
         self.shape_state = bake_rest.shape_state(_find_target_armature(context))
         return self.invoke_popup(context)
+
+
+_FROM_SELECTION = "__FROM_SELECTION__"
+
+# Blender does not keep the strings a dynamic EnumProperty callback returns
+# alive; this reference does, or the menu shows garbage.
+_target_items: list[tuple[str, str, str]] = []
+
+
+def _target_armature_items(context) -> list[tuple[str, str, str]]:
+    items = [
+        (
+            _FROM_SELECTION,
+            "From Selection",
+            "The armature found from the current selection",
+        )
+    ]
+    view_layer = getattr(context, "view_layer", None)
+    if view_layer is not None:
+        items += [
+            (obj.name, obj.name.split("#")[0], "")
+            for obj in view_layer.objects
+            if obj.type == "ARMATURE"
+        ]
+
+    _target_items.clear()
+    _target_items.extend(items)
+    return _target_items
 
 
 def _find_target_armature(context: bpy.types.Context) -> bpy.types.Object | None:
