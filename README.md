@@ -162,6 +162,12 @@ This will install the add-on in Blender, then symlink it back to this repo. The 
 
 Run the script without `--editable` to install the add-on without a symlink.
 
+To build the add-on without installing it, e.g. for a release, run:
+
+```pwsh
+uv run scripts/build_package.py
+```
+
 ## Acknowledgements
 
 This fork exists because two people spent years on this and shared all of it.
@@ -170,9 +176,3 @@ This fork exists because two people spent years on this and shared all of it.
 - **[Shadowth117](https://github.com/Shadowth117)** reverse engineered the formats themselves: [PSO2-Aqua-Library](https://github.com/Shadowth117/PSO2-Aqua-Library), [Aqua-Toolset](https://github.com/Shadowth117/Aqua-Toolset), and [Zamboni](https://github.com/Shadowth117/Zamboni). Every model, motion, and archive this add-on touches goes through his work.
 
 Boundless gratitude to both.
-
-To build the add-on without installing it, e.g. for a release, run:
-
-```pwsh
-uv run scripts/build_package.py
-```
