@@ -35,6 +35,7 @@ from . import (
     import_fnp,
     import_model,
     objects,
+    parts,
     proportions,
     scene_props,
 )
@@ -70,7 +71,12 @@ _FACE_TEXTURE_PARTS = (
 
 # Texture file suffix -> the image node that carries it, matching what the
 # model importer wires for skin (Diffuse<-_d, Color Mask<-_m, ...).
-_TEXTURE_NODES = {"d": "Diffuse", "m": "Color Mask", "s": "Multi Map", "n": "Normal Map"}
+_TEXTURE_NODES = {
+    "d": "Diffuse",
+    "m": "Color Mask",
+    "s": "Multi Map",
+    "n": "Normal Map",
+}
 
 # Face paints: part-id field -> its opacity slider. The game layers the
 # first over the skin and the second over that.
@@ -188,6 +194,52 @@ def _paint_face_textures(
                     painted = True
 
     return painted
+
+
+# The face carries its neck as a skirt below the jaw, and ships one copy per
+# body region a costume can cover, so that whichever region the outfit hides
+# takes the neck with it. The copies are coincident - all four wrap the full
+# 360 degrees over the same 7cm of height with the same 129cm2 of surface,
+# differing only by ~2mm of radius and by vertex count - so drawing them all
+# stacks their rims into visible steps under the chin.
+_FACE_NECK_MESH_IDS = (
+    parts.MeshId.BreastNeck,
+    parts.MeshId.Front,
+    parts.MeshId.Ornament1,
+    parts.MeshId.Back,
+)
+
+
+def _keep_one_neck_variant(context) -> int:
+    """Hide all but one of the face's interchangeable neck skirts.
+
+    BreastNeck is the bare-skin copy and the one to keep: it is what shows
+    with nothing covering the throat, which is the state we import into.
+    """
+    found: dict[parts.MeshId, list[bpy.types.Object]] = {}
+    for obj in context.selected_objects:
+        if obj.type != "MESH":
+            continue
+        try:
+            mesh_id = parts.get_mesh_id(obj.name)
+        except ValueError:
+            continue
+        if mesh_id in _FACE_NECK_MESH_IDS:
+            found.setdefault(mesh_id, []).append(obj)
+
+    if len(found) < 2:
+        return 0
+
+    keep = next(i for i in _FACE_NECK_MESH_IDS if i in found)
+    hidden = 0
+    for mesh_id, objects_ in found.items():
+        if mesh_id == keep:
+            continue
+        for obj in objects_:
+            obj.hide_viewport = True
+            obj.hide_render = True
+            hidden += 1
+    return hidden
 
 
 def _face_skin_materials() -> list[bpy.types.Material]:
@@ -389,6 +441,10 @@ class PSO2_OT_ImportCharacter(  # type: ignore https://github.com/nutti/fake-bpy
                     missing.append(f"{suffix}={part_id}")
                     continue
                 import_model.import_object(self, context, obj, high_quality=True)
+                if suffix == "faceTypePart":
+                    debug_print(
+                        f"Face neck: hid {_keep_one_neck_variant(context)} spare copies"
+                    )
                 loaded.append(obj.name)
 
             for suffix, getter, fragments, skip in _FACE_TEXTURE_PARTS:
@@ -421,7 +477,9 @@ class PSO2_OT_ImportCharacter(  # type: ignore https://github.com/nutti/fake-bpy
                 diffuse = _load_part_images(obj, data_path).get("d")
                 opacity = _face_paint_alpha(char, opacity_field)
                 painted = diffuse is not None and [
-                    m for m in face_materials if _layer_face_paint(m, diffuse, opacity, layer)
+                    m
+                    for m in face_materials
+                    if _layer_face_paint(m, diffuse, opacity, layer)
                 ]
                 if painted:
                     loaded.append(obj.name)
