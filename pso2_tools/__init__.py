@@ -28,6 +28,7 @@ from . import (
     export_aqp,
     import_aqm,
     import_aqp,
+    import_character,
     import_fnp,
     import_ice,
     import_search,
@@ -81,6 +82,10 @@ def menu_func_import(self: bpy.types.Operator, context: bpy.types.Context):
         import_fnp.PSO2_OT_ImportFnp.bl_idname,
         # every body type: (male/female) x (human/newman/cast/deuman)
         text="PSO2 Character (.fnp/.mhp/...)",
+    )
+    self.layout.operator(
+        import_character.PSO2_OT_ImportCharacter.bl_idname,
+        text="PSO2 Full Character (.fnp)",
     )
     # Shape adjusts are reached from Scene > PSO2 Appearance > Shape Adjust,
     # where the sliders and the rest-pose bake live. The operator stays
