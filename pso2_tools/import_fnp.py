@@ -27,15 +27,11 @@ from pathlib import Path
 
 import bpy
 from bpy_extras.io_utils import ImportHelper
-from mathutils import Matrix, Quaternion, Vector
+from mathutils import Vector
 
 from . import char_colors, charfile, classes, import_aqm, proportions, scene_props
 from .debug import debug_print
 from .util import OperatorResult
-
-# PSO2 X is the bone length axis; Blender's is Y. Components 0 and 1 swap,
-# Z flips. det(+1), a proper rotation (SPEC §6-2).
-_PERM = Matrix(((0.0, 1.0, 0.0), (1.0, 0.0, 0.0), (0.0, 0.0, -1.0)))
 
 # NOTE (SPEC §9-2, unverified): muscleMass is a shader/normal-map blend,
 # not a bone deform. Whether the addon's MUSCULARITY property maps as
@@ -440,18 +436,12 @@ def apply_proportions(armature: bpy.types.Object, bones: dict) -> dict:
         d = delta["pos"]
         pose_bone.location = rest_rotation.inverted() @ Vector((d[1], d[0], -d[2]))
 
-        # SPEC §6-10: the game composes delta * rest in the parent-local
-        # frame, so the bone-local pose is rest^-1 * delta * rest, with the
-        # delta moved into Blender's basis by the same permutation.
-        q = delta.get("rotQuat")
-        if q is not None and any(abs(component) > 1e-9 for component in q[:3]):
-            m_pso2 = Quaternion((q[3], q[0], q[1], q[2])).to_matrix()
-            m_blender = _PERM @ m_pso2 @ _PERM.transposed()
-            pose_bone.rotation_quaternion = (
-                rest_rotation.inverted().to_matrix()
-                @ m_blender
-                @ rest_rotation.to_matrix()
-            ).to_quaternion()
+        # The table carries a rotation for each slider too, but the game
+        # throws it away: reading the live skeleton out of a running demo,
+        # every bone's rotation is its rest rotation to three decimals,
+        # while this character's table asks for 11.2 degrees on each breast
+        # bone, 5.3 on spine2 and 1.8 on the neck. Applying it tilted the
+        # whole upper body away from what the game draws.
 
         # The pose was reset first, so what was just written IS the delta
         # from neutral. Recorded so motion import can keep the body
