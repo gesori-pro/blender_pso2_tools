@@ -21,14 +21,12 @@ if "reloader" in locals():
     # ruff: enable[F821]
 
 from . import (
-    bake_rest,
     classes,
     dotnet,
     export_aqm,
     export_aqp,
     import_aqm,
     import_aqp,
-    import_character,
     import_fnp,
     import_ice,
     import_search,
@@ -36,8 +34,10 @@ from . import (
     scene_props,
     shape_sliders,
 )
-# Imported for the side effect of registering its operator: it has no menu
-# entry, so nothing else in this module refers to it.
+# Imported for the side effect of registering their operators: they have no
+# menu entry, so nothing else in this module refers to them.
+from . import bake_rest as bake_rest
+from . import import_character as import_character
 from . import import_shape_adjust as import_shape_adjust
 from . import reloader as reloader
 from .panels import appearance as appearance
@@ -83,10 +83,9 @@ def menu_func_import(self: bpy.types.Operator, context: bpy.types.Context):
         # every body type: (male/female) x (human/newman/cast/deuman)
         text="PSO2 Character (.fnp/.mhp/...)",
     )
-    self.layout.operator(
-        import_character.PSO2_OT_ImportCharacter.bl_idname,
-        text="PSO2 Full Character (.fnp)",
-    )
+    # The full-character import stays off this menu until its face import
+    # holds up. The operator stays registered, so F3 search still finds
+    # "Import Character (.fnp)".
     # Shape adjusts are reached from Scene > PSO2 Appearance > Shape Adjust,
     # where the sliders and the rest-pose bake live. The operator stays
     # registered, so F3 search still finds "Import Shape Adjust".
