@@ -608,14 +608,24 @@ def _strip_zero_uv_layers(objects) -> int:
 
 
 def _import_skin_textures(
-    context: bpy.types.Context, high_quality: bool, use_t2_skin: bool
+    context: bpy.types.Context,
+    high_quality: bool,
+    use_t2_skin: bool,
+    skin_id: int | None = None,
 ) -> list[bpy.types.Image]:
+    """Load a skin's textures into the file, by id or the preference default.
+
+    The character import passes the file's skinTextureSet so the face and
+    body take their skin from the same set; without an id this falls back
+    to the preference default for the body type.
+    """
     preferences = get_preferences(context)
     data_path = preferences.get_pso2_data_path()
 
-    skin_id = int(
-        preferences.default_skin_t2 if use_t2_skin else preferences.default_skin_t1
-    )
+    if skin_id is None:
+        skin_id = int(
+            preferences.default_skin_t2 if use_t2_skin else preferences.default_skin_t1
+        )
 
     with closing(objects.ObjectDatabase(context)) as db:
         result = db.get_skins(item_id=skin_id)

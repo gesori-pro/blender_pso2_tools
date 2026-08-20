@@ -9,7 +9,9 @@ character often stacks a dozen and they rarely help a base import.
 Parts come in two shapes. Most (hair, costume, ears, teeth) carry their own
 model, so they import like any object. Eyes, eyebrows and eyelashes are
 texture-only - their mesh already lives in the face model - so their textures
-are wired onto the face's materials instead.
+are wired onto the face's materials instead, and face paints are blended over
+the face's skin at their opacity sliders. The character's own skin set loads
+before any model so the face and body colour the neck from the same textures.
 
 Colours are read into the scene *before* any model loads, because a material
 bakes the scene colour it sees at import time; setting it afterwards leaves the
@@ -33,6 +35,7 @@ from . import (
     import_model,
     objects,
     proportions,
+    scene_props,
 )
 from .debug import debug_print
 from .preferences import get_preferences
@@ -68,6 +71,23 @@ _FACE_TEXTURE_PARTS = (
 # model importer wires for skin (Diffuse<-_d, Color Mask<-_m, ...).
 _TEXTURE_NODES = {"d": "Diffuse", "m": "Color Mask", "s": "Multi Map", "n": "Normal Map"}
 
+# Face paints: part-id field -> its opacity slider. The game layers the
+# first over the skin and the second over that.
+_FACE_PAINT_PARTS = (
+    ("makeup1Part", "facePaint1Opacity"),
+    ("makeup2Part", "facePaint2Opacity"),
+)
+
+
+def _find_slider_ratio(char: charfile.CharacterFile, suffix: str) -> float:
+    """A -127..127 slider under any field ending in `suffix`, as 0..1."""
+    for name in char:
+        if name.split(".")[-1] == suffix:
+            value = char[name]
+            if isinstance(value, int):
+                return max(0.0, min(1.0, (value + 127) / 254.0))
+    return 0.5
+
 
 def _find_part_id(char: charfile.CharacterFile, suffix: str) -> int:
     """The part id stored under any of the ...Part fields ending in `suffix`.
@@ -84,25 +104,17 @@ def _find_part_id(char: charfile.CharacterFile, suffix: str) -> int:
     return 0
 
 
-def _paint_face_textures(
-    obj: objects.CmxObjectBase,
-    data_path: Path,
-    fragments: tuple[str, ...],
-    skip: str | None,
-) -> bool:
-    """Wire a texture-only part's images onto the face's materials.
-
-    Eyes/brows/lashes ship as a bare set of `_d/_m/_s/_n` textures with no
-    model, so the face model's matching materials are painted with them
-    directly. Returns whether any image was placed.
-    """
+def _load_part_images(
+    obj: objects.CmxObjectBase, data_path: Path
+) -> dict[str, bpy.types.Image]:
+    """Load a texture-only part's images, keyed by their `_d/_m/...` suffix."""
     files = obj.get_files()
     if not files:
-        return False
+        return {}
 
     ice_path = import_model._get_ice_path(files[0], data_path, True)
     if ice_path is None or not ice_path.exists():
-        return False
+        return {}
 
     images: dict[str, bpy.types.Image] = {}
     with tempfile.TemporaryDirectory(prefix="pso2_char_") as tmp:
@@ -116,6 +128,22 @@ def _paint_face_textures(
             image.pack()  # the temp file is about to be removed
             images[suffix] = image
 
+    return images
+
+
+def _paint_face_textures(
+    obj: objects.CmxObjectBase,
+    data_path: Path,
+    fragments: tuple[str, ...],
+    skip: str | None,
+) -> bool:
+    """Wire a texture-only part's images onto the face's materials.
+
+    Eyes/brows/lashes ship as a bare set of `_d/_m/_s/_n` textures with no
+    model, so the face model's matching materials are painted with them
+    directly. Returns whether any image was placed.
+    """
+    images = _load_part_images(obj, data_path)
     if not images:
         return False
 
@@ -138,6 +166,77 @@ def _paint_face_textures(
                     painted = True
 
     return painted
+
+
+def _face_skin_materials() -> list[bpy.types.Material]:
+    """The face's skin materials: the NGS skin shader tagged [fc]."""
+    return [
+        m
+        for m in bpy.data.materials
+        if m.use_nodes and "(1102p" in m.name and "[fc]" in m.name
+    ]
+
+
+def _clear_face_paint(material: bpy.types.Material) -> None:
+    """Remove any face-paint layers a previous import left on the material."""
+    tree = material.node_tree
+    for node in list(tree.nodes):
+        if node.name.startswith("Face Paint"):
+            tree.nodes.remove(node)
+
+    colorize = tree.nodes.get("Skin Colorize")
+    skin_group = tree.nodes.get("PSO2 NGS Skin")
+    if colorize and skin_group:
+        tree.links.new(colorize.outputs["Result"], skin_group.inputs["Diffuse"])
+
+
+def _layer_face_paint(
+    material: bpy.types.Material,
+    image: bpy.types.Image,
+    opacity: float,
+    index: int,
+) -> bool:
+    """Blend one face paint over the skin, before the shader group.
+
+    The game composites face paints onto the face texture at the file's
+    opacity slider. The same blend goes between the skin colorize and the
+    shader group here, factored by the paint's own alpha times that
+    opacity, so paints stack in slot order like they do in game.
+    """
+    tree = material.node_tree
+    skin_group = tree.nodes.get("PSO2 NGS Skin")
+    if skin_group is None or not skin_group.inputs["Diffuse"].links:
+        return False
+
+    current = skin_group.inputs["Diffuse"].links[0].from_socket
+    base_x, base_y = skin_group.location
+
+    tex = tree.nodes.new("ShaderNodeTexImage")
+    tex.name = tex.label = f"Face Paint {index}"
+    tex.image = image
+    tex.location = (base_x - 900, base_y + 300 + index * 350)
+
+    fac = tree.nodes.new("ShaderNodeMath")
+    fac.name = f"Face Paint {index} Opacity"
+    fac.label = fac.name
+    fac.operation = "MULTIPLY"
+    fac.inputs[1].default_value = opacity
+    fac.location = (tex.location.x + 320, tex.location.y - 120)
+
+    mix = tree.nodes.new("ShaderNodeMix")
+    mix.name = f"Face Paint {index} Mix"
+    mix.label = mix.name
+    mix.data_type = "RGBA"
+    mix.blend_type = "MIX"
+    mix.clamp_factor = True
+    mix.location = (tex.location.x + 560, tex.location.y)
+
+    tree.links.new(tex.outputs["Alpha"], fac.inputs[0])
+    tree.links.new(fac.outputs["Value"], mix.inputs["Factor"])
+    tree.links.new(current, mix.inputs["A"])
+    tree.links.new(tex.outputs["Color"], mix.inputs["B"])
+    tree.links.new(mix.outputs["Result"], skin_group.inputs["Diffuse"])
+    return True
 
 
 @classes.register
@@ -192,12 +291,27 @@ class PSO2_OT_ImportCharacter(  # type: ignore https://github.com/nutti/fake-bpy
         # built, so they have to be in place before anything imports.
         if self.import_colors:
             char_colors.apply_to_scene(context, char)
+            self._apply_muscularity(context, char)
 
         model_parts = _HEAD_PARTS + (_BODY_PARTS if self.include_body else ())
         loaded: list[str] = []
         missing: list[str] = []
 
         with closing(objects.ObjectDatabase(context)) as db:
+            # The character's skin goes into the file before any model:
+            # each part's import takes whatever skin images are already
+            # loaded, and the first one would otherwise pull in the
+            # preference default instead. The face and body sharing one
+            # skin set is what keeps the neck seamless.
+            skin_id = _find_part_id(char, "skinTextureSet")
+            if skin_id > 0:
+                if import_model._import_skin_textures(
+                    context, high_quality=True, use_t2_skin=False, skin_id=skin_id
+                ):
+                    loaded.append(f"skin={skin_id}")
+                else:
+                    missing.append(f"skinTextureSet={skin_id}")
+
             for suffix, getter in model_parts:
                 part_id = _find_part_id(char, suffix)
                 if part_id <= 0:
@@ -222,6 +336,30 @@ class PSO2_OT_ImportCharacter(  # type: ignore https://github.com/nutti/fake-bpy
                 else:
                     missing.append(f"{suffix}={part_id} (no face to paint)")
 
+            face_materials = _face_skin_materials()
+            for material in face_materials:
+                _clear_face_paint(material)
+
+            for layer, (part_field, opacity_field) in enumerate(
+                _FACE_PAINT_PARTS, start=1
+            ):
+                part_id = _find_part_id(char, part_field)
+                if part_id <= 0:
+                    continue
+                obj = next(iter(db.get_facepaint(part_id)), None)
+                if obj is None:
+                    missing.append(f"{part_field}={part_id}")
+                    continue
+                diffuse = _load_part_images(obj, data_path).get("d")
+                opacity = _find_slider_ratio(char, opacity_field)
+                painted = diffuse is not None and [
+                    m for m in face_materials if _layer_face_paint(m, diffuse, opacity, layer)
+                ]
+                if painted:
+                    loaded.append(obj.name)
+                else:
+                    missing.append(f"{part_field}={part_id} (no face to paint)")
+
         if self.import_proportions:
             self._apply_proportions(context, char)
 
@@ -237,6 +375,24 @@ class PSO2_OT_ImportCharacter(  # type: ignore https://github.com/nutti/fake-bpy
             self.report({"INFO"}, f"Loaded {len(loaded)} parts.")
 
         return {"FINISHED"}
+
+    def _apply_muscularity(self, context, char: charfile.CharacterFile) -> None:
+        """Set the scene's muscle blend to the character's muscle mass.
+
+        The skin shaders mix their base and muscular texture sets by this
+        value, so leaving it at the default renders every character at the
+        same half-muscled skin regardless of the file.
+        """
+        try:
+            muscle_mass = float(char["baseDOC.muscleMass"])
+        except (KeyError, TypeError, ValueError):
+            return
+
+        value = max(0.0, min(1.0, muscle_mass / import_fnp._MUSCLE_MASS_MAX))
+        try:
+            setattr(context.scene, scene_props.MUSCULARITY, value)
+        except (AttributeError, TypeError):
+            debug_print("Could not set scene muscularity")
 
     def _apply_proportions(self, context, char: charfile.CharacterFile) -> None:
         """Pose every imported armature to the body-shape sliders.
@@ -263,3 +419,62 @@ class PSO2_OT_ImportCharacter(  # type: ignore https://github.com/nutti/fake-bpy
                 debug_print(f"Posed {obj.name} ({summary['applied']} bones)")
 
         debug_print(f"Applied proportions to {posed} armatures")
+        self._attach_head_parts(context)
+
+    def _attach_head_parts(self, context) -> None:
+        """Move each head part's armature onto the posed body's head bone.
+
+        Every part imports as its own armature, parked where the model was
+        authored, but the body sliders move the head attach point. The game
+        runs all the parts on one skeleton so they can never drift; here
+        the face's neck skirt is alpha-faded over the body's neck, and the
+        couple of centimetres of drift open a see-through ring where the
+        fade has nothing behind it.
+        """
+        context.view_layer.update()
+
+        body = None
+        parts = []
+        for obj in context.scene.objects:
+            if obj.type != "ARMATURE":
+                continue
+            bases = {b.name.split("#")[0] for b in obj.pose.bones}
+            if "body_root" in bases:
+                body = obj
+            else:
+                parts.append(obj)
+        if body is None or not parts:
+            return
+
+        head = next(
+            (
+                b
+                for name in ("head", "neck2", "neck1")
+                for b in body.pose.bones
+                if b.name.split("#")[0] == name
+            ),
+            None,
+        )
+        if head is None:
+            return
+        target = body.matrix_world @ head.head
+
+        moved = 0
+        for obj in parts:
+            root = next(
+                (
+                    b
+                    for b in obj.pose.bones
+                    if b.name.split("#")[0].rstrip("0123456789") == "head"
+                ),
+                None,
+            )
+            if root is None:
+                continue
+            current = obj.matrix_world @ root.head
+            delta = target - current
+            if delta.length > 1e-5:
+                obj.matrix_world.translation += delta
+                moved += 1
+
+        debug_print(f"Attached {moved} head parts to {head.name}")
