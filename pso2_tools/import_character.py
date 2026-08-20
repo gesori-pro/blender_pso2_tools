@@ -196,6 +196,133 @@ def _paint_face_textures(
     return painted
 
 
+def _body_armature(context) -> bpy.types.Object | None:
+    """The armature that is the whole character's skeleton, not a part's."""
+    for obj in context.scene.objects:
+        if obj.type == "ARMATURE" and any(
+            bone.name.split("#")[0] == "body_root" for bone in obj.data.bones
+        ):
+            return obj
+    return None
+
+
+def _weight_deficit(obj: bpy.types.Object) -> list[float]:
+    """How much of each vertex's skin weight never landed on a bone."""
+    return [max(0.0, 1.0 - sum(g.weight for g in v.groups)) for v in obj.data.vertices]
+
+
+# A mesh either rides the root node for a real share of its skin or not at
+# all. Below this, the gap is the rounding a handful of vertices pick up
+# from influences the import dropped for other reasons, and moving it onto
+# a body bone would drag scattered vertices out of the face.
+_ROOT_WEIGHT_FLOOR = 0.05
+
+# How far the part's origin may sit from a body bone and still be taken for
+# it. The neighbouring candidates are 4cm away, so this only has to absorb
+# the wobble in where a part model is authored.
+_ROOT_BONE_TOLERANCE = 0.02
+
+
+def _bone_at(body: bpy.types.Object, point, tolerance: float):
+    """The body bone resting at `point`, if one rests close enough to it."""
+    best = None
+    best_distance = tolerance
+    for bone in body.data.bones:
+        distance = ((body.matrix_world @ bone.head_local) - point).length
+        if distance < best_distance:
+            best, best_distance = bone, distance
+    return best
+
+
+def _add_proxy_bone(
+    armature: bpy.types.Object, name: str, matrix, length: float
+) -> None:
+    """Give `armature` a bone standing in for a body bone.
+
+    It takes the body bone's name so the proportion pass, which matches by
+    name, drives it like any other, and its rest transform so the scales
+    that pass writes mean the same thing on both. Everything about the
+    body bone is passed in by value: switching an armature into edit mode
+    re-points the Bone objects held on another armature, so a reference
+    read afterwards names some unrelated bone.
+    """
+    previous = bpy.context.view_layer.objects.active
+    if previous is not None and previous.mode != "OBJECT":
+        bpy.ops.object.mode_set(mode="OBJECT")
+    bpy.context.view_layer.objects.active = armature
+    bpy.ops.object.mode_set(mode="EDIT")
+    try:
+        edit_bones = armature.data.edit_bones
+        if name in edit_bones:
+            edit_bones.remove(edit_bones[name])
+        edit_bone = edit_bones.new(name)
+        edit_bone.head = (0.0, 0.0, 0.0)
+        edit_bone.tail = (0.0, length, 0.0)
+        edit_bone.matrix = matrix
+        edit_bone.length = length
+        edit_bone.use_deform = True
+    finally:
+        bpy.ops.object.mode_set(mode="OBJECT")
+        bpy.context.view_layer.objects.active = previous
+
+
+def _restore_root_node_weights(context) -> int:
+    """Re-attach the skin weights the model's dropped root node carried.
+
+    A part model's first node is not one of the part's own bones: it is
+    the body bone the part hangs from, and for a face that is the neck.
+    The importer folds that node into the armature object instead of
+    keeping it as a bone, so the weights aimed at it have nowhere to land
+    and are dropped - here, half the neck skirt's skin, and three quarters
+    of it on some copies. Those vertices then ride the armature rigidly,
+    holding the width the model was authored at while the body's neck
+    shrinks under the sliders, which reads as a collar standing off the
+    neck instead of as the neck itself.
+    """
+    body = _body_armature(context)
+    if body is None:
+        return 0
+
+    by_armature: dict[bpy.types.Object, list[bpy.types.Object]] = {}
+    for obj in context.scene.objects:
+        if obj.type == "MESH" and obj.parent and obj.parent.type == "ARMATURE":
+            by_armature.setdefault(obj.parent, []).append(obj)
+
+    restored = 0
+    for armature, meshes in by_armature.items():
+        if armature == body:
+            continue
+
+        needy = []
+        for mesh in meshes:
+            deficit = _weight_deficit(mesh)
+            if deficit and sum(deficit) / len(deficit) >= _ROOT_WEIGHT_FLOOR:
+                needy.append((mesh, deficit))
+        if not needy:
+            continue
+
+        bone = _bone_at(body, armature.matrix_world.translation, _ROOT_BONE_TOLERANCE)
+        if bone is None:
+            debug_print(
+                f"No body bone under {armature.name}; left its root weights off"
+            )
+            continue
+
+        name = bone.name
+        matrix = (
+            armature.matrix_world.inverted() @ body.matrix_world @ bone.matrix_local
+        )
+        _add_proxy_bone(armature, name, matrix, bone.length)
+        for mesh, deficit in needy:
+            group = mesh.vertex_groups.get(name) or mesh.vertex_groups.new(name=name)
+            for index, weight in enumerate(deficit):
+                if weight > 1e-4:
+                    group.add([index], weight, "REPLACE")
+                    restored += 1
+
+    return restored
+
+
 # The face carries its neck as a skirt below the jaw, and ships one copy per
 # body region a costume can cover, so that whichever region the outfit hides
 # takes the neck with it. The copies are coincident - all four wrap the full
@@ -455,6 +582,12 @@ class PSO2_OT_ImportCharacter(  # type: ignore https://github.com/nutti/fake-bpy
                         f"Face neck: hid {_keep_one_neck_variant(context)} spare copies"
                     )
                 loaded.append(obj.name)
+
+            # Head parts import before the body, so this waits until the
+            # skeleton it has to name its bones after is in the scene.
+            debug_print(
+                f"Rewired {_restore_root_node_weights(context)} root-node weights"
+            )
 
             for suffix, getter, fragments, skip in _FACE_TEXTURE_PARTS:
                 part_id = _find_part_id(char, suffix)
