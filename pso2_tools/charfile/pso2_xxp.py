@@ -34,9 +34,12 @@ import json
 import struct
 import zlib
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, TYPE_CHECKING
 
 from .pso2_blowfish_tables import PBOX, SBOX
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 MASK = 0xFFFFFFFF
 CHARACTER_BLOWFISH_KEY = 0x9A46D7C8  # 2588334024
@@ -151,7 +154,7 @@ def _stored_crc(data: bytes) -> int:
 
 
 class Field:
-    __slots__ = ("name", "offset", "type", "count")
+    __slots__ = ("count", "name", "offset", "type")
 
     def __init__(self, d: dict) -> None:
         self.name: str = d["name"]
@@ -199,7 +202,7 @@ class CharacterFile:
     # ---- file io -------------------------------------------------------
 
     @classmethod
-    def load(cls, path: Path | str) -> "CharacterFile":
+    def load(cls, path: Path | str) -> CharacterFile:
         path = Path(path)
         raw = path.read_bytes()
         version, body_size, stored_crc, _ = struct.unpack_from("<iiIi", raw, 0)

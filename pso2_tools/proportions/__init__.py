@@ -21,7 +21,10 @@ import json
 import math
 from pathlib import Path
 
-from ..charfile import CharacterFile
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..charfile import CharacterFile
 
 _DATA_DIR = Path(__file__).parent
 
@@ -66,8 +69,8 @@ def blend(value: int, neutral, at_min, at_max):
     """
     t = value / 127.0
     if t < 0.0:
-        return [n + (lo - n) * -t for n, lo in zip(neutral, at_min)]
-    return [n + (hi - n) * t for n, hi in zip(neutral, at_max)]
+        return [n + (lo - n) * -t for n, lo in zip(neutral, at_min, strict=False)]
+    return [n + (hi - n) * t for n, hi in zip(neutral, at_max, strict=False)]
 
 
 def quat_mul(a, b):
@@ -171,7 +174,7 @@ def outfit_adjust(char: CharacterFile) -> dict[str, list[float]]:
             continue
         for bone, mul in adjust.get(slot, {}).get(str(part_id), {}).items():
             current = result.setdefault(bone, [1.0, 1.0, 1.0])
-            result[bone] = [a * b for a, b in zip(current, mul)]
+            result[bone] = [a * b for a, b in zip(current, mul, strict=False)]
 
     return result
 
@@ -217,10 +220,10 @@ def compute(
             lo, hi = deltas[MIN_KEY], deltas[MAX_KEY]
 
             s = blend(value, (1.0, 1.0, 1.0), lo["scaleMul"], hi["scaleMul"])
-            slot["scale"] = [x * y for x, y in zip(slot["scale"], s)]
+            slot["scale"] = [x * y for x, y in zip(slot["scale"], s, strict=False)]
 
             p = blend(value, (0.0, 0.0, 0.0), lo["posDelta"], hi["posDelta"])
-            slot["pos"] = [x + y for x, y in zip(slot["pos"], p)]
+            slot["pos"] = [x + y for x, y in zip(slot["pos"], p, strict=False)]
 
             if "rotDeltaQuat" in lo:
                 q = blend_quat(value, lo["rotDeltaQuat"], hi["rotDeltaQuat"])
@@ -246,11 +249,11 @@ def compute(
 
     for bone_key, mul in table.get("_baseCorrection", {}).items():
         slot = slot_for(bone_key)
-        slot["scale"] = [x * y for x, y in zip(slot["scale"], mul)]
+        slot["scale"] = [x * y for x, y in zip(slot["scale"], mul, strict=False)]
 
     for bone_key, delta in table.get("_baseCorrectionPos", {}).items():
         slot = slot_for(bone_key)
-        slot["pos"] = [x + y for x, y in zip(slot["pos"], delta)]
+        slot["pos"] = [x + y for x, y in zip(slot["pos"], delta, strict=False)]
 
     for bone_key, q in table.get("_baseCorrectionRot", {}).items():
         slot = slot_for(bone_key)
@@ -260,7 +263,7 @@ def compute(
     outfit_bones = outfit_adjust(char) if apply_outfit_adjust else {}
     for bone_key, mul in outfit_bones.items():
         slot = slot_for(bone_key)
-        slot["scale"] = [x * y for x, y in zip(slot["scale"], mul)]
+        slot["scale"] = [x * y for x, y in zip(slot["scale"], mul, strict=False)]
 
     return {
         "source": Path(weights_path).name,

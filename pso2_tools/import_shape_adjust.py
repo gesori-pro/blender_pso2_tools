@@ -145,13 +145,14 @@ def extract_frame1_deltas(motion: aqm.AqmMotion) -> dict:
             if not key_set.vec4_keys:
                 continue
 
-            keys = dict(zip(key_set.frames(), key_set.vec4_keys))
+            keys = dict(zip(key_set.frames(), key_set.vec4_keys, strict=False))
 
             if key_set.key_type == aqm.KEY_TYPE_SCALE:
                 if 0 in keys and 1 in keys:
                     f0, f1 = keys[0], keys[1]
                     mul = [
-                        a / b if abs(b) > 1e-9 else 1.0 for a, b in zip(f1[:3], f0[:3])
+                        a / b if abs(b) > 1e-9 else 1.0
+                        for a, b in zip(f1[:3], f0[:3], strict=False)
                     ]
                 elif len(keys) == 1:
                     mul = list(next(iter(keys.values()))[:3])
@@ -173,7 +174,7 @@ def extract_frame1_deltas(motion: aqm.AqmMotion) -> dict:
             f0, f1 = keys[0], keys[1]
 
             if key_set.key_type == aqm.KEY_TYPE_POSITION:
-                diff = [a - b for a, b in zip(f1[:3], f0[:3])]
+                diff = [a - b for a, b in zip(f1[:3], f0[:3], strict=False)]
                 if any(abs(d) > 1e-9 for d in diff):
                     entry["pos"] = diff
             elif key_set.key_type == aqm.KEY_TYPE_ROTATION:

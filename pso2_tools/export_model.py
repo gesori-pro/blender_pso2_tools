@@ -133,7 +133,7 @@ def export(
     clean_effect_nodes(context, aqn)
     name_root_node(context, aqn, path.stem)
 
-    restored, missing = restore_material_textures(model)
+    _restored, missing = restore_material_textures(model)
     if missing:
         shown = ", ".join(sorted(missing)[:4])
         more = "..." if len(missing) > 4 else ""
