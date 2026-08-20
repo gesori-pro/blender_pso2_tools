@@ -10,6 +10,23 @@ from .mix import ShaderNodePso2MixTextureAttribute
 from .ngs import ShaderNodePso2Ngs, ShaderNodePso2NgsSkin
 
 
+def _no_layer_image() -> bpy.types.Image:
+    """A 1x1 transparent black stand-in for a missing Layer texture.
+
+    An image node with no image reads as black in EEVEE but magenta in
+    Cycles, and the Layer's red channel is what shows the innerwear - so
+    a face (which has no innerwear set) rendered in Cycles wore the bare
+    innerwear shader over its whole surface. Black keeps the mix closed
+    in both engines, and a later innerwear import still replaces it.
+    """
+    name = "pso2_no_layer"
+    image = bpy.data.images.get(name)
+    if image is None:
+        image = bpy.data.images.new(name, 1, 1, alpha=True)
+        image.pixels[:] = (0.0, 0.0, 0.0, 0.0)
+    return image
+
+
 class Shader1102(builder.ShaderBuilder):
     """NGS skin shader"""
 
@@ -213,7 +230,7 @@ class Shader1102(builder.ShaderBuilder):
         # ========== Mix ==========
 
         layer = skin.add_node(bpy.types.ShaderNodeTexImage, (24, 0), name="Layer")
-        layer.image = self.textures.inner.layer
+        layer.image = self.textures.inner.layer or _no_layer_image()
 
         layer_rgb = skin.add_node(bpy.types.ShaderNodeSeparateColor, (30, 0))
         layer_rgb.mode = "RGB"
