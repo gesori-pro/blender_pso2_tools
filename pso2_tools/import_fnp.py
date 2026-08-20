@@ -390,6 +390,22 @@ def apply_proportions(armature: bpy.types.Object, bones: dict) -> dict:
 
     bones_by_id, bones_by_name = import_aqm._get_bone_maps(armature)
 
+    # Head-part armatures (teeth, hair, ears) number the bones they share
+    # with the face - the teeth's "jaw5" is the face's "jaw" - so keep a
+    # second map with those counters removed for when the exact name misses.
+    bones_by_base = {}
+    for pso2_name, blender_name in bones_by_name.items():
+        base = pso2_name.rstrip("0123456789")
+        if base and base != pso2_name and base not in bones_by_base:
+            bones_by_base[base] = blender_name
+
+    # The table's indices are full-skeleton ids, and a part armature
+    # numbers its own bones from zero, so an id lookup there lands each
+    # delta on whatever bone sits at that position - the teeth's jaw once
+    # wore a thigh's scale. Only fall back to ids on a rig that actually
+    # is the full skeleton.
+    trust_ids = "body_root" in bones_by_name or "body_root" in bones_by_base
+
     applied = 0
     missing: list[str] = []
     record: dict[str, list[float]] = {}
@@ -397,9 +413,10 @@ def apply_proportions(armature: bpy.types.Object, bones: dict) -> dict:
     for name, delta in bones.items():
         index = delta.get("index")
 
-        bone_name = bones_by_id.get(index) if index is not None else None
-        if bone_name is None:
-            bone_name = bones_by_name.get(name.lower())
+        key = name.lower()
+        bone_name = bones_by_name.get(key) or bones_by_base.get(key)
+        if bone_name is None and trust_ids and index is not None:
+            bone_name = bones_by_id.get(index)
         if bone_name is None:
             missing.append(name)
             continue
