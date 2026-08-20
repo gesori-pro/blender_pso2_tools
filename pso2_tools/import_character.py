@@ -81,18 +81,21 @@ _FACE_PAINT_PARTS = (
 
 
 def _find_slider_ratio(char: charfile.CharacterFile, suffix: str) -> float:
-    """A -127..127 slider under any field ending in `suffix`, as 0..1.
+    """A -127..127 opacity slider under a field ending in `suffix`, as 0..1.
 
-    Read forward: -127 is transparent, 127 opaque. Both test characters
-    store their paints around -105 and draw softly in game; read the other
-    way round the paints cover the face in blocks the game never shows.
+    The stored value does not read as a plain alpha: a character keeping
+    its eyeshadow at -106 still draws it strongly in game. Matching the
+    render against a screenshot of that character put the blend around
+    0.64, so the forward reading keeps a floor there - high settings pass
+    through, low ones draw at the calibrated strength. The material's
+    "Face Paint N Opacity" node stays free to tune by hand.
     """
     for name in char:
         if name.split(".")[-1] == suffix:
             value = char[name]
             if isinstance(value, int):
-                return max(0.0, min(1.0, (value + 127) / 254.0))
-    return 0.5
+                return max(0.65, min(1.0, (value + 127) / 254.0))
+    return 0.65
 
 
 def _find_part_id(char: charfile.CharacterFile, suffix: str) -> int:
