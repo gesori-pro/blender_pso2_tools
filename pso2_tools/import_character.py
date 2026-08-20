@@ -80,7 +80,12 @@ _FACE_PAINT_PARTS = (
 
 
 def _find_slider_ratio(char: charfile.CharacterFile, suffix: str) -> float:
-    """A -127..127 slider under any field ending in `suffix`, as 0..1."""
+    """A -127..127 slider under any field ending in `suffix`, as 0..1.
+
+    Read forward: -127 is transparent, 127 opaque. Both test characters
+    store their paints around -105 and draw softly in game; read the other
+    way round the paints cover the face in blocks the game never shows.
+    """
     for name in char:
         if name.split(".")[-1] == suffix:
             value = char[name]
@@ -169,25 +174,38 @@ def _paint_face_textures(
 
 
 def _face_skin_materials() -> list[bpy.types.Material]:
-    """The face's skin materials: the NGS skin shader tagged [fc]."""
+    """The face's skin materials, tagged [fc]: shader 1102 (T2) or 1101 (T1)."""
     return [
         m
         for m in bpy.data.materials
-        if m.use_nodes and "(1102p" in m.name and "[fc]" in m.name
+        if m.use_nodes
+        and "[fc]" in m.name
+        and ("(1102p" in m.name or "(1101p" in m.name)
     ]
 
 
 def _clear_face_paint(material: bpy.types.Material) -> None:
     """Remove any face-paint layers a previous import left on the material."""
     tree = material.node_tree
+    skin_group = tree.nodes.get("PSO2 NGS Skin")
+    if skin_group is None:
+        return
+
+    # Walk the paint chain back to whatever originally fed the shader, so
+    # the link can be put back once the paint nodes are gone.
+    source = None
+    if skin_group.inputs["Diffuse"].links:
+        source = skin_group.inputs["Diffuse"].links[0].from_socket
+        while source is not None and source.node.name.startswith("Face Paint"):
+            upstream = source.node.inputs["A"]
+            source = upstream.links[0].from_socket if upstream.links else None
+
     for node in list(tree.nodes):
         if node.name.startswith("Face Paint"):
             tree.nodes.remove(node)
 
-    colorize = tree.nodes.get("Skin Colorize")
-    skin_group = tree.nodes.get("PSO2 NGS Skin")
-    if colorize and skin_group:
-        tree.links.new(colorize.outputs["Result"], skin_group.inputs["Diffuse"])
+    if source is not None:
+        tree.links.new(source, skin_group.inputs["Diffuse"])
 
 
 def _layer_face_paint(
