@@ -46,6 +46,12 @@ _FACE_SLIDERS: tuple[tuple[str, int | None, int], ...] = (
     ("baseFIGR.eyeShapeVerts.X", 34, 36),
     ("baseFIGR.eyeShapeVerts.Y", 38, 40),
     ("baseFIGR.eyeShapeVerts.Z", 42, 44),
+    # ...and again for the right eye, which this one slider keys in its own
+    # block forty frames earlier. The bones at 3-5 are the mirror of the ones
+    # at 43-45, right lid for left lid, and the running game blends both by
+    # the same slider. Reading only the left half leaves the right eye a
+    # third of a millimetre from where the game puts it.
+    ("baseFIGR.eyeShapeVerts.Z", 2, 4),
     ("baseFIGR.noseHeightVerts.X", 46, 48),
     ("baseFIGR.noseHeightVerts.Y", 50, 52),
     ("baseFIGR.noseShapeVerts.X", 54, 56),
@@ -114,7 +120,11 @@ def _load_motion(context, face_id: int) -> aqm.AqmMotion | None:
         return None
 
     entry = next(
-        (f for f in ice.IceFile.load(path).get_files() if f.name.lower().endswith(".aqm")),
+        (
+            f
+            for f in ice.IceFile.load(path).get_files()
+            if f.name.lower().endswith(".aqm")
+        ),
         None,
     )
     if entry is None:
@@ -136,6 +146,46 @@ def _key_at(node, key_type, frame: int):
     return list(key_set.vec4_keys[frames.index(frame)])
 
 
+# Frame 1 is not a slider extreme: it is a correction the game lays over
+# every character whatever the sliders say, exactly as the body's proportion
+# motion does at the same frame. It is small - 0.42mm outwards on each eye
+# socket, 0.1mm on the lip bones - but it is the difference between eyes
+# sitting where the game puts them and eyes sitting a millimetre too close
+# together.
+_BASE_CORRECTION_FRAME = 1
+
+
+def _seed_base_correction(motion, neutral, result: dict[str, dict]) -> None:
+    """Start every node the always-on correction touches at that correction."""
+    for node in motion.nodes:
+        base_position, base_rotation, base_scale = neutral[node.name]
+        position = _key_at(node, aqm.KEY_TYPE_POSITION, _BASE_CORRECTION_FRAME)
+        rotation = _key_at(node, aqm.KEY_TYPE_ROTATION, _BASE_CORRECTION_FRAME)
+        scale = _key_at(node, aqm.KEY_TYPE_SCALE, _BASE_CORRECTION_FRAME)
+        if position is None and rotation is None and scale is None:
+            continue
+
+        entry = {
+            "position": list((position or base_position)[:3]),
+            "rotation": Quaternion(
+                (
+                    (rotation or base_rotation)[3],
+                    (rotation or base_rotation)[0],
+                    (rotation or base_rotation)[1],
+                    (rotation or base_rotation)[2],
+                )
+            ),
+            "scale": list((scale or base_scale)[:3]),
+        }
+        if (
+            entry["position"] == list(base_position[:3])
+            and entry["scale"] == list(base_scale[:3])
+            and rotation is None
+        ):
+            continue
+        result[node.name] = entry
+
+
 def _blend(char, motion, expression: str) -> dict[str, dict]:
     """Node name -> the PSO2-space transform the sliders ask for.
 
@@ -152,6 +202,7 @@ def _blend(char, motion, expression: str) -> dict[str, dict]:
         )
 
     result: dict[str, dict] = {}
+    _seed_base_correction(motion, neutral, result)
     for field, min_frame, max_frame in _FACE_SLIDERS:
         value = _slider(char, field, expression)
         if value is None:
@@ -285,9 +336,12 @@ def _pose(armature, targets, bones_by_name, correction: Matrix) -> int:
             (parent_correction3_inv @ Vector(target["position"])) - rest_translation
         )
 
-        rotation = rest_rotation_inv @ (
-            parent_correction3_inv @ target["rotation"].to_matrix() @ correction3
-        ).to_quaternion()
+        rotation = (
+            rest_rotation_inv
+            @ (
+                parent_correction3_inv @ target["rotation"].to_matrix() @ correction3
+            ).to_quaternion()
+        )
         rotation.normalize()
         pose_bone.rotation_mode = "QUATERNION"
         pose_bone.rotation_quaternion = rotation
