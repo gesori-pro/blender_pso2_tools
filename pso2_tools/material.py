@@ -62,6 +62,13 @@ class Material:
     unknown_int_0: int = 100
     unknown_int_1: int = 0
 
+    # The texture register list as it appears in the source model, one dict
+    # per texture. GenericMaterial only surfaces the names, but the game
+    # varies the other TSTA fields per texture (a mask carries tag 150 where
+    # a diffuse carries 23), so the whole entry has to ride along for an
+    # export to reproduce it.
+    tsta_data: list[dict] = field(default_factory=list)
+
     @classmethod
     def from_generic_material(
         cls,

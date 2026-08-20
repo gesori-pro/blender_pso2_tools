@@ -1,3 +1,4 @@
+import json
 import re
 from collections.abc import Iterable
 from contextlib import contextmanager
@@ -131,6 +132,25 @@ def export(
     restore_bone_flags(context, aqn)
     clean_effect_nodes(context, aqn)
     name_root_node(context, aqn, path.stem)
+
+    restored, missing = restore_material_textures(model)
+    if missing:
+        shown = ", ".join(sorted(missing)[:4])
+        more = "..." if len(missing) > 4 else ""
+        operator.report(
+            {"WARNING"},
+            f"{len(missing)} materials have no saved texture list"
+            f" ({shown}{more}), so their texture names are whatever the"
+            " conversion guessed. Re-import the model with a current version"
+            " of this add-on to record them.",
+        )
+
+    if stripped := strip_padded_uvs(model):
+        operator.report(
+            {"INFO"},
+            f"Dropped {stripped} zero-filled UV blocks the FBX conversion"
+            " padded in.",
+        )
 
     if options.get("override_bounding_radius"):
         set_bounding_radius(model, options.get("bounding_radius", GAME_BOUNDING_RADIUS))
@@ -311,6 +331,255 @@ def clean_effect_nodes(context: bpy.types.Context, aqn) -> tuple[int, int]:
         aqn.nodoList.Add(node)
 
     return len(keep), dropped
+
+
+# Blender material names encode "(shaders){blend}[special]name@twoSided@cutoff",
+# plus the ".001" Blender adds to duplicates. The plain name is what the
+# converted model's MATE entries carry.
+_MATERIAL_NAME = re.compile(
+    r"^(?:\([^)]*\))?(?:\{[^}]*\})?(?:\[[^\]]*\])?(?P<name>.+?)(?:@-?\d+)*(?:\.\d+)?$"
+)
+
+
+def _material_texture_data() -> dict[str, list[dict]]:
+    """The texture register lists saved on materials at import, by name."""
+    result: dict[str, list[dict]] = {}
+    for mat in bpy.data.materials:
+        raw = mat.get("pso2_tsta")
+        if not raw:
+            continue
+        match = _MATERIAL_NAME.match(mat.name)
+        if match is None:
+            continue
+        try:
+            data = json.loads(raw)
+        except ValueError:
+            continue
+        if data:
+            result.setdefault(match.group("name"), data)
+    return result
+
+
+def restore_material_textures(model) -> tuple[int, set[str]]:
+    """Rebuild the texture registers from the lists saved at import.
+
+    The FBX between Blender and the conversion names textures after the
+    images in the scene, and a material whose images were never found -
+    eyes, eyelashes and eyebrows live in other ICE files - comes out as
+    placeholder "tex0_d.dds" entries. Environment maps are not in the node
+    tree at all and vanish. The game then has dangling texture references,
+    which is most of what "the face breaks when exported from Blender"
+    looks like. Returns (materials restored, material names with nothing
+    saved).
+    """
+    saved = _material_texture_data()
+    missing: set[str] = set()
+    if not model.meshList.Count or not model.mateList.Count:
+        return 0, missing
+
+    tsta_type = type(model.tstaList[0]) if model.tstaList.Count else None
+    tset_type = type(model.tsetList[0]) if model.tsetList.Count else None
+    if tsta_type is None or tset_type is None:
+        return 0, missing
+
+    from AquaModelLibrary.Data.DataTypes.SetLengthStrings import PSO2String
+    from System.Collections.Generic import List as CsList
+    from System import Int32
+
+    new_tsta: list = []
+    tsta_cache: dict[tuple, int] = {}
+    tset_cache: dict[str, int] = {}
+    new_tset: list = []
+    restored = 0
+
+    def tsta_index(entry: dict, template_index: int) -> int:
+        key = (
+            entry["name"],
+            entry.get("tag", 23),
+            entry.get("usage", 0),
+            entry.get("uv", 0),
+            entry.get("i3", 1),
+            entry.get("i4", 1),
+            entry.get("i5", 1),
+        )
+        if key in tsta_cache:
+            return tsta_cache[key]
+        # Indexing the .NET list boxes a fresh copy each time. Reusing one
+        # copy for several entries would leave every entry with the fields
+        # of whichever was written last.
+        tsta = model.tstaList[template_index]
+        tsta.texName = PSO2String.GeneratePSO2String(entry["name"])
+        tsta.tag = entry.get("tag", 23)
+        tsta.texUsageOrder = entry.get("usage", 0)
+        tsta.modelUVSet = entry.get("uv", 0)
+        tsta.unkInt3 = entry.get("i3", 1)
+        tsta.unkInt4 = entry.get("i4", 1)
+        tsta.unkInt5 = entry.get("i5", 1)
+        new_tsta.append(tsta)
+        tsta_cache[key] = len(new_tsta) - 1
+        return tsta_cache[key]
+
+    for mesh_index in range(model.meshList.Count):
+        mesh = model.meshList[mesh_index]
+        if not 0 <= mesh.mateIndex < model.mateList.Count:
+            continue
+        mate_name = str(model.mateList[mesh.mateIndex].matName.GetString())
+        entries = saved.get(mate_name)
+        if not entries:
+            missing.add(mate_name)
+            continue
+
+        if mate_name not in tset_cache:
+            # Take field defaults from whatever the conversion produced for
+            # this mesh, then overwrite everything the saved list knows.
+            old_tset = model.tsetList[mesh.tsetIndex]
+            template_index = (
+                old_tset.tstaTexIDs[0]
+                if old_tset.tstaTexIDs.Count
+                and 0 <= old_tset.tstaTexIDs[0] < model.tstaList.Count
+                else 0
+            )
+            ids = CsList[Int32]()
+            for entry in entries:
+                ids.Add(tsta_index(entry, template_index))
+            tset = old_tset  # value type copy
+            tset.tstaTexIDs = ids
+            tset.texCount = ids.Count
+            new_tset.append(tset)
+            tset_cache[mate_name] = len(new_tset) - 1
+            restored += 1
+
+        mesh.tsetIndex = tset_cache[mate_name]
+        model.meshList[mesh_index] = mesh
+
+    if not restored:
+        return 0, missing
+
+    # Any mesh whose material had nothing saved still points into the old
+    # lists, so bring its entries across unchanged.
+    if missing:
+        carried: dict[int, int] = {}
+        for mesh_index in range(model.meshList.Count):
+            mesh = model.meshList[mesh_index]
+            mate_name = str(model.mateList[mesh.mateIndex].matName.GetString())
+            if mate_name not in missing:
+                continue
+            old_index = mesh.tsetIndex
+            if old_index not in carried:
+                old_tset = model.tsetList[old_index]
+                ids = CsList[Int32]()
+                for k in range(old_tset.tstaTexIDs.Count):
+                    old_tsta_index = old_tset.tstaTexIDs[k]
+                    if not 0 <= old_tsta_index < model.tstaList.Count:
+                        continue
+                    old_tsta = model.tstaList[old_tsta_index]
+                    entry = {
+                        "name": str(old_tsta.texName.GetString()),
+                        "tag": int(old_tsta.tag),
+                        "usage": int(old_tsta.texUsageOrder),
+                        "uv": int(old_tsta.modelUVSet),
+                        "i3": int(old_tsta.unkInt3),
+                        "i4": int(old_tsta.unkInt4),
+                        "i5": int(old_tsta.unkInt5),
+                    }
+                    ids.Add(tsta_index(entry, old_tsta_index))
+                tset = old_tset
+                tset.tstaTexIDs = ids
+                tset.texCount = ids.Count
+                new_tset.append(tset)
+                carried[old_index] = len(new_tset) - 1
+            mesh.tsetIndex = carried[old_index]
+            model.meshList[mesh_index] = mesh
+
+    model.tstaList.Clear()
+    for tsta in new_tsta:
+        model.tstaList.Add(tsta)
+    model.tsetList.Clear()
+    for tset in new_tset:
+        model.tsetList.Add(tset)
+
+    _rebuild_texf(model, new_tsta)
+    _sync_texture_counts(model)
+
+    return restored, missing
+
+
+def _sync_texture_counts(model) -> None:
+    """Put the header's texture counts back in step with the lists.
+
+    OBJC stores its own count for each list, and the writer emits exactly
+    that many entries rather than measuring the list. Rewriting the
+    registers without it writes the old number of them - a face rebuilt
+    with 19 comes out holding 15, the last four silently cut, so the eyes
+    lose their textures. OBJC is a value type, so the whole struct has to
+    go back.
+    """
+    objc = model.objc
+    objc.tstaCount = model.tstaList.Count
+    objc.tsetCount = model.tsetList.Count
+    objc.texfCount = model.texfList.Count
+    model.objc = objc
+
+
+def _rebuild_texf(model, new_tsta: list) -> None:
+    """Put the file's texture name table in step with the registers.
+
+    TEXF is a second, separate list of texture names, and it is the one the
+    written file carries - the header's texfCount comes from it. Rewriting
+    only the registers leaves it holding whatever the conversion guessed,
+    so the model still ships placeholder names and the game finds no
+    textures. TEXF entries are unique by name, unlike registers.
+    """
+    from AquaModelLibrary.Data.DataTypes.SetLengthStrings import PSO2String
+
+    if not model.texfList.Count:
+        return
+
+    template = model.texfList[0]
+    seen: set[str] = set()
+    entries = []
+    for tsta in new_tsta:
+        name = str(tsta.texName.GetString())
+        if name in seen:
+            continue
+        seen.add(name)
+        texf = template  # TEXF is a value type; indexing boxed a copy.
+        texf.texName = PSO2String.GeneratePSO2String(name)
+        entries.append(texf)
+
+    model.texfList.Clear()
+    for texf in entries:
+        model.texfList.Add(texf)
+
+    if hasattr(model, "texFUnicodeNames"):
+        model.texFUnicodeNames.Clear()
+        for name in (str(t.texName.GetString()) for t in entries):
+            model.texFUnicodeNames.Add(name)
+
+
+def strip_padded_uvs(model) -> int:
+    """Clear secondary UV blocks that are zero at every vertex.
+
+    A scene imported before the importer learned to drop the conversion's
+    padding still has eight UV layers on every mesh, and they come through
+    the FBX as real uv2-uv4 blocks full of zeros - a face grows by half
+    its file size and carries a vertex layout the game never wrote.
+    """
+    cleared = 0
+    for index in range(model.vtxlList.Count):
+        vtxl = model.vtxlList[index]
+        for attribute in ("uv2List", "uv3List", "uv4List"):
+            uv_list = getattr(vtxl, attribute, None)
+            if uv_list is None or not uv_list.Count:
+                continue
+            if all(
+                abs(uv_list[k].X) < 1e-9 and abs(uv_list[k].Y) < 1e-9
+                for k in range(uv_list.Count)
+            ):
+                uv_list.Clear()
+                cleared += 1
+
+    return cleared
 
 
 @contextmanager

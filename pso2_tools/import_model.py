@@ -1,3 +1,4 @@
+import json
 from collections.abc import Iterable
 from contextlib import closing
 from dataclasses import dataclass, field
@@ -297,6 +298,13 @@ def _import_models(
         )
         shaders.build_material(context, bpy.data.materials[key], data)
 
+        # The texture register list rides on the material so the exporter
+        # can write the game's texture names back. The Blender node tree
+        # only holds the images that were actually found, which for a face
+        # is none of the eye, eyelash or eyebrow textures.
+        if mat.tsta_data:
+            bpy.data.materials[key]["pso2_tsta"] = json.dumps(mat.tsta_data)
+
     return {"FINISHED"}
 
 
@@ -509,14 +517,95 @@ def _import_aqp(
         for obj in context.selected_objects:
             debug_print(obj.type, obj.name)
 
-    mesh_mat_mapping = List[int]()
-    generic_materials, _ = model.GetUniqueMaterials(mesh_mat_mapping)
+        if removed := _strip_zero_uv_layers(context.selected_objects):
+            debug_print(f"Removed {removed} zero-filled UV layers")
+
+    # Python.NET hands the filled list back as a second return value; the
+    # one passed in stays empty.
+    generic_materials, mesh_mat_mapping = model.GetUniqueMaterials(List[int]())
 
     materials = [
         material.Material.from_generic_material(mat) for mat in generic_materials
     ]
+    _attach_tsta_data(model, mesh_mat_mapping, materials)
 
     return {"FINISHED"}, materials
+
+
+def _attach_tsta_data(model, mesh_mat_mapping, materials: list) -> None:
+    """Copy each material's texture register list off the source model.
+
+    GenericMaterial reduces the textures to their names, but the game varies
+    the rest of the TSTA entry per texture - a mask is tagged 150 where a
+    diffuse is 23, an environment map sits on UV set -1 - and the FBX a
+    model travels through on export has nowhere to carry any of that. Keep
+    the whole entry with the material so the exporter can write it back.
+    """
+    for mesh_index in range(mesh_mat_mapping.Count):
+        mat_index = mesh_mat_mapping[mesh_index]
+        if mat_index < 0 or mat_index >= len(materials):
+            continue
+        if materials[mat_index].tsta_data:
+            continue
+        if mesh_index >= model.meshList.Count:
+            continue
+
+        mesh = model.meshList[mesh_index]
+        if not 0 <= mesh.tsetIndex < model.tsetList.Count:
+            continue
+
+        tset = model.tsetList[mesh.tsetIndex]
+        entries = []
+        for k in range(tset.tstaTexIDs.Count):
+            tsta_index = tset.tstaTexIDs[k]
+            if not 0 <= tsta_index < model.tstaList.Count:
+                continue
+            tsta = model.tstaList[tsta_index]
+            entries.append(
+                {
+                    "name": str(tsta.texName.GetString()),
+                    "tag": int(tsta.tag),
+                    "usage": int(tsta.texUsageOrder),
+                    "uv": int(tsta.modelUVSet),
+                    "i3": int(tsta.unkInt3),
+                    "i4": int(tsta.unkInt4),
+                    "i5": int(tsta.unkInt5),
+                }
+            )
+
+        materials[mat_index].tsta_data = entries
+
+
+def _strip_zero_uv_layers(objects) -> int:
+    """Drop the padding UV layers the AQP-to-FBX conversion invents.
+
+    The conversion always writes eight UV channels, filling the ones the
+    model does not have with zeros. Imported as-is they ride back out on
+    the next export as real uv2-uv4 blocks: a face that shipped with one
+    UV set grows four, and the file half again in size. A channel that is
+    zero at every corner carries nothing, so it is safe to remove; the
+    first channel stays no matter what.
+    """
+    import array
+
+    removed = 0
+    for obj in objects:
+        if obj.type != "MESH":
+            continue
+        mesh_data = obj.data
+        for layer in list(mesh_data.uv_layers)[1:]:
+            count = len(layer.data)
+            if not count:
+                mesh_data.uv_layers.remove(layer)
+                removed += 1
+                continue
+            buffer = array.array("f", [0.0]) * (count * 2)
+            layer.data.foreach_get("uv", buffer)
+            if all(abs(value) < 1e-9 for value in buffer):
+                mesh_data.uv_layers.remove(layer)
+                removed += 1
+
+    return removed
 
 
 def _import_skin_textures(
