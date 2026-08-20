@@ -269,6 +269,12 @@ def update_innerwear_slots(images: Iterable[bpy.types.Image]) -> int:
     for mat in bpy.data.materials:
         if not mat.use_nodes or mat.node_tree is None:
             continue
+        # The face is the skin shader too, so it has the nodes, but its
+        # UVs live in the face texture's space: a body innerwear set read
+        # there paints a white band around the neck. The game gives the
+        # face material no innerwear registers, so leave it bare.
+        if "[fc]" in mat.name:
+            continue
         nodes = mat.node_tree.nodes
         if "Innerwear Diffuse" not in nodes:
             continue
