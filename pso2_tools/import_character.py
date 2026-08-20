@@ -34,6 +34,7 @@ from . import (
     import_fnp,
     import_model,
     objects,
+    parts,
     proportions,
     scene_props,
 )
@@ -171,6 +172,31 @@ def _paint_face_textures(
                     painted = True
 
     return painted
+
+
+def _hide_mouth_states(context) -> int:
+    """Hide the face's numbered mouth-state meshes, leaving the resting one.
+
+    A face ships its mouth in several states: the base meshes carry it
+    closed, and numbered variants reshape the lips for expressions. The
+    game draws one state at a time - the live skeleton read out of a
+    running game keeps every lip bone at rest, so the resting mouth is a
+    mesh choice, not a pose. Importing every state stacks the open lips
+    over the closed ones, which reads as teeth poking through the chin.
+    """
+    hidden = 0
+    for obj in context.selected_objects:
+        if obj.type != "MESH":
+            continue
+        try:
+            mesh_id = parts.get_mesh_id(obj.name)
+        except ValueError:
+            mesh_id = None
+        if mesh_id is not None and int(mesh_id) != 0:
+            obj.hide_viewport = True
+            obj.hide_render = True
+            hidden += 1
+    return hidden
 
 
 def _face_skin_materials() -> list[bpy.types.Material]:
@@ -339,6 +365,8 @@ class PSO2_OT_ImportCharacter(  # type: ignore https://github.com/nutti/fake-bpy
                     missing.append(f"{suffix}={part_id}")
                     continue
                 import_model.import_object(self, context, obj, high_quality=True)
+                if suffix == "faceTypePart":
+                    _hide_mouth_states(context)
                 loaded.append(obj.name)
 
             for suffix, getter, fragments, skip in _FACE_TEXTURE_PARTS:
@@ -496,3 +524,42 @@ class PSO2_OT_ImportCharacter(  # type: ignore https://github.com/nutti/fake-bpy
                 moved += 1
 
         debug_print(f"Attached {moved} head parts to {head.name}")
+        self._follow_face_bones(context, parts)
+
+    def _follow_face_bones(self, context, parts_armatures) -> None:
+        """Copy the face's posed bone matrices onto the parts' shared bones.
+
+        A part rig is a cut-down copy of the face's chain - the teeth carry
+        the mouth bones but not the morph-driver bones between them and the
+        head - so a scale the proportion pass puts on those drivers moves
+        the face's mouth and not the teeth, and the teeth poke out of the
+        closed lips. Matching bones by their counter-stripped names and
+        copying the posed matrix keeps the parts inside the face the way
+        the game's single skeleton does.
+        """
+        face = next(
+            (o for o in parts_armatures if "_rhd_" in o.name),
+            None,
+        )
+        if face is None:
+            return
+
+        face_by_base: dict[str, bpy.types.PoseBone] = {}
+        for pose_bone in face.pose.bones:
+            key = pose_bone.name.split("#")[0].rstrip("0123456789")
+            face_by_base.setdefault(key, pose_bone)
+
+        for obj in parts_armatures:
+            if obj is face:
+                continue
+            for pose_bone in obj.pose.bones:
+                key = pose_bone.name.split("#")[0].rstrip("0123456789")
+                source = face_by_base.get(key)
+                if source is None:
+                    continue
+                # Writing consecutive pose matrices without an update in
+                # between reads stale parents, so refresh before each one.
+                context.view_layer.update()
+                pose_bone.matrix = (
+                    obj.matrix_world.inverted() @ face.matrix_world @ source.matrix
+                )
