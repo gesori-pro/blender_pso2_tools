@@ -35,7 +35,6 @@ from . import (
     import_fnp,
     import_model,
     objects,
-    parts,
     proportions,
     scene_props,
 )
@@ -189,31 +188,6 @@ def _paint_face_textures(
                     painted = True
 
     return painted
-
-
-def _hide_mouth_states(context) -> int:
-    """Hide the face's numbered mouth-state meshes, leaving the resting one.
-
-    A face ships its mouth in several states: the base meshes carry it
-    closed, and numbered variants reshape the lips for expressions. The
-    game draws one state at a time - the live skeleton read out of a
-    running game keeps every lip bone at rest, so the resting mouth is a
-    mesh choice, not a pose. Importing every state stacks the open lips
-    over the closed ones, which reads as teeth poking through the chin.
-    """
-    hidden = 0
-    for obj in context.selected_objects:
-        if obj.type != "MESH":
-            continue
-        try:
-            mesh_id = parts.get_mesh_id(obj.name)
-        except ValueError:
-            mesh_id = None
-        if mesh_id is not None and int(mesh_id) != 0:
-            obj.hide_viewport = True
-            obj.hide_render = True
-            hidden += 1
-    return hidden
 
 
 def _face_skin_materials() -> list[bpy.types.Material]:
@@ -415,8 +389,6 @@ class PSO2_OT_ImportCharacter(  # type: ignore https://github.com/nutti/fake-bpy
                     missing.append(f"{suffix}={part_id}")
                     continue
                 import_model.import_object(self, context, obj, high_quality=True)
-                if suffix == "faceTypePart":
-                    _hide_mouth_states(context)
                 loaded.append(obj.name)
 
             for suffix, getter, fragments, skip in _FACE_TEXTURE_PARTS:
