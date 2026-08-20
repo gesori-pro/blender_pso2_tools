@@ -30,6 +30,7 @@ from . import (
     char_colors,
     charfile,
     classes,
+    face_shape,
     ice,
     import_fnp,
     import_model,
@@ -457,6 +458,7 @@ class PSO2_OT_ImportCharacter(  # type: ignore https://github.com/nutti/fake-bpy
 
         if self.import_proportions:
             self._apply_proportions(context, char)
+            self._apply_face_shape(context, char)
 
         if missing:
             shown = ", ".join(missing[:6])
@@ -470,6 +472,25 @@ class PSO2_OT_ImportCharacter(  # type: ignore https://github.com/nutti/fake-bpy
             self.report({"INFO"}, f"Loaded {len(loaded)} parts.")
 
         return {"FINISHED"}
+
+    def _apply_face_shape(self, context, char: charfile.CharacterFile) -> None:
+        """Shape the face with its own sliders, after the body proportions.
+
+        It has to run after them because they reset every pose they touch,
+        and the head-part fit has to run again afterwards because reshaping
+        the face moves the mouth the teeth sit in.
+        """
+        face_id = _find_part_id(char, "faceTypePart")
+        if face_id <= 0:
+            return
+
+        summary = face_shape.apply(context, char, face_id)
+        debug_print(
+            f"Face shape: posed {summary['bones']} bones"
+            f" on {summary['posed']} armatures"
+        )
+        if summary["posed"]:
+            self._attach_head_parts(context)
 
     def _apply_muscularity(self, context, char: charfile.CharacterFile) -> None:
         """Set the scene's muscle blend to the character's muscle mass.
