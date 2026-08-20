@@ -79,23 +79,36 @@ _FACE_PAINT_PARTS = (
     ("makeup2Part", "facePaint2Opacity"),
 )
 
+# What the opacity slider draws at its middle, as a fraction of full
+# strength. Sweeping the slider in a running game and measuring the paint
+# in the frames it produced gives a line from nothing at -127 up to this
+# at 0, then a shallower line on to full at 127 - the same "neutral in the
+# middle" shape the body sliders use. Reading the value as a plain 0..1
+# alpha instead draws an eyeshadow at a twelfth of the strength the game
+# shows for the same character.
+_PAINT_NEUTRAL = 0.73
 
-def _find_slider_ratio(char: charfile.CharacterFile, suffix: str) -> float:
-    """A -127..127 opacity slider under a field ending in `suffix`, as 0..1.
+# Where a face paint lands on the face texture. Its width matches the face
+# texture's, so it covers the whole width, and it is an eighth as tall,
+# sitting over the eyes. Measured against the game: a face UV of v 0.25 to
+# 0.375 holds the eyeshadow, and the eye region of the face mesh (u 0.202
+# to 0.781) lines up with the painted part of the texture (0.202 to 0.797)
+# with no horizontal scaling at all.
+_PAINT_ORIGIN_V = 0.25
 
-    The stored value does not read as a plain alpha: a character keeping
-    its eyeshadow at -106 still draws it strongly in game. Matching the
-    render against a screenshot of that character put the blend around
-    0.64, so the forward reading keeps a floor there - high settings pass
-    through, low ones draw at the calibrated strength. The material's
-    "Face Paint N Opacity" node stays free to tune by hand.
-    """
+
+def _face_paint_alpha(char: charfile.CharacterFile, suffix: str) -> float:
+    """The blend a -127..127 opacity slider asks for, as 0..1."""
     for name in char:
         if name.split(".")[-1] == suffix:
             value = char[name]
-            if isinstance(value, int):
-                return max(0.65, min(1.0, (value + 127) / 254.0))
-    return 0.65
+            if not isinstance(value, int):
+                continue
+            value = max(-127, min(127, value))
+            if value <= 0:
+                return _PAINT_NEUTRAL * (value + 127) / 127.0
+            return _PAINT_NEUTRAL + (1.0 - _PAINT_NEUTRAL) * value / 127.0
+    return _PAINT_NEUTRAL
 
 
 def _find_part_id(char: charfile.CharacterFile, suffix: str) -> int:
@@ -229,6 +242,8 @@ def _clear_face_paint(material: bpy.types.Material) -> None:
             upstream = source.node.inputs["A"]
             source = upstream.links[0].from_socket if upstream.links else None
 
+    # Takes the paint's UV and placement nodes with it - they share the
+    # "Face Paint N" prefix.
     for node in list(tree.nodes):
         if node.name.startswith("Face Paint"):
             tree.nodes.remove(node)
@@ -249,6 +264,12 @@ def _layer_face_paint(
     opacity slider. The same blend goes between the skin colorize and the
     shader group here, factored by the paint's own alpha times that
     opacity, so paints stack in slot order like they do in game.
+
+    A paint is not a whole face texture: it is a strip that covers a band
+    of the face's UV space, an eighth of the texture's height over the
+    eyes, at the texture's own resolution. Sampled with the face's UVs
+    unchanged it stretches over the entire head, which puts eyeshadow on
+    the cheeks and forehead - the shape a running game never draws there.
     """
     tree = material.node_tree
     skin_group = tree.nodes.get("PSO2 NGS Skin")
@@ -262,6 +283,31 @@ def _layer_face_paint(
     tex.name = tex.label = f"Face Paint {index}"
     tex.image = image
     tex.location = (base_x - 900, base_y + 300 + index * 350)
+    # Outside its band the paint must not draw at all, so no repeats.
+    tex.extension = "CLIP"
+
+    face_texture = tree.nodes.get("Diffuse")
+    face_image = face_texture.image if face_texture else None
+    if face_image and all(image.size) and all(face_image.size):
+        scale_u = face_image.size[0] / image.size[0]
+        scale_v = face_image.size[1] / image.size[1]
+
+        uv_node = tree.nodes.new("ShaderNodeUVMap")
+        uv_node.name = uv_node.label = f"Face Paint {index} UV"
+        uv_node.location = (tex.location.x - 700, tex.location.y)
+
+        mapping = tree.nodes.new("ShaderNodeMapping")
+        mapping.name = mapping.label = f"Face Paint {index} Placement"
+        mapping.location = (tex.location.x - 450, tex.location.y)
+        mapping.inputs["Scale"].default_value = (scale_u, scale_v, 1.0)
+        mapping.inputs["Location"].default_value = (
+            0.0,
+            -_PAINT_ORIGIN_V * scale_v,
+            0.0,
+        )
+
+        tree.links.new(uv_node.outputs["UV"], mapping.inputs["Vector"])
+        tree.links.new(mapping.outputs["Vector"], tex.inputs["Vector"])
 
     fac = tree.nodes.new("ShaderNodeMath")
     fac.name = f"Face Paint {index} Opacity"
@@ -400,7 +446,7 @@ class PSO2_OT_ImportCharacter(  # type: ignore https://github.com/nutti/fake-bpy
                     missing.append(f"{part_field}={part_id}")
                     continue
                 diffuse = _load_part_images(obj, data_path).get("d")
-                opacity = _find_slider_ratio(char, opacity_field)
+                opacity = _face_paint_alpha(char, opacity_field)
                 painted = diffuse is not None and [
                     m for m in face_materials if _layer_face_paint(m, diffuse, opacity, layer)
                 ]
