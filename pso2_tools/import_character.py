@@ -210,15 +210,24 @@ _FACE_NECK_MESH_IDS = (
 )
 
 
+def _is_face_mesh(obj: bpy.types.Object) -> bool:
+    """Whether a mesh is part of a face model, by its [fc] skin material."""
+    return any(m and "[fc]" in m.name for m in obj.data.materials)
+
+
 def _keep_one_neck_variant(context) -> int:
     """Hide all but one of the face's interchangeable neck skirts.
 
     BreastNeck is the bare-skin copy and the one to keep: it is what shows
     with nothing covering the throat, which is the state we import into.
+
+    A costume uses these same ids for its own breast, front, ornament and
+    back pieces, where they are separate parts rather than copies, so this
+    only ever looks at meshes wearing a face's [fc] material.
     """
     found: dict[parts.MeshId, list[bpy.types.Object]] = {}
     for obj in context.selected_objects:
-        if obj.type != "MESH":
+        if obj.type != "MESH" or not _is_face_mesh(obj):
             continue
         try:
             mesh_id = parts.get_mesh_id(obj.name)
