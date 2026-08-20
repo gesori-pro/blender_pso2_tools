@@ -415,11 +415,39 @@ def _clear_face_paint(material: bpy.types.Material) -> None:
         tree.links.new(source, skin_group.inputs["Diffuse"])
 
 
+def _paint_rect(
+    placement: tuple[float, float, float, float] | None,
+    image: bpy.types.Image,
+    face_image: bpy.types.Image | None,
+) -> tuple[float, float, float, float] | None:
+    """Where a paint sits on the face, as (u, v, u scale, v scale).
+
+    The CMX rectangle is (u, v measured down from the top, width, height);
+    Blender measures v up from the bottom. With no rectangle the paint is
+    assumed to be a full-width band over the eyes, which is what every
+    1024-wide paint is and what the eyeshadow this was worked out on reads
+    out of the CMX anyway.
+    """
+    if placement is not None:
+        u, v_from_top, width, height = placement
+        return u, 1.0 - v_from_top - height, 1.0 / width, 1.0 / height
+
+    if face_image and all(image.size) and all(face_image.size):
+        return (
+            0.0,
+            _PAINT_ORIGIN_V,
+            face_image.size[0] / image.size[0],
+            face_image.size[1] / image.size[1],
+        )
+    return None
+
+
 def _layer_face_paint(
     material: bpy.types.Material,
     image: bpy.types.Image,
     opacity: float,
     index: int,
+    placement: tuple[float, float, float, float] | None = None,
 ) -> bool:
     """Blend one face paint over the skin, before the shader group.
 
@@ -451,9 +479,9 @@ def _layer_face_paint(
 
     face_texture = tree.nodes.get("Diffuse")
     face_image = face_texture.image if face_texture else None
-    if face_image and all(image.size) and all(face_image.size):
-        scale_u = face_image.size[0] / image.size[0]
-        scale_v = face_image.size[1] / image.size[1]
+    rect = _paint_rect(placement, image, face_image)
+    if rect is not None:
+        origin_u, origin_v, scale_u, scale_v = rect
 
         uv_node = tree.nodes.new("ShaderNodeUVMap")
         uv_node.name = uv_node.label = f"Face Paint {index} UV"
@@ -464,8 +492,8 @@ def _layer_face_paint(
         mapping.location = (tex.location.x - 450, tex.location.y)
         mapping.inputs["Scale"].default_value = (scale_u, scale_v, 1.0)
         mapping.inputs["Location"].default_value = (
-            0.0,
-            -_PAINT_ORIGIN_V * scale_v,
+            -origin_u * scale_u,
+            -origin_v * scale_v,
             0.0,
         )
 
@@ -606,6 +634,8 @@ class PSO2_OT_ImportCharacter(  # type: ignore https://github.com/nutti/fake-bpy
             for material in face_materials:
                 _clear_face_paint(material)
 
+            paint_placement = objects.get_facepaint_placement(data_path.parent)
+
             for layer, (part_field, opacity_field) in enumerate(
                 _FACE_PAINT_PARTS, start=1
             ):
@@ -618,10 +648,11 @@ class PSO2_OT_ImportCharacter(  # type: ignore https://github.com/nutti/fake-bpy
                     continue
                 diffuse = _load_part_images(obj, data_path).get("d")
                 opacity = _face_paint_alpha(char, opacity_field)
+                placement = paint_placement.get(part_id)
                 painted = diffuse is not None and [
                     m
                     for m in face_materials
-                    if _layer_face_paint(m, diffuse, opacity, layer)
+                    if _layer_face_paint(m, diffuse, opacity, layer, placement)
                 ]
                 if painted:
                     loaded.append(obj.name)

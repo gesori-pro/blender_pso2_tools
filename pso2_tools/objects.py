@@ -1,5 +1,6 @@
 import hashlib
 import sqlite3
+import struct
 from collections import defaultdict
 from collections.abc import Callable, Generator, Iterable
 from contextlib import closing, suppress
@@ -1537,6 +1538,51 @@ def _parse_face_variation_lua(script_file: datafile.DataFile) -> dict[str, int]:
             language = line.split('"')[1]
 
     return result
+
+
+# bin path -> {face paint id: (u, v from the top, width, height)}. Read once
+# per path: pulling the CMX apart takes a second or two.
+_FACEPAINT_PLACEMENT: dict[str, dict[int, tuple[float, float, float, float]]] = {}
+
+
+def get_facepaint_placement(
+    bin_path: Path,
+) -> dict[int, tuple[float, float, float, float]]:
+    """Where each face paint's texture belongs on the face texture.
+
+    A paint is not a whole face texture, it is a small tile, and the CMX
+    says which rectangle of the face it covers - four floats the library
+    hands back as raw ints. An eyeshadow reads (0, 0.625, 1, 0.125) and a
+    lipstick (0.375, 0.75, 0.25, 0.125), each landing over the feature it
+    paints. Without it a tile can only be guessed at the texture's top
+    left, which drops a lipstick off the side of the face.
+
+    Empty if the install's CMX cannot be read; the caller falls back to
+    that guess, which is right for the full-width paints.
+    """
+    key = str(bin_path)
+    if key in _FACEPAINT_PLACEMENT:
+        return _FACEPAINT_PLACEMENT[key]
+
+    placement: dict[int, tuple[float, float, float, float]] = {}
+    try:
+        from AquaModelLibrary.Data.Utility import ReferenceGenerator
+
+        cmx = ReferenceGenerator.ExtractCMX(str(bin_path))
+        for item_id in cmx.fcpDict.Keys:
+            fcp = cmx.fcpDict[item_id].fcp
+            rect = tuple(
+                struct.unpack("<f", struct.pack("<i", value))[0]
+                for value in (fcp.unkInt2, fcp.unkInt3, fcp.unkInt4, fcp.unkInt5)
+            )
+            if rect[2] > 0.0 and rect[3] > 0.0:
+                placement[int(item_id)] = rect  # type: ignore[assignment]
+    except Exception as ex:
+        # Any reader failure just means falling back to the guess.
+        debug_print("Could not read face paint placement:", ex)
+
+    _FACEPAINT_PLACEMENT[key] = placement
+    return placement
 
 
 def _get_ccl(bin_path: Path) -> ccl.Pso2Ccl:
