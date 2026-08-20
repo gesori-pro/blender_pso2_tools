@@ -74,6 +74,9 @@ _FACE_SLIDERS: tuple[tuple[str, int | None, int], ...] = (
     ("ngsSLID.mouthVertical", 146, 148),
     ("ngsSLID.eyebrowHoriz", 150, 152),
     ("ngsSLID.irisVertical", 154, 156),
+    # Named only in V16 files, where they sit one level down the expression.
+    ("<expr>.tongueVertical", 158, 160),
+    ("<expr>.tongueHorizontal", 162, 164),
 )
 
 # The expression the face rests in. The file carries ten presets; this is
@@ -82,12 +85,23 @@ DEFAULT_EXPRESSION = "faceNatural"
 
 
 def _slider(char, field: str, expression: str) -> int | None:
-    name = field.replace("<expr>", expression)
-    try:
-        value = char[name]
-    except (KeyError, TypeError):
-        return None
-    return int(value) if isinstance(value, int) else None
+    """One slider's value, wherever this file version keeps it.
+
+    V16 moved the eighteen expression values down two levels, from
+    `faceNatural.eyeCorner` to `faceNatural.expStruct.expStruct.eyeCorner`,
+    and put the tongue pair one level down. Reading only the old path left
+    every expression slider unread on a file saved by the live game, which
+    imports the face with its brows, lids and mouth corners at neutral.
+    """
+    for prefix in ("", "expStruct.expStruct.", "expStruct."):
+        name = field.replace("<expr>.", f"{expression}.{prefix}")
+        try:
+            value = char[name]
+        except (KeyError, TypeError):
+            continue
+        if isinstance(value, int):
+            return int(value)
+    return None
 
 
 def _load_motion(context, face_id: int) -> aqm.AqmMotion | None:
