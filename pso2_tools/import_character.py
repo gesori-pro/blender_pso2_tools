@@ -102,6 +102,29 @@ _PAINT_NEUTRAL = 0.73
 # with no horizontal scaling at all.
 _PAINT_ORIGIN_V = 0.25
 
+# Eye size and iris size both scale the UVs the eye textures are sampled at,
+# about the middle of the texture where the iris is drawn (its dark disc's
+# centroid sits at 0.5000, 0.4937). A bigger scale samples a wider crop, so
+# the iris draws smaller. Neither slider moves a bone, which is why reading
+# the skeleton says they do nothing.
+#
+# The two ends are the CMX's eyeDict unkFloat0/unkFloat1, the same pair on
+# every eye item in the game. Sweeping each slider in a running game and
+# measuring the iris confirms them, the blend between, and that the two
+# scales multiply:
+#
+#     eye size   iris size   iris width   scale(eye) * scale(iris)
+#          0           0         56.5          1.0000  -> 56.3
+#          0         127         67.5          0.8333  -> 67.5
+#        127        -127         53.5          1.0417  -> 54.0
+#        127         127         80.0          0.6944  -> 81.0
+#
+# Slider 0 landing on a scale of exactly 1.0 is what makes this the same
+# neutral-anchored two-segment blend as every other slider: a straight line
+# between the ends would put the pair at (0, 0) 5% smaller than measured.
+_IRIS_UV_SCALE_MIN = 1.25
+_IRIS_UV_SCALE_MAX = 0.8333333
+
 
 def _face_paint_alpha(char: charfile.CharacterFile, suffix: str) -> float:
     """The blend a -127..127 opacity slider asks for, as 0..1."""
@@ -194,6 +217,60 @@ def _paint_face_textures(
                     painted = True
 
     return painted
+
+
+def _find_slider(char: charfile.CharacterFile, name: str) -> int | None:
+    """A top-level slider's value, whichever block this file keeps it in."""
+    for field in char:
+        if field.split(".")[-1] == name:
+            value = char[field]
+            if isinstance(value, int):
+                return value
+    return None
+
+
+def _iris_uv_scale(value: int) -> float:
+    """One eye slider's share of the UV scale."""
+    value = max(-127, min(127, value))
+    end = _IRIS_UV_SCALE_MAX if value >= 0 else _IRIS_UV_SCALE_MIN
+    return 1.0 + (end - 1.0) * abs(value) / 127.0
+
+
+def _eye_materials() -> list[bpy.types.Material]:
+    """The face's two eye materials, which the eye part's textures went on."""
+    return [
+        m
+        for m in bpy.data.materials
+        if m.use_nodes and ("eye_l" in m.name or "eye_r" in m.name)
+    ]
+
+
+def _scale_iris(material: bpy.types.Material, scale: float) -> bool:
+    """Sample the eye's textures at `scale`, centred on the iris."""
+    tree = material.node_tree
+    textures = [n for n in tree.nodes if n.type == "TEX_IMAGE"]
+    if not textures:
+        return False
+
+    mapping = tree.nodes.get("Iris Size")
+    if mapping is None:
+        uv_node = tree.nodes.new("ShaderNodeUVMap")
+        uv_node.name = uv_node.label = "Iris Size UV"
+        uv_node.location = (min(t.location.x for t in textures) - 700, 0)
+
+        mapping = tree.nodes.new("ShaderNodeMapping")
+        mapping.name = mapping.label = "Iris Size"
+        mapping.location = (uv_node.location.x + 250, 0)
+        tree.links.new(uv_node.outputs["UV"], mapping.inputs["Vector"])
+
+    mapping.inputs["Scale"].default_value = (scale, scale, 1.0)
+    offset = 0.5 * (1.0 - scale)
+    mapping.inputs["Location"].default_value = (offset, offset, 0.0)
+
+    for tex in textures:
+        if not tex.inputs["Vector"].links:
+            tree.links.new(mapping.outputs["Vector"], tex.inputs["Vector"])
+    return True
 
 
 def _body_armature(context) -> bpy.types.Object | None:
@@ -642,6 +719,16 @@ class PSO2_OT_ImportCharacter(  # type: ignore https://github.com/nutti/fake-bpy
                     loaded.append(obj.name)
                 else:
                     missing.append(f"{suffix}={part_id} (no face to paint)")
+
+            iris = face_shape.slider(char, "<expr>.irisSize", self.expression)
+            eye_size = _find_slider(char, "eyeSize")
+            if iris is not None or eye_size is not None:
+                scale = _iris_uv_scale(iris or 0) * _iris_uv_scale(eye_size or 0)
+                scaled = [m for m in _eye_materials() if _scale_iris(m, scale)]
+                debug_print(
+                    f"Eye size {eye_size}, iris size {iris}"
+                    f" -> UV scale {scale:.4f} on {len(scaled)} eye materials"
+                )
 
             face_materials = _face_skin_materials()
             for material in face_materials:

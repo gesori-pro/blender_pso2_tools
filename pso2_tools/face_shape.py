@@ -117,7 +117,7 @@ _EXPRESSION_ALIASES = {
 }
 
 
-def _slider(char, field: str, expression: str) -> int | None:
+def slider(char, field: str, expression: str) -> int | None:
     """One slider's value, wherever this file version keeps it.
 
     V16 moved the eighteen expression values down two levels, from
@@ -237,7 +237,7 @@ def _blend(char, motion, expression: str) -> dict[str, dict]:
     result: dict[str, dict] = {}
     _seed_base_correction(motion, neutral, result)
     for field, min_frame, max_frame in _FACE_SLIDERS:
-        value = _slider(char, field, expression)
+        value = slider(char, field, expression)
         if value is None:
             continue
 
