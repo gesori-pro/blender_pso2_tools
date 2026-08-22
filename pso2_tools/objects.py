@@ -143,6 +143,13 @@ def is_genderless(object_id: int):
     return not is_t1(object_id) and not is_t2(object_id)
 
 
+def is_classic_layering_wear(object_id: int):
+    return (
+        CLASSIC_MALE_START <= object_id < CLASSIC_FEMALE_START
+        or CLASSIC_FEMALE_START <= object_id < CLASSIC_CAST_START
+    )
+
+
 def md5digest(text: str):
     """Get an MD5 hex digest of a string"""
     return hashlib.md5(text.encode()).hexdigest()

@@ -36,6 +36,8 @@ NGS_CAST_LEGS_UV = UVMapping(from_u_min=2 / 3, to_u_max=2 / 3)
 CLASSIC_CAST_ARMS_UV = NGS_CAST_LEGS_UV
 CLASSIC_CAST_BODY_UV = NGS_CAST_BODY_UV
 CLASSIC_CAST_LEGS_UV = NGS_CAST_ARMS_UV
+CLASSIC_LAYERED_INNERWEAR_UV = UVMapping(from_u_max=1 / 2)
+CLASSIC_OUTERWEAR_UV = UVMapping(from_u_min=1 / 2)
 
 
 @dataclass
@@ -592,6 +594,7 @@ _CLASSIC_BODY_PARTS = [
     ["bd", "bw"],  # Basewear
     ["bd", "fu"],  # Female Costume
     ["bd", "mu"],  # Male Costume
+    ["bd", "ow"],  # Outerwear
     ["rm"],  # Cast arms
     ["tr"],  # Cast body
     ["lg"],  # Cast legs

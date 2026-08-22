@@ -6,6 +6,7 @@ from . import attributes, builder
 from .colorize import ShaderNodePso2Colorize
 from .colors import ShaderNodePso2Colorchannels
 from .ngs import ShaderNodePso2Ngs
+from .uv_map import set_uv_map_range
 
 
 class Shader1100(builder.ShaderBuilder):
@@ -83,12 +84,7 @@ class Shader1100(builder.ShaderBuilder):
             map_range = tree.add_node(
                 bpy.types.ShaderNodeMapRange, (-6, 6), name="Cast UV Rescale"
             )
-            map_range.data_type = "FLOAT_VECTOR"
-            map_range.clamp = False
-            map_range.inputs[7].default_value[0] = self.data.uv_map.from_u_min  # type: ignore
-            map_range.inputs[8].default_value[0] = self.data.uv_map.from_u_max  # type: ignore
-            map_range.inputs[9].default_value[0] = self.data.uv_map.to_u_min  # type: ignore
-            map_range.inputs[10].default_value[0] = self.data.uv_map.to_u_max  # type: ignore
+            set_uv_map_range(map_range, self.uv_map)
 
             tree.add_link(uv.outputs["UV"], map_range.inputs[6])
 

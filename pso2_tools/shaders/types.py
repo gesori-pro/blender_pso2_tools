@@ -10,3 +10,4 @@ class ShaderData:
     textures: mat.MaterialTextures
     color_map: clr.ColorMapping | None = field(default_factory=clr.ColorMapping)
     uv_map: mat.UVMapping | None = None
+    uv_map_2: mat.UVMapping | None = None

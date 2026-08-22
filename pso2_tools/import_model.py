@@ -147,14 +147,17 @@ def import_aqp_file(
 def _get_import_kwargs(obj: objects.CmxObjectBase):
     color_map = obj.get_color_map()
     uv_map = None
+    uv_map_2 = None
 
     if isinstance(obj, objects.CmxBodyObject):
         uv_map = _get_uv_map(obj)
+        uv_map_2 = _get_uv_map_2(obj)
 
     return {
         "use_t2_skin": obj.is_t2,
         "color_map": color_map,
         "uv_map": uv_map,
+        "uv_map_2": uv_map_2,
     }
 
 
@@ -191,6 +194,7 @@ def _import_models(
     use_t2_skin=False,
     color_map: colors.ColorMapping | None = None,
     uv_map: material.UVMapping | None = None,
+    uv_map_2: material.UVMapping | None = None,
 ) -> OperatorResult:
     debug_print(f"Import: {high_quality=} {use_t2_skin=} {color_map=}")
     debug_print(f"Options: {options=}")
@@ -265,9 +269,6 @@ def _import_models(
     if model_materials.has_eyelash_material:
         model_materials.extra_textures.extend(material.find_textures("res"))
 
-    if model_materials.has_classic_default_material:
-        model_materials.extra_textures.extend(material.find_textures("bd", "iw"))
-
     if model_materials.has_decal_texture:
         model_materials.extra_textures.extend(material.find_textures("bp"))
 
@@ -282,6 +283,18 @@ def _import_models(
         operator.report(
             {"INFO"}, f"Applied innerwear textures to {inner_count} materials"
         )
+    # Classic layering wear paints the body and inner layers into the same
+    # material, so those textures have to come along; with no innerwear
+    # chosen the blank set stands in, or the skin areas render black.
+    if model_materials.has_classic_default_material:
+        model_materials.extra_textures.extend(material.find_textures("bd"))
+
+        if inner := material.find_textures("iw"):
+            model_materials.extra_textures.extend(inner)
+        else:
+            model_materials.extra_textures.extend(
+                _import_classic_skin_textures(context, use_t2_skin)
+            )
 
     _delete_empty_images()
 
@@ -294,6 +307,7 @@ def _import_models(
             textures=model_materials.get_textures(mat),
             color_map=color_map or colors.ColorMapping(),
             uv_map=uv_map,
+            uv_map_2=uv_map_2,
         )
         shaders.build_material(context, bpy.data.materials[key], data)
 
@@ -605,6 +619,19 @@ def _strip_zero_uv_layers(objects) -> int:
                 removed += 1
 
     return removed
+def _import_images_from_object(
+    obj: objects.CmxObjectBase, data_path: Path, high_quality=False
+):
+    files = obj.get_files()
+    ice_files = [
+        ice.IceFile.load(p)
+        for f in files
+        if (p := _get_ice_path(f, data_path, high_quality))
+    ]
+
+    skin_textures = collect_model_files(ice_files).texture_files
+
+    return [import_data_image(tex) for tex in skin_textures]
 
 
 def _import_skin_textures(
@@ -633,17 +660,24 @@ def _import_skin_textures(
     if not result:
         return []
 
-    skin = result[0]
-    files = skin.get_files()
-    ice_files = [
-        ice.IceFile.load(p)
-        for f in files
-        if (p := _get_ice_path(f, data_path, high_quality))
-    ]
+    return _import_images_from_object(result[0], data_path, high_quality)
 
-    skin_textures = collect_model_files(ice_files).texture_files
 
-    return [import_data_image(tex) for tex in skin_textures]
+def _import_classic_skin_textures(
+    context: bpy.types.Context, use_t2_skin: bool
+) -> list[bpy.types.Image]:
+    preferences = get_preferences(context)
+    data_path = preferences.get_pso2_data_path()
+
+    skin_id = 30000 if use_t2_skin else 20000
+
+    with closing(objects.ObjectDatabase(context)) as db:
+        result = db.get_innerwear(item_id=skin_id)
+
+    if not result:
+        return []
+
+    return _import_images_from_object(result[0], data_path)
 
 
 def _get_uv_map(obj: objects.CmxBodyObject):
@@ -661,6 +695,8 @@ def _get_uv_map(obj: objects.CmxBodyObject):
             return material.CLASSIC_CAST_BODY_UV
         case False, objects.ObjectType.CAST_LEGS:
             return material.CLASSIC_CAST_LEGS_UV
+        case False, objects.ObjectType.OUTERWEAR:
+            return material.CLASSIC_OUTERWEAR_UV
 
         case _:
             return None
@@ -677,6 +713,17 @@ _BONE_AXIS_DEFAULTS: FbxImportOptions = {
     "primary_bone_axis": "X",
     "secondary_bone_axis": "Y",
 }
+def _get_uv_map_2(obj: objects.CmxBodyObject):
+    if obj.is_ngs:
+        return None
+
+    if (
+        obj.object_type == objects.ObjectType.BASEWEAR
+        and objects.is_classic_layering_wear(obj.id)
+    ):
+        return material.CLASSIC_LAYERED_INNERWEAR_UV
+
+    return None
 
 
 def _get_fbx_options(options: ImportOptions):

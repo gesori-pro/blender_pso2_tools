@@ -8,6 +8,7 @@ from .attributes import ShaderNodePso2ShowInnerwear
 from .colorize import ShaderNodePso2Colorize
 from .colors import ShaderNodePso2Colorchannels
 from .mix import ShaderNodePso2MixTexture
+from .uv_map import set_uv_map_range
 
 
 class Shader0100(builder.ShaderBuilder):
@@ -22,8 +23,12 @@ class Shader0100(builder.ShaderBuilder):
         return self.data.color_map or ColorMapping()
 
     @property
-    def uv_map(self) -> UVMapping | None:
-        return self.data.uv_map
+    def uv_map(self) -> UVMapping:
+        return self.data.uv_map or UVMapping()
+
+    @property
+    def inner_uv_map(self) -> UVMapping:
+        return self.data.uv_map_2 or UVMapping()
 
     def build(self, context):
         # Just guessing how this all fits together, but this seems to work...
@@ -172,41 +177,30 @@ class Shader0100(builder.ShaderBuilder):
 
         tree.add_link(mix_normal.outputs["Color"], base_group.inputs["Normal"])
 
-        # Cast part UV adjustment
-        if self.uv_map:
-            uv = tree.add_node(bpy.types.ShaderNodeUVMap, (-12, 24))
-            uv.uv_map = "UVChannel_1"
+        # Cast part/outerwear UV adjustment
+        uv = tree.add_node(bpy.types.ShaderNodeUVMap, (-12, 24))
+        uv.uv_map = "UVChannel_1"
 
-            map_range = tree.add_node(
-                bpy.types.ShaderNodeMapRange, (-6, 24), name="Cast UV Rescale"
-            )
-            map_range.data_type = "FLOAT_VECTOR"
-            map_range.clamp = False
-            map_range.inputs[7].default_value[0] = self.data.uv_map.from_u_min  # type: ignore
-            map_range.inputs[8].default_value[0] = self.data.uv_map.from_u_max  # type: ignore
-            map_range.inputs[9].default_value[0] = self.data.uv_map.to_u_min  # type: ignore
-            map_range.inputs[10].default_value[0] = self.data.uv_map.to_u_max  # type: ignore
+        map_range = tree.add_node(
+            bpy.types.ShaderNodeMapRange, (-6, 24), name="Main UV Rescale"
+        )
+        set_uv_map_range(map_range, self.uv_map)
 
-            tree.add_link(uv.outputs["UV"], map_range.inputs[6])
+        tree.add_link(uv.outputs["UV"], map_range.inputs[6])
 
-            tree.add_link(map_range.outputs[1], diffuse.inputs["Vector"])
-            tree.add_link(map_range.outputs[1], mask.inputs["Vector"])
-            tree.add_link(map_range.outputs[1], multi.inputs["Vector"])
-            tree.add_link(map_range.outputs[1], normal.inputs["Vector"])
+        tree.add_link(map_range.outputs[1], diffuse.inputs["Vector"])
+        tree.add_link(map_range.outputs[1], mask.inputs["Vector"])
+        tree.add_link(map_range.outputs[1], multi.inputs["Vector"])
+        tree.add_link(map_range.outputs[1], normal.inputs["Vector"])
 
-        # Innerwear UV
+        # Innerwear UV adjustment
         in_uv = tree.add_node(bpy.types.ShaderNodeUVMap, (-12, 12))
         in_uv.uv_map = "UVChannel_1"
 
         map_range = tree.add_node(
             bpy.types.ShaderNodeMapRange, (-6, 12), name="Innerwear UV Rescale"
         )
-        map_range.data_type = "FLOAT_VECTOR"
-        map_range.clamp = False
-        map_range.inputs[7].default_value[0] = 0  # type: ignore
-        map_range.inputs[8].default_value[0] = 0.5  # type: ignore
-        map_range.inputs[9].default_value[0] = 0  # type: ignore
-        map_range.inputs[10].default_value[0] = 1  # type: ignore
+        set_uv_map_range(map_range, self.inner_uv_map)
 
         tree.add_link(in_uv.outputs["UV"], map_range.inputs[6])
 
