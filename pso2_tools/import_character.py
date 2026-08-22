@@ -611,8 +611,18 @@ class PSO2_OT_ImportCharacter(  # type: ignore https://github.com/nutti/fake-bpy
     bl_options = {"UNDO"}
 
     filename_ext = ".fnp"
+    # A save is named [gender][race]p: f or m, then d/n/h/c for the four
+    # races, and a trailing u where the body is not encrypted. Listing a
+    # few by hand left the male ones invisible in the file dialog, so the
+    # whole set is generated.
     filter_glob: bpy.props.StringProperty(
-        default="*.fnp;*.fkp;*.fcp", options={"HIDDEN"}
+        default=";".join(
+            f"*.{gender}{race}p{plain}"
+            for gender in "fm"
+            for race in "dnhc"
+            for plain in ("", "u")
+        ),
+        options={"HIDDEN"},
     )
 
     import_colors: bpy.props.BoolProperty(
