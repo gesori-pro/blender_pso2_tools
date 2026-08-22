@@ -1,6 +1,6 @@
 import bpy
 
-from . import builder, shader_1102
+from . import builder, decal, shader_1102
 
 
 class Shader1117(shader_1102.Shader1102):
@@ -20,10 +20,10 @@ class Shader1117(shader_1102.Shader1102):
         decal_uv.parent = frame  # type: ignore
         decal_uv.uv_map = "UVChannel_3"
 
-        decal = tree.add_node(bpy.types.ShaderNodeTexImage, (24, 0), name="Decal")
-        decal.parent = frame  # type: ignore
-        decal.image = self.textures.decal.diffuse
-        decal.extension = "CLIP"
+        decal_tex = tree.add_node(bpy.types.ShaderNodeTexImage, (24, 0), name="Decal")
+        decal_tex.parent = frame  # type: ignore
+        decal_tex.image = self.textures.decal.diffuse or decal.get_no_decal_image()
+        decal_tex.extension = "CLIP"
 
         decal_mix = tree.add_node(bpy.types.ShaderNodeMix, (30, 4), name="Decal Mix")
         decal_mix.parent = frame  # type: ignore
@@ -31,8 +31,8 @@ class Shader1117(shader_1102.Shader1102):
         decal_mix.blend_type = "MIX"
         decal_mix.clamp_factor = True
 
-        tree.add_link(decal_uv.outputs["UV"], decal.inputs["Vector"])
+        tree.add_link(decal_uv.outputs["UV"], decal_tex.inputs["Vector"])
         tree.add_link(diffuse.outputs["Result"], decal_mix.inputs["A"])
-        tree.add_link(decal.outputs["Color"], decal_mix.inputs["B"])
-        tree.add_link(decal.outputs["Alpha"], decal_mix.inputs["Factor"])
+        tree.add_link(decal_tex.outputs["Color"], decal_mix.inputs["B"])
+        tree.add_link(decal_tex.outputs["Alpha"], decal_mix.inputs["Factor"])
         tree.add_link(decal_mix.outputs["Result"], skin.inputs["Diffuse"])

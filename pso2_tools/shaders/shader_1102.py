@@ -24,6 +24,10 @@ def _no_layer_image() -> bpy.types.Image:
     if image is None:
         image = bpy.data.images.new(name, 1, 1, alpha=True)
         image.pixels[:] = (0.0, 0.0, 0.0, 0.0)
+        # A generated image regenerates its pixels on reload, which would
+        # bring this one back opaque; packing keeps the transparent pixel.
+        image.update()
+        image.pack()
     return image
 
 
