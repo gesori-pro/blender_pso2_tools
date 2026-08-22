@@ -34,9 +34,11 @@ from . import (
     scene_props,
     shape_sliders,
 )
+
 # Imported for the side effect of registering their operators: they have no
 # menu entry, so nothing else in this module refers to them.
 from . import bake_rest as bake_rest
+from . import bake_textures as bake_textures
 from . import import_character as import_character
 from . import import_shape_adjust as import_shape_adjust
 from . import reloader as reloader

@@ -39,6 +39,14 @@ class PSO2AppearancePanel(bpy.types.Panel):
             for channel in colors.COLOR_CHANNELS.values():
                 grid.prop(context.scene, channel.custom_property_name)
 
+        # Everything above is applied at draw time, so a model taken out of
+        # Blender loses it. Baking is where that gets frozen into textures.
+        header, body = layout.panel("PSO2_appearance_bake", default_closed=True)
+        header.label(text="Bake Textures", icon="TEXTURE")
+        if body:
+            body.label(text="Bakes the selected objects' materials.")
+            body.operator("pso2.bake_textures", icon="RENDER_STILL")
+
 
 @classes.register
 class PSO2MaterialPanel(bpy.types.Panel):
