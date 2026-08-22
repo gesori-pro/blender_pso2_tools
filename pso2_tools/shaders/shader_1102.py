@@ -40,7 +40,20 @@ class Shader1102(builder.ShaderBuilder):
 
     @property
     def colors(self) -> ColorMapping:
-        return self.data.color_map or ColorMapping()
+        """The colours the inner layer is tinted with.
+
+        A material that names its own channels - the ones that are really
+        clothing rather than skin - is taken at its word. A skin import
+        names none, and its inner layer has always been the innerwear
+        pair, so that is what an empty mapping falls back to. Testing the
+        mapping for truth instead of for content would never fall back:
+        the import always hands over a ColorMapping, empty or not, and an
+        empty dataclass is still true.
+        """
+        color_map = self.data.color_map
+        if color_map and color_map.get_used_colors():
+            return color_map
+        return ColorMapping(red=ColorId.INNER1, green=ColorId.INNER2)
 
     def build(self, context):
         tree = self.init_tree()
@@ -48,6 +61,8 @@ class Shader1102(builder.ShaderBuilder):
         output = tree.add_node(bpy.types.ShaderNodeOutputMaterial, (42, 1))
 
         # ========== Skin ==========
+
+        uses_skin_textures = bool(self.textures.skin_0.mask)
 
         skin = tree.add_group("Skin", (0, 0))
 
@@ -62,7 +77,7 @@ class Shader1102(builder.ShaderBuilder):
         diffuse_0.image = self.textures.skin_0.diffuse or self.textures.default.diffuse
 
         diffuse_1 = skin.add_node(
-            bpy.types.ShaderNodeTexImage, (6, 18), name="Diffse Muscle"
+            bpy.types.ShaderNodeTexImage, (6, 18), name="Diffuse Muscle"
         )
         diffuse_1.image = self.textures.skin_1.diffuse or self.textures.default.diffuse
 
@@ -99,9 +114,12 @@ class Shader1102(builder.ShaderBuilder):
         tree.add_link(mask_1.outputs["Color"], mask_mix.inputs["Color 2"])
         tree.add_link(mask_1.outputs["Alpha"], mask_mix.inputs["Alpha 2"])
 
-        colorize = skin.add_node(
-            ShaderNodePso2ColorizeMultiply, (26, 14), name="Skin Colorize"
-        )
+        if uses_skin_textures:
+            colorize = skin.add_node(
+                ShaderNodePso2ColorizeMultiply, (26, 14), name="Skin Colorize"
+            )
+        else:
+            colorize = skin.add_node(ShaderNodePso2Colorize, (26, 14), name="Colorize")
 
         tree.add_link(diffuse_mix.outputs["Color"], colorize.inputs["Input"])
         tree.add_link(mask_mix.outputs["Color"], colorize.inputs["Mask RGB"])
@@ -110,7 +128,7 @@ class Shader1102(builder.ShaderBuilder):
 
         channels = skin.add_node(ShaderNodePso2Colorchannels, (22, 10), name="Colors")
 
-        if self.textures.skin_0.mask:
+        if uses_skin_textures:
             # If using skin textures, use skin colors
             tree.add_color_link(ColorId.MAIN_SKIN, channels, colorize.inputs["Color 1"])
             tree.add_color_link(ColorId.SUB_SKIN, channels, colorize.inputs["Color 2"])
@@ -208,9 +226,11 @@ class Shader1102(builder.ShaderBuilder):
 
         channels = inner.add_node(ShaderNodePso2Colorchannels, (7, 10), name="Colors")
 
-        tree.add_color_link(ColorId.INNER1, channels, in_colorize.inputs["Color 1"])
-        tree.add_color_link(ColorId.INNER2, channels, in_colorize.inputs["Color 2"])
-        in_colorize.set_colors_used([1, 2])
+        tree.add_color_link(self.colors.red, channels, in_colorize.inputs["Color 1"])
+        tree.add_color_link(self.colors.green, channels, in_colorize.inputs["Color 2"])
+        tree.add_color_link(self.colors.blue, channels, in_colorize.inputs["Color 3"])
+        tree.add_color_link(self.colors.alpha, channels, in_colorize.inputs["Color 4"])
+        in_colorize.set_colors_used(self.colors)
 
         # Multi Map
         in_multi = inner.add_node(

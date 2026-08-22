@@ -11,8 +11,11 @@ class Shader1117(shader_1102.Shader1102):
 
         tree = builder.NodeTreeBuilder(self.tree)
         frame = tree.tree.nodes["Skin"]
-        diffuse = tree.tree.nodes["Skin Colorize"]
         skin = tree.tree.nodes["PSO2 NGS Skin"]
+        try:
+            diffuse = tree.tree.nodes["Skin Colorize"]
+        except KeyError:
+            diffuse = tree.tree.nodes["Colorize"]
 
         skin.location.x += 50 * 6
 
