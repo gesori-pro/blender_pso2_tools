@@ -553,12 +553,25 @@ class PSO2_OT_ImportCharacter(  # type: ignore https://github.com/nutti/fake-bpy
         description="Load basewear, costume, innerwear and outerwear",
         default=True,
     )
+    expression: bpy.props.EnumProperty(
+        name="Expression",
+        description=(
+            "Which of the file's expression presets the face rests in."
+            " The character creator shows Natural"
+        ),
+        items=[
+            (name, label, f"Pose the face with the file's {label} preset")
+            for name, label in face_shape.EXPRESSIONS
+        ],
+        default=face_shape.DEFAULT_EXPRESSION,
+    )
 
     def draw(self, context):
         assert self.layout is not None
         self.layout.prop(self, "import_colors")
         self.layout.prop(self, "import_proportions")
         self.layout.prop(self, "include_body")
+        self.layout.prop(self, "expression")
 
     def execute(self, context) -> OperatorResult:
         path = Path(self.filepath)  # type: ignore
@@ -661,7 +674,7 @@ class PSO2_OT_ImportCharacter(  # type: ignore https://github.com/nutti/fake-bpy
 
         if self.import_proportions:
             self._apply_proportions(context, char)
-            self._apply_face_shape(context, char)
+            self._apply_face_shape(context, char, self.expression)
 
         if missing:
             shown = ", ".join(missing[:6])
@@ -676,7 +689,12 @@ class PSO2_OT_ImportCharacter(  # type: ignore https://github.com/nutti/fake-bpy
 
         return {"FINISHED"}
 
-    def _apply_face_shape(self, context, char: charfile.CharacterFile) -> None:
+    def _apply_face_shape(
+        self,
+        context,
+        char: charfile.CharacterFile,
+        expression: str = face_shape.DEFAULT_EXPRESSION,
+    ) -> None:
         """Shape the face with its own sliders, after the body proportions.
 
         It has to run after them because they reset every pose they touch,
@@ -687,7 +705,7 @@ class PSO2_OT_ImportCharacter(  # type: ignore https://github.com/nutti/fake-bpy
         if face_id <= 0:
             return
 
-        summary = face_shape.apply(context, char, face_id)
+        summary = face_shape.apply(context, char, face_id, expression)
         debug_print(
             f"Face shape: posed {summary['bones']} bones"
             f" on {summary['posed']} armatures"

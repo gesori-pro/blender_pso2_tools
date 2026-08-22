@@ -89,6 +89,33 @@ _FACE_SLIDERS: tuple[tuple[str, int | None, int], ...] = (
 # the one the character creator shows when nothing else is playing.
 DEFAULT_EXPRESSION = "faceNatural"
 
+# The presets a character file carries, in the order it stores them. V10 named
+# the last three "unused"; V16 turned them into the three custom slots, and the
+# blend only needs whichever name the file actually has, so both spellings are
+# tried when a preset is looked up.
+EXPRESSIONS: tuple[tuple[str, str], ...] = (
+    ("faceNatural", "Natural"),
+    ("faceSmile", "Smile"),
+    ("faceAngry", "Angry"),
+    ("faceSad", "Sad"),
+    ("faceSus", "Suspicious"),
+    ("faceEyesClosed", "Eyes Closed"),
+    ("faceSmile2", "Smile 2"),
+    ("faceWink", "Wink"),
+    ("faceCustom1", "Custom 1"),
+    ("faceCustom2", "Custom 2"),
+    ("faceCustom3", "Custom 3"),
+)
+
+
+# V10 files call the last presets "unused" where V16 calls them custom, so a
+# preset picked by its V16 name has to fall back to the older spelling.
+_EXPRESSION_ALIASES = {
+    "faceCustom1": "faceUnused1",
+    "faceCustom2": "faceUnused2",
+    "faceCustom3": "faceUnused3",
+}
+
 
 def _slider(char, field: str, expression: str) -> int | None:
     """One slider's value, wherever this file version keeps it.
@@ -99,14 +126,20 @@ def _slider(char, field: str, expression: str) -> int | None:
     every expression slider unread on a file saved by the live game, which
     imports the face with its brows, lids and mouth corners at neutral.
     """
-    for prefix in ("", "expStruct.expStruct.", "expStruct."):
-        name = field.replace("<expr>.", f"{expression}.{prefix}")
-        try:
-            value = char[name]
-        except (KeyError, TypeError):
-            continue
-        if isinstance(value, int):
-            return int(value)
+    names = [expression]
+    alias = _EXPRESSION_ALIASES.get(expression)
+    if alias:
+        names.append(alias)
+
+    for preset in names:
+        for prefix in ("", "expStruct.expStruct.", "expStruct."):
+            name = field.replace("<expr>.", f"{preset}.{prefix}")
+            try:
+                value = char[name]
+            except (KeyError, TypeError):
+                continue
+            if isinstance(value, int):
+                return int(value)
     return None
 
 
