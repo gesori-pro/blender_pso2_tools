@@ -360,6 +360,26 @@ def _material_texture_data() -> dict[str, list[dict]]:
     return result
 
 
+def _saved_entries(saved: dict[str, list[dict]], mate_name: str) -> list[dict] | None:
+    """The saved register list for a converted material name.
+
+    A source file can hold two materials with the same name, which the
+    conversion tells apart as "name" and "name(1)" - and the trip back
+    through FBX clips the marker's closing paren, so the model comes home
+    asking for "name(1". Nothing then matches, and that material ships
+    placeholder "tex0_d.dds" textures. Repair the marker first; failing
+    that, same-named materials share their textures in every file seen,
+    so the base name's registers stand in.
+    """
+    if entries := saved.get(mate_name):
+        return entries
+
+    match = re.match(r"^(?P<base>.+?)\((?P<n>\d+)\)?$", mate_name)
+    if match is None:
+        return None
+    return saved.get(f"{match['base']}({match['n']})") or saved.get(match["base"])
+
+
 def restore_material_textures(model) -> tuple[int, set[str]]:
     """Rebuild the texture registers from the lists saved at import.
 
@@ -424,7 +444,7 @@ def restore_material_textures(model) -> tuple[int, set[str]]:
         if not 0 <= mesh.mateIndex < model.mateList.Count:
             continue
         mate_name = str(model.mateList[mesh.mateIndex].matName.GetString())
-        entries = saved.get(mate_name)
+        entries = _saved_entries(saved, mate_name)
         if not entries:
             missing.add(mate_name)
             continue
@@ -535,7 +555,6 @@ def _rebuild_texf(model, new_tsta: list) -> None:
     if not model.texfList.Count:
         return
 
-    template = model.texfList[0]
     seen: set[str] = set()
     entries = []
     for tsta in new_tsta:
@@ -543,7 +562,10 @@ def _rebuild_texf(model, new_tsta: list) -> None:
         if name in seen:
             continue
         seen.add(name)
-        texf = template  # TEXF is a value type; indexing boxed a copy.
+        # Indexing the .NET list boxes a fresh copy each time. Reusing one
+        # copy for several entries would leave every name in the table as
+        # whichever was written last.
+        texf = model.texfList[0]
         texf.texName = PSO2String.GeneratePSO2String(name)
         entries.append(texf)
 
