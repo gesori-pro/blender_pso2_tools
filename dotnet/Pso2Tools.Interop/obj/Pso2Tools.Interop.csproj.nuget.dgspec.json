@@ -1,0 +1,924 @@
+{
+  "format": 1,
+  "restore": {
+    "/Users/focuslite/Documents/GitHub/blender_pso2_tools/dotnet/Pso2Tools.Interop/Pso2Tools.Interop.csproj": {}
+  },
+  "projects": {
+    "/Users/focuslite/Documents/GitHub/blender_pso2_tools/dotnet/Pso2Tools.Interop/Pso2Tools.Interop.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "/Users/focuslite/Documents/GitHub/blender_pso2_tools/dotnet/Pso2Tools.Interop/Pso2Tools.Interop.csproj",
+        "projectName": "Pso2Tools.Interop",
+        "projectPath": "/Users/focuslite/Documents/GitHub/blender_pso2_tools/dotnet/Pso2Tools.Interop/Pso2Tools.Interop.csproj",
+        "packagesPath": "/Users/focuslite/.nuget/packages/",
+        "outputPath": "/Users/focuslite/Documents/GitHub/blender_pso2_tools/dotnet/Pso2Tools.Interop/obj/",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "/Users/focuslite/.nuget/NuGet/NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net9.0"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net9.0": {
+            "targetAlias": "net9.0",
+            "projectReferences": {
+              "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/AquaModelLibrary.Core/AquaModelLibrary.Core.csproj": {
+                "projectPath": "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/AquaModelLibrary.Core/AquaModelLibrary.Core.csproj"
+              }
+            }
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        },
+        "SdkAnalysisLevel": "10.0.100"
+      },
+      "frameworks": {
+        "net9.0": {
+          "targetAlias": "net9.0",
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "downloadDependencies": [
+            {
+              "name": "Microsoft.AspNetCore.App.Ref",
+              "version": "[9.0.13, 9.0.13]"
+            },
+            {
+              "name": "Microsoft.NETCore.App.Ref",
+              "version": "[9.0.13, 9.0.13]"
+            }
+          ],
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/10.0.103/PortableRuntimeIdentifierGraph.json"
+        }
+      },
+      "runtimes": {
+        "osx-arm64": {
+          "#import": []
+        }
+      }
+    },
+    "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/AquaModelLibrary.Core/AquaModelLibrary.Core.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/AquaModelLibrary.Core/AquaModelLibrary.Core.csproj",
+        "projectName": "AquaModelLibrary.Core",
+        "projectPath": "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/AquaModelLibrary.Core/AquaModelLibrary.Core.csproj",
+        "packagesPath": "/Users/focuslite/.nuget/packages/",
+        "outputPath": "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/AquaModelLibrary.Core/obj/",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "/Users/focuslite/.nuget/NuGet/NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net9.0"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net9.0": {
+            "targetAlias": "net9.0",
+            "projectReferences": {
+              "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/AquaModelLibrary.Data/AquaModelLibrary.Data.csproj": {
+                "projectPath": "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/AquaModelLibrary.Data/AquaModelLibrary.Data.csproj"
+              },
+              "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/SAToolsShared/ArchiveLib/ArchiveLib.csproj": {
+                "projectPath": "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/SAToolsShared/ArchiveLib/ArchiveLib.csproj"
+              },
+              "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/SoulsFormatsNEXT/SoulsFormats/SoulsFormats.csproj": {
+                "projectPath": "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/SoulsFormatsNEXT/SoulsFormats/SoulsFormats.csproj"
+              }
+            }
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        },
+        "SdkAnalysisLevel": "10.0.100"
+      },
+      "frameworks": {
+        "net9.0": {
+          "targetAlias": "net9.0",
+          "dependencies": {
+            "BouncyCastle.Cryptography": {
+              "target": "Package",
+              "version": "[2.4.0, )"
+            },
+            "Reloaded.Memory": {
+              "target": "Package",
+              "version": "[9.4.2, )"
+            },
+            "SharpAssimp": {
+              "target": "Package",
+              "version": "[6.0.11, )"
+            },
+            "SixLabors.ImageSharp": {
+              "target": "Package",
+              "version": "[3.1.6, )"
+            },
+            "System.Drawing.Common": {
+              "target": "Package",
+              "version": "[8.0.11, )"
+            },
+            "System.Net.Http": {
+              "target": "Package",
+              "version": "[4.3.4, )"
+            },
+            "System.Text.Encoding.CodePages": {
+              "target": "Package",
+              "version": "[9.0.0, )"
+            },
+            "System.Text.RegularExpressions": {
+              "target": "Package",
+              "version": "[4.3.1, )"
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "downloadDependencies": [
+            {
+              "name": "Microsoft.AspNetCore.App.Ref",
+              "version": "[9.0.13, 9.0.13]"
+            },
+            {
+              "name": "Microsoft.NETCore.App.Ref",
+              "version": "[9.0.13, 9.0.13]"
+            }
+          ],
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/10.0.103/PortableRuntimeIdentifierGraph.json"
+        }
+      },
+      "runtimes": {
+        "osx-arm64": {
+          "#import": []
+        }
+      }
+    },
+    "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/AquaModelLibrary.Data/AquaModelLibrary.Data.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/AquaModelLibrary.Data/AquaModelLibrary.Data.csproj",
+        "projectName": "AquaModelLibrary.Data",
+        "projectPath": "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/AquaModelLibrary.Data/AquaModelLibrary.Data.csproj",
+        "packagesPath": "/Users/focuslite/.nuget/packages/",
+        "outputPath": "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/AquaModelLibrary.Data/obj/",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "/Users/focuslite/.nuget/NuGet/NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net9.0"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net9.0": {
+            "targetAlias": "net9.0",
+            "projectReferences": {
+              "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/AquaModelLibrary.Helpers/AquaModelLibrary.Helpers.csproj": {
+                "projectPath": "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/AquaModelLibrary.Helpers/AquaModelLibrary.Helpers.csproj"
+              },
+              "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/NvTriStrip.Net/NvTriStripDotNet/NvTriStripDotNet.csproj": {
+                "projectPath": "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/NvTriStrip.Net/NvTriStripDotNet/NvTriStripDotNet.csproj"
+              },
+              "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/SAToolsShared/ArchiveLib/ArchiveLib.csproj": {
+                "projectPath": "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/SAToolsShared/ArchiveLib/ArchiveLib.csproj"
+              },
+              "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/SAToolsShared/VrSharp/VrSharp.csproj": {
+                "projectPath": "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/SAToolsShared/VrSharp/VrSharp.csproj"
+              },
+              "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/UnluacNET/UnluacNET.csproj": {
+                "projectPath": "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/UnluacNET/UnluacNET.csproj"
+              },
+              "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/ZamboniLib/ZamboniLib/ZamboniLib.csproj": {
+                "projectPath": "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/ZamboniLib/ZamboniLib/ZamboniLib.csproj"
+              }
+            }
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        },
+        "SdkAnalysisLevel": "10.0.100"
+      },
+      "frameworks": {
+        "net9.0": {
+          "targetAlias": "net9.0",
+          "dependencies": {
+            "Reloaded.Memory": {
+              "target": "Package",
+              "version": "[9.4.2, )"
+            },
+            "SixLabors.ImageSharp": {
+              "target": "Package",
+              "version": "[3.1.6, )"
+            },
+            "System.Drawing.Common": {
+              "target": "Package",
+              "version": "[8.0.11, )"
+            },
+            "System.Net.Http": {
+              "target": "Package",
+              "version": "[4.3.4, )"
+            },
+            "System.Text.Encoding.CodePages": {
+              "target": "Package",
+              "version": "[9.0.0, )"
+            },
+            "ZstdNet": {
+              "target": "Package",
+              "version": "[1.4.5, )"
+            },
+            "prs_rs.Net.Sys": {
+              "target": "Package",
+              "version": "[1.0.4, )"
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "downloadDependencies": [
+            {
+              "name": "Microsoft.AspNetCore.App.Ref",
+              "version": "[9.0.13, 9.0.13]"
+            },
+            {
+              "name": "Microsoft.NETCore.App.Ref",
+              "version": "[9.0.13, 9.0.13]"
+            }
+          ],
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/10.0.103/PortableRuntimeIdentifierGraph.json"
+        }
+      },
+      "runtimes": {
+        "osx-arm64": {
+          "#import": []
+        }
+      }
+    },
+    "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/AquaModelLibrary.Helpers/AquaModelLibrary.Helpers.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/AquaModelLibrary.Helpers/AquaModelLibrary.Helpers.csproj",
+        "projectName": "AquaModelLibrary.Helpers",
+        "projectPath": "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/AquaModelLibrary.Helpers/AquaModelLibrary.Helpers.csproj",
+        "packagesPath": "/Users/focuslite/.nuget/packages/",
+        "outputPath": "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/AquaModelLibrary.Helpers/obj/",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "/Users/focuslite/.nuget/NuGet/NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net9.0"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net9.0": {
+            "targetAlias": "net9.0",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        },
+        "SdkAnalysisLevel": "10.0.100"
+      },
+      "frameworks": {
+        "net9.0": {
+          "targetAlias": "net9.0",
+          "dependencies": {
+            "DrSwizzler": {
+              "target": "Package",
+              "version": "[1.1.1, )"
+            },
+            "Reloaded.Memory": {
+              "target": "Package",
+              "version": "[9.4.2, )"
+            },
+            "SharpZipLib": {
+              "target": "Package",
+              "version": "[1.4.2, )"
+            },
+            "prs_rs.Net.Sys": {
+              "target": "Package",
+              "version": "[1.0.4, )"
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "downloadDependencies": [
+            {
+              "name": "Microsoft.AspNetCore.App.Ref",
+              "version": "[9.0.13, 9.0.13]"
+            },
+            {
+              "name": "Microsoft.NETCore.App.Ref",
+              "version": "[9.0.13, 9.0.13]"
+            }
+          ],
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/10.0.103/PortableRuntimeIdentifierGraph.json"
+        }
+      },
+      "runtimes": {
+        "osx-arm64": {
+          "#import": []
+        }
+      }
+    },
+    "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/NvTriStrip.Net/NvTriStripDotNet/NvTriStripDotNet.csproj": {
+      "restore": {
+        "projectUniqueName": "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/NvTriStrip.Net/NvTriStripDotNet/NvTriStripDotNet.csproj",
+        "projectName": "NvTriStripDotNet",
+        "projectPath": "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/NvTriStrip.Net/NvTriStripDotNet/NvTriStripDotNet.csproj",
+        "UsingMicrosoftNETSdk": false,
+        "frameworks": {
+          "net48": {
+            "projectReferences": {}
+          }
+        }
+      },
+      "frameworks": {
+        "net48": {}
+      }
+    },
+    "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/SAToolsShared/ArchiveLib/ArchiveLib.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/SAToolsShared/ArchiveLib/ArchiveLib.csproj",
+        "projectName": "ArchiveLib",
+        "projectPath": "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/SAToolsShared/ArchiveLib/ArchiveLib.csproj",
+        "packagesPath": "/Users/focuslite/.nuget/packages/",
+        "outputPath": "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/SAToolsShared/ArchiveLib/obj/",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "/Users/focuslite/.nuget/NuGet/NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net6.0"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net6.0": {
+            "targetAlias": "net6.0",
+            "projectReferences": {
+              "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/SAToolsShared/VrSharp/VrSharp.csproj": {
+                "projectPath": "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/SAToolsShared/VrSharp/VrSharp.csproj"
+              }
+            }
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        },
+        "SdkAnalysisLevel": "10.0.100"
+      },
+      "frameworks": {
+        "net6.0": {
+          "targetAlias": "net6.0",
+          "dependencies": {
+            "Pfim": {
+              "target": "Package",
+              "version": "[0.11.3, )"
+            },
+            "SixLabors.ImageSharp": {
+              "target": "Package",
+              "version": "[3.1.6, )"
+            },
+            "System.Drawing.Common": {
+              "target": "Package",
+              "version": "[8.0.11, )"
+            },
+            "System.Net.Http": {
+              "target": "Package",
+              "version": "[4.3.4, )"
+            },
+            "System.Text.Encoding.CodePages": {
+              "target": "Package",
+              "version": "[9.0.0, )"
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "downloadDependencies": [
+            {
+              "name": "Microsoft.AspNetCore.App.Ref",
+              "version": "[6.0.36, 6.0.36]"
+            },
+            {
+              "name": "Microsoft.NETCore.App.Ref",
+              "version": "[6.0.36, 6.0.36]"
+            }
+          ],
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/10.0.103/RuntimeIdentifierGraph.json"
+        }
+      },
+      "runtimes": {
+        "osx-arm64": {
+          "#import": []
+        }
+      }
+    },
+    "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/SAToolsShared/VrSharp/VrSharp.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/SAToolsShared/VrSharp/VrSharp.csproj",
+        "projectName": "VrSharp",
+        "projectPath": "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/SAToolsShared/VrSharp/VrSharp.csproj",
+        "packagesPath": "/Users/focuslite/.nuget/packages/",
+        "outputPath": "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/SAToolsShared/VrSharp/obj/",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "/Users/focuslite/.nuget/NuGet/NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net6.0"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net6.0": {
+            "targetAlias": "net6.0",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        },
+        "SdkAnalysisLevel": "10.0.100"
+      },
+      "frameworks": {
+        "net6.0": {
+          "targetAlias": "net6.0",
+          "dependencies": {
+            "BCnEncoder.Net": {
+              "target": "Package",
+              "version": "[2.1.0, )"
+            },
+            "BCnEncoder.Net.ImageSharp": {
+              "target": "Package",
+              "version": "[1.1.1, )"
+            },
+            "Pfim": {
+              "target": "Package",
+              "version": "[0.11.3, )"
+            },
+            "SixLabors.ImageSharp": {
+              "target": "Package",
+              "version": "[3.1.6, )"
+            },
+            "System.Drawing.Common": {
+              "target": "Package",
+              "version": "[8.0.11, )"
+            },
+            "System.Net.Http": {
+              "target": "Package",
+              "version": "[4.3.4, )"
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "downloadDependencies": [
+            {
+              "name": "Microsoft.AspNetCore.App.Ref",
+              "version": "[6.0.36, 6.0.36]"
+            },
+            {
+              "name": "Microsoft.NETCore.App.Ref",
+              "version": "[6.0.36, 6.0.36]"
+            }
+          ],
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/10.0.103/RuntimeIdentifierGraph.json"
+        }
+      },
+      "runtimes": {
+        "osx-arm64": {
+          "#import": []
+        }
+      }
+    },
+    "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/SoulsFormatsNEXT/SoulsFormats/SoulsFormats.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/SoulsFormatsNEXT/SoulsFormats/SoulsFormats.csproj",
+        "projectName": "SoulsFormats",
+        "projectPath": "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/SoulsFormatsNEXT/SoulsFormats/SoulsFormats.csproj",
+        "packagesPath": "/Users/focuslite/.nuget/packages/",
+        "outputPath": "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/SoulsFormatsNEXT/SoulsFormats/obj/",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "/Users/focuslite/.nuget/NuGet/NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net9.0"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net9.0": {
+            "targetAlias": "net9.0",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        },
+        "SdkAnalysisLevel": "10.0.100"
+      },
+      "frameworks": {
+        "net9.0": {
+          "targetAlias": "net9.0",
+          "dependencies": {
+            "BouncyCastle.Cryptography": {
+              "target": "Package",
+              "version": "[2.4.0, )"
+            },
+            "DrSwizzler": {
+              "target": "Package",
+              "version": "[1.1.1, )"
+            },
+            "System.Text.Encoding.CodePages": {
+              "target": "Package",
+              "version": "[8.0.0, )"
+            },
+            "System.ValueTuple": {
+              "target": "Package",
+              "version": "[4.5.0, )"
+            },
+            "ZstdNet": {
+              "target": "Package",
+              "version": "[1.4.5, )"
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "downloadDependencies": [
+            {
+              "name": "Microsoft.AspNetCore.App.Ref",
+              "version": "[9.0.13, 9.0.13]"
+            },
+            {
+              "name": "Microsoft.NETCore.App.Ref",
+              "version": "[9.0.13, 9.0.13]"
+            }
+          ],
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/10.0.103/PortableRuntimeIdentifierGraph.json"
+        }
+      },
+      "runtimes": {
+        "osx-arm64": {
+          "#import": []
+        }
+      }
+    },
+    "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/UnluacNET/UnluacNET.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/UnluacNET/UnluacNET.csproj",
+        "projectName": "UnluacNET",
+        "projectPath": "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/UnluacNET/UnluacNET.csproj",
+        "packagesPath": "/Users/focuslite/.nuget/packages/",
+        "outputPath": "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/UnluacNET/obj/",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "/Users/focuslite/.nuget/NuGet/NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net9.0"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net9.0": {
+            "targetAlias": "net9.0",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        },
+        "SdkAnalysisLevel": "10.0.100"
+      },
+      "frameworks": {
+        "net9.0": {
+          "targetAlias": "net9.0",
+          "dependencies": {
+            "Microsoft.CSharp": {
+              "target": "Package",
+              "version": "[4.7.0, )"
+            },
+            "System.Data.DataSetExtensions": {
+              "target": "Package",
+              "version": "[4.6.0-preview3.19128.7, )"
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "downloadDependencies": [
+            {
+              "name": "Microsoft.AspNetCore.App.Ref",
+              "version": "[9.0.13, 9.0.13]"
+            },
+            {
+              "name": "Microsoft.NETCore.App.Ref",
+              "version": "[9.0.13, 9.0.13]"
+            }
+          ],
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/10.0.103/PortableRuntimeIdentifierGraph.json"
+        }
+      },
+      "runtimes": {
+        "osx-arm64": {
+          "#import": []
+        }
+      }
+    },
+    "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/ZamboniLib/ZamboniLib/ZamboniLib.csproj": {
+      "version": "1.0.3",
+      "restore": {
+        "projectUniqueName": "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/ZamboniLib/ZamboniLib/ZamboniLib.csproj",
+        "projectName": "ZamboniCore",
+        "projectPath": "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/ZamboniLib/ZamboniLib/ZamboniLib.csproj",
+        "packagesPath": "/Users/focuslite/.nuget/packages/",
+        "outputPath": "/Users/focuslite/Documents/GitHub/blender_pso2_tools/PSO2-Aqua-Library/ZamboniLib/ZamboniLib/obj/",
+        "projectStyle": "PackageReference",
+        "crossTargeting": true,
+        "configFilePaths": [
+          "/Users/focuslite/.nuget/NuGet/NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net472",
+          "net48",
+          "net6.0"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net6.0": {
+            "targetAlias": "net6.0",
+            "projectReferences": {}
+          },
+          "net472": {
+            "targetAlias": "net472",
+            "projectReferences": {}
+          },
+          "net48": {
+            "targetAlias": "net48",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        },
+        "SdkAnalysisLevel": "10.0.100"
+      },
+      "frameworks": {
+        "net6.0": {
+          "targetAlias": "net6.0",
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "downloadDependencies": [
+            {
+              "name": "Microsoft.AspNetCore.App.Ref",
+              "version": "[6.0.36, 6.0.36]"
+            },
+            {
+              "name": "Microsoft.NETCore.App.Ref",
+              "version": "[6.0.36, 6.0.36]"
+            }
+          ],
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/10.0.103/RuntimeIdentifierGraph.json"
+        },
+        "net472": {
+          "targetAlias": "net472",
+          "dependencies": {
+            "Microsoft.NETFramework.ReferenceAssemblies": {
+              "suppressParent": "All",
+              "target": "Package",
+              "version": "[1.0.3, )",
+              "autoReferenced": true
+            }
+          },
+          "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/10.0.103/RuntimeIdentifierGraph.json"
+        },
+        "net48": {
+          "targetAlias": "net48",
+          "dependencies": {
+            "Microsoft.NETFramework.ReferenceAssemblies": {
+              "suppressParent": "All",
+              "target": "Package",
+              "version": "[1.0.3, )",
+              "autoReferenced": true
+            }
+          },
+          "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/10.0.103/RuntimeIdentifierGraph.json"
+        }
+      },
+      "runtimes": {
+        "osx-arm64": {
+          "#import": []
+        }
+      }
+    }
+  }
+}
