@@ -1,4 +1,5 @@
 import json
+import os
 from collections.abc import Iterable
 from contextlib import closing
 from dataclasses import dataclass, field
@@ -12,9 +13,11 @@ from . import (
     aqm,
     colors,
     datafile,
+    dotnet,
     fbx_wrapper,
     ice,
     import_fnp,
+    import_model_native,
     material,
     objects,
     objects_aqp,
@@ -401,11 +404,8 @@ def _import_aqp(
     aqn: Path | datafile.DataFile | None,
     options: ImportOptions | None = None,
 ) -> tuple[OperatorResult, list[material.Material]]:
-    from AquaModelLibrary.Core.General import FbxExporterNative
-    from AquaModelLibrary.Data.PSO2.Aqua import AquaMotion, AquaNode, AquaPackage
-    from AquaModelLibrary.Data.Utility import CoordSystem
+    from AquaModelLibrary.Data.PSO2.Aqua import AquaNode, AquaPackage
     from System.Collections.Generic import List
-    from System.Numerics import Matrix4x4
 
     options = options or {}
 
@@ -433,10 +433,143 @@ def _import_aqp(
 
     model.FixHollowMatNaming()
 
+    if _use_native_import():
+        result, bone_axes = _convert_native(
+            operator, context, model, skeleton, aqp_name, options
+        )
+    else:
+        result, bone_axes = _convert_through_fbx(
+            operator, context, model, skeleton, aqp_name, options
+        )
+
+    if result != {"FINISHED"}:
+        return (result, [])
+
+    if context.selected_objects is None:
+        raise TypeError()
+
+    # The import does not leave the skeleton at its rest pose - the
+    # fingertip bones arrive with real transforms on them. Recording that
+    # as the baseline gives export somewhere to put the pose back to, and
+    # tells a body shape loaded later apart from what was always there.
+    for obj in context.selected_objects:
+        if obj.type == "ARMATURE":
+            obj[scene_props.BONE_AXES] = bone_axes
+            import_fnp.store_model_pose(obj)
+
+    # Automatic Bone Orientation points every bone at its children, so
+    # the rest pose stops being the skeleton the game has - measured
+    # 111 cm off at the worst node. Nothing downstream can undo it, so
+    # say so at the point it happens.
+    if bone_axes == "AUTO":
+        operator.report(
+            {"WARNING"},
+            "Imported with Automatic Bone Orientation. The bones no"
+            " longer match the game's skeleton, so a motion exported"
+            " from this armature will carry the wrong bone lengths."
+            " Re-import with that option off before posing.",
+        )
+
+    if get_preferences(context).hide_armature:
+        for obj in context.selected_objects:
+            if obj.type == "ARMATURE":
+                obj.hide_set(True)
+
+    for obj in context.selected_objects:
+        debug_print(obj.type, obj.name)
+
+    # Python.NET hands the filled list back as a second return value; the
+    # one passed in stays empty.
+    generic_materials, mesh_mat_mapping = model.GetUniqueMaterials(List[int]())
+
+    materials = [
+        material.Material.from_generic_material(mat) for mat in generic_materials
+    ]
+    _attach_tsta_data(model, mesh_mat_mapping, materials)
+
+    return {"FINISHED"}, materials
+
+
+def _use_native_import() -> bool:
+    """Whether to build the Blender scene without the FBX intermediate.
+
+    Windows keeps the FBX pipeline it has always used; everywhere else the
+    C++/CLI FBX bridge cannot exist, so the native importer is the only
+    path. Setting PSO2_TOOLS_NATIVE_IMPORT=1 forces the native path on
+    Windows too, for comparing the two.
+    """
+    if os.environ.get("PSO2_TOOLS_NATIVE_IMPORT") == "1":
+        return True
+
+    return not dotnet.has_fbx_converter()
+
+
+def _convert_native(
+    operator: bpy.types.Operator,
+    context: bpy.types.Context,
+    model,
+    skeleton,
+    aqp_name: str,
+    options: ImportOptions,
+) -> tuple[OperatorResult, str]:
+    if not dotnet.has_interop():
+        operator.report(
+            {"ERROR"},
+            "pso2_tools/bin is missing Pso2Tools.Interop.dll, which the"
+            " model importer needs on this platform. Rebuild it with"
+            " scripts/build_bin.py.",
+        )
+        return ({"CANCELLED"}, scene_props.DEFAULT_BONE_AXES)
+
+    result = cast(
+        "OperatorResult",
+        import_model_native.import_model(
+            operator, context, model, skeleton, aqp_name, options
+        ),
+    )
+
+    # The native importer always builds PSO2's X,Y bone convention; the
+    # FBX importer's axis options do not apply to it.
+    return result, scene_props.DEFAULT_BONE_AXES
+
+
+def _convert_through_fbx(
+    operator: bpy.types.Operator,
+    context: bpy.types.Context,
+    model,
+    skeleton,
+    aqp_name: str,
+    options: ImportOptions,
+) -> tuple[OperatorResult, str]:
+    from AquaModelLibrary.Core.General import FbxExporterNative
+    from AquaModelLibrary.Data.PSO2.Aqua import AquaMotion
+    from AquaModelLibrary.Data.Utility import CoordSystem
+    from System.Collections.Generic import List
+    from System.Numerics import Matrix4x4
+
     # TODO: support importing motion files
     aqms = List[AquaMotion]()
     aqm_names = List[str]()
     instance_transforms = List[Matrix4x4]()
+
+    fbx_options = _get_fbx_options(options)
+
+    # Record how the bones were oriented on the way in. Motion keys are
+    # in PSO2's own axes, so importing one has to undo this rotation.
+    #
+    # The fallbacks have to be io_scene_fbx's own, not this add-on's
+    # preferred X,Y: a caller that leaves the axes out gets the FBX
+    # importer's defaults, and recording anything else describes a rig
+    # that was never built. That mismatch does not fail - it quietly
+    # rotates every motion key, and the model comes out with its limbs
+    # stretched away from the body.
+    if fbx_options.get("automatic_bone_orientation", False):
+        bone_axes = "AUTO"
+    else:
+        bone_axes = "{},{}".format(
+            fbx_options["primary_bone_axis"],
+            fbx_options["secondary_bone_axis"],
+        )
 
     with TemporaryDirectory() as tempdir:
         fbxfile = Path(tempdir) / Path(aqp_name).with_suffix(".fbx")
@@ -453,8 +586,6 @@ def _import_aqp(
             excludeTangentBinormal=not options.get("include_tangent_binormal", False),
         )
 
-        fbx_options = _get_fbx_options(options)
-
         result = cast(
             "OperatorResult",
             fbx_wrapper.load(
@@ -464,71 +595,15 @@ def _import_aqp(
                 **fbx_options,
             ),
         )
-        if result != {"FINISHED"}:
-            return (result, [])
 
-        if context.selected_objects is None:
-            raise TypeError()
+    if (
+        result == {"FINISHED"}
+        and context.selected_objects is not None
+        and (removed := _strip_zero_uv_layers(context.selected_objects))
+    ):
+        debug_print(f"Removed {removed} zero-filled UV layers")
 
-        # Record how the bones were oriented on the way in. Motion keys are
-        # in PSO2's own axes, so importing one has to undo this rotation.
-        #
-        # The fallbacks have to be io_scene_fbx's own, not this add-on's
-        # preferred X,Y: a caller that leaves the axes out gets the FBX
-        # importer's defaults, and recording anything else describes a rig
-        # that was never built. That mismatch does not fail - it quietly
-        # rotates every motion key, and the model comes out with its limbs
-        # stretched away from the body.
-        if fbx_options.get("automatic_bone_orientation", False):
-            bone_axes = "AUTO"
-        else:
-            bone_axes = "{},{}".format(
-                fbx_options["primary_bone_axis"],
-                fbx_options["secondary_bone_axis"],
-            )
-        # The import does not leave the skeleton at its rest pose - the
-        # fingertip bones arrive with real transforms on them. Recording that
-        # as the baseline gives export somewhere to put the pose back to, and
-        # tells a body shape loaded later apart from what was always there.
-        for obj in context.selected_objects:
-            if obj.type == "ARMATURE":
-                obj[scene_props.BONE_AXES] = bone_axes
-                import_fnp.store_model_pose(obj)
-
-        # Automatic Bone Orientation points every bone at its children, so
-        # the rest pose stops being the skeleton the game has - measured
-        # 111 cm off at the worst node. Nothing downstream can undo it, so
-        # say so at the point it happens.
-        if bone_axes == "AUTO":
-            operator.report(
-                {"WARNING"},
-                "Imported with Automatic Bone Orientation. The bones no"
-                " longer match the game's skeleton, so a motion exported"
-                " from this armature will carry the wrong bone lengths."
-                " Re-import with that option off before posing.",
-            )
-
-        if get_preferences(context).hide_armature:
-            for obj in context.selected_objects:
-                if obj.type == "ARMATURE":
-                    obj.hide_set(True)
-
-        for obj in context.selected_objects:
-            debug_print(obj.type, obj.name)
-
-        if removed := _strip_zero_uv_layers(context.selected_objects):
-            debug_print(f"Removed {removed} zero-filled UV layers")
-
-    # Python.NET hands the filled list back as a second return value; the
-    # one passed in stays empty.
-    generic_materials, mesh_mat_mapping = model.GetUniqueMaterials(List[int]())
-
-    materials = [
-        material.Material.from_generic_material(mat) for mat in generic_materials
-    ]
-    _attach_tsta_data(model, mesh_mat_mapping, materials)
-
-    return {"FINISHED"}, materials
+    return result, bone_axes
 
 
 def _attach_tsta_data(model, mesh_mat_mapping, materials: list) -> None:
