@@ -293,13 +293,30 @@ def clean_effect_nodes(context: bpy.types.Context, aqn) -> tuple[int, int]:
     restore_bone_flags never matched them. Re-importing such a file turns
     the junk entries into the whole skeleton: 20 bones instead of 232.
 
+    The conversion also mangles the entries' transforms - measured on a
+    45-degree node: rotation inverted, translation shrunk a hundredfold -
+    so the position and rotation are read back off the Blender bones,
+    which still stand where the model import posed them.
+
     Effect nodes that map to a Blender bone are kept, renamed to their
-    stem, and get their flags back; everything else is dropped. Returns
-    (kept, dropped).
+    stem, and get their flags and transform back; everything else is
+    dropped. Returns (kept, dropped).
     """
+    import math
+
+    from bpy_extras.io_utils import axis_conversion
+
     from AquaModelLibrary.Data.DataTypes.SetLengthStrings import PSO2String
+    from System.Numerics import Vector3
+
+    # The X,Y bone convention every armature here is built with.
+    correction = axis_conversion(
+        from_forward="X", from_up="Y", to_forward="Y", to_up="X"
+    ).to_4x4()
+    correction_inv = correction.inverted()
 
     bone_flags: dict[str, tuple[int, int]] = {}
+    bone_locals: dict[str, tuple] = {}
     for obj in bpy.data.objects:
         if obj.type != "ARMATURE":
             continue
@@ -314,6 +331,30 @@ def clean_effect_nodes(context: bpy.types.Context, aqn) -> tuple[int, int]:
             except ValueError:
                 continue
 
+            if parts[0] in bone_locals:
+                continue
+            pose_bone = obj.pose.bones.get(bone.name)
+            if pose_bone is None:
+                continue
+            # Posed transform relative to the parent bone, in PSO2's own
+            # axes: pose matrices are (aqua-world @ correction) forms, so
+            # the correction conjugates away.
+            parent_matrix = (
+                pose_bone.parent.matrix if pose_bone.parent else Matrix.Identity(4)
+            )
+            local = (
+                correction
+                @ parent_matrix.inverted_safe()
+                @ pose_bone.matrix
+                @ correction_inv
+            )
+            # NODO stores XYZ euler degrees, matching mathutils XYZ order.
+            euler = local.to_euler("XYZ")
+            bone_locals[parts[0]] = (
+                local.to_translation(),
+                tuple(math.degrees(angle) for angle in euler),
+            )
+
     keep = []
     dropped = 0
     for node in aqn.nodoList:
@@ -324,6 +365,10 @@ def clean_effect_nodes(context: bpy.types.Context, aqn) -> tuple[int, int]:
             continue
         node.boneName = PSO2String.GeneratePSO2String(stem)
         node.boneShort1, node.boneShort2 = flags
+        if transform := bone_locals.get(stem):
+            position, angles = transform
+            node.pos = Vector3(position.x, position.y, position.z)
+            node.eulRot = Vector3(*angles)
         keep.append(node)
 
     aqn.nodoList.Clear()
