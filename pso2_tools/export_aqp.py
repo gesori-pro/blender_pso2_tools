@@ -134,8 +134,16 @@ class PSO2_OT_ExportAqp(bpy.types.Operator, ExportHelper):  # type: ignore
 
     use_mesh_modifiers: bpy.props.BoolProperty(
         name="Apply Modifiers",
-        description="Apply modifiers to mesh objects (except Armature ones) - "
-        "WARNING: prevents exporting shape keys",
+        description="Apply modifiers to mesh objects (except Armature ones)",
+        default=True,
+    )
+    apply_shape_keys: bpy.props.BoolProperty(
+        name="Apply Shape Keys",
+        description=(
+            "Write the current shape-key mix into the exported mesh."
+            " The original mesh, shape keys and values stay editable."
+            " AQP stores the resulting shape, not the shape keys themselves"
+        ),
         default=True,
     )
 
@@ -366,15 +374,19 @@ class PSO2_OT_ExportAqp(bpy.types.Operator, ExportHelper):  # type: ignore
         armature = target if self.ignore_pose else None
         unbaked = target if self.ignore_applied_shape else None
 
-        with bake_rest.pose_suspended(armature), bake_rest.bake_suspended(unbaked):
-            return export_model.export(
-                self,
-                context,
-                path,
-                is_ngs=self.game_version == "NGS",
-                overwrite_aqn=self.overwrite_aqn,
-                options=options,
-            )
+        try:
+            with bake_rest.pose_suspended(armature), bake_rest.bake_suspended(unbaked):
+                return export_model.export(
+                    self,
+                    context,
+                    path,
+                    is_ngs=self.game_version == "NGS",
+                    overwrite_aqn=self.overwrite_aqn,
+                    options=options,
+                )
+        except RuntimeError as ex:
+            self.report({"ERROR"}, f"Could not export AQP: {ex}")
+            return {"CANCELLED"}
 
 
 def export_panel_main(layout: bpy.types.UILayout, operator):
@@ -418,6 +430,7 @@ def export_panel_geometry(layout: bpy.types.UILayout, operator):
     header, body = layout.panel("PSO2_export_geometry", default_closed=False)
     header.label(text="Geometry")
     if body:
+        body.prop(operator, "apply_shape_keys")
         body.prop(operator, "mesh_smooth_type")
         body.prop(operator, "use_subsurf")
         body.prop(operator, "use_mesh_modifiers")
