@@ -42,6 +42,16 @@ Shape adjusts - the extra per-outfit tweak the game applies on top of the body p
 
 **Files > Export > PSO2 AQP (.aqp)** exports the model back to an `.aqp` file.
 
+**Apply Shape Keys**, under **Geometry**, is on by default. It writes the
+current shape-key mix into the exported vertices. It respects partial values,
+muted keys and vertex-group masks. The mesh and its editable shape keys stay
+unchanged in Blender. Set the values you want before exporting; this works
+with any mesh and key names and with **Apply Modifiers** on or off.
+
+AQP stores the resulting mesh shape, not editable shape keys or shape-key
+animation. Export again with different values to make another variation.
+Turning **Apply Shape Keys** off keeps the previous export behavior.
+
 By default, this will only write a matching `.aqn` file if it does not already exist. Check **Overwrite .aqn** to overwrite any existing file.
 
 **Ignore Pose** is on by default and exports the skeleton as the model import left it. Without it, a body shape or animation frame sitting in the pose is written into the model, and since the file comes out the same size either way there is nothing to notice. It does nothing unless a character file has been applied, so plain model round trips are unaffected.

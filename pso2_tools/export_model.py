@@ -9,7 +9,7 @@ from typing import Any, TypedDict, cast, get_type_hints
 import bpy
 from mathutils import Matrix
 
-from . import dotnet, fbx_wrapper
+from . import dotnet, export_shape_keys, fbx_wrapper
 from .util import OperatorResult
 
 
@@ -57,6 +57,7 @@ class FbxExportOptions(TypedDict, total=False):
 
 class ExportOptions(FbxExportOptions, total=False):
     rigid: bool
+    apply_shape_keys: bool
     override_bounding_radius: bool
     bounding_radius: float
 
@@ -105,9 +106,15 @@ def export(
         with _include_parents(context, options):
             fbx_options = _get_fbx_options(options)
 
-            result = fbx_wrapper.save(
-                operator, context, filepath=str(fbxfile), **fbx_options
+            meshes = (
+                _get_export_meshes(context, options)
+                if options.get("apply_shape_keys", True)
+                else []
             )
+            with export_shape_keys.applied(context, meshes):
+                result = fbx_wrapper.save(
+                    operator, context, filepath=str(fbxfile), **fbx_options
+                )
 
         if "FINISHED" not in result:
             return result
@@ -148,8 +155,7 @@ def export(
     if stripped := strip_padded_uvs(model):
         operator.report(
             {"INFO"},
-            f"Dropped {stripped} zero-filled UV blocks the FBX conversion"
-            " padded in.",
+            f"Dropped {stripped} zero-filled UV blocks the FBX conversion padded in.",
         )
 
     if options.get("override_bounding_radius"):
@@ -308,9 +314,7 @@ def clean_effect_nodes(context: bpy.types.Context, aqn) -> tuple[int, int]:
             if len(parts) < 3:
                 continue
             try:
-                bone_flags.setdefault(
-                    parts[0], (int(parts[1], 16), int(parts[2], 16))
-                )
+                bone_flags.setdefault(parts[0], (int(parts[1], 16), int(parts[2], 16)))
             except ValueError:
                 continue
 
@@ -744,6 +748,32 @@ def _layer_chain(layer_collection, obj, chain: list | None = None) -> list | Non
 
 def _get_visible_meshes(objects: Iterable[bpy.types.Object]):
     return (obj for obj in objects if obj.type == "MESH" and obj.visible_get())
+
+
+def _get_export_meshes(context: bpy.types.Context, options: ExportOptions):
+    """Match FBX's collection, selection and visibility filters."""
+    collection = None
+    if options.get("use_active_collection"):
+        collection = context.view_layer.active_layer_collection.collection
+    elif name := options.get("collection"):
+        collection = bpy.data.collections.get((name, None))
+        if collection is None:
+            return []  # FBX reports the missing collection.
+
+    if collection is not None:
+        objects = collection.all_objects
+        if options.get("use_selection"):
+            objects = [obj for obj in objects if obj.select_get()]
+    elif options.get("use_selection"):
+        objects = context.selected_objects or []
+    else:
+        objects = context.view_layer.objects
+
+    return [
+        obj
+        for obj in objects
+        if obj.type == "MESH" and (not options.get("use_visible") or obj.visible_get())
+    ]
 
 
 def _get_selected_meshes(objects: Iterable[bpy.types.Object]):
