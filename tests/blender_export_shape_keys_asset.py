@@ -98,8 +98,10 @@ def main():
             for obj in meshes:
                 original = obj.data
                 copy = original.copy()
-                keys = copy.shape_keys
-                swapped.append((obj, original, copy, keys, obj.active_shape_key_index))
+                key_uid = copy.shape_keys.session_uid
+                swapped.append(
+                    (obj, original, copy, key_uid, obj.active_shape_key_index)
+                )
                 obj.data = copy
                 obj.shape_key_clear()
                 for vertex, co in zip(copy.vertices, expected[obj.name], strict=True):
@@ -113,10 +115,13 @@ def main():
                 "AQP differs from the evaluated plain mesh"
             )
         finally:
-            for obj, original, copy, keys, index in reversed(swapped):
+            for obj, original, copy, key_uid, index in reversed(swapped):
                 obj.data = original
                 obj.active_shape_key_index = index
-                bpy.data.batch_remove(ids=(copy, keys))
+                remaining_keys = [
+                    key for key in bpy.data.shape_keys if key.session_uid == key_uid
+                ]
+                bpy.data.batch_remove(ids=(copy, *remaining_keys))
             bpy.context.view_layer.update()
         assert [state(obj) for obj in meshes] == before
         model = AquaPackage(path.read_bytes()).models[0]

@@ -307,7 +307,7 @@ class ShapeKeyExportTests(unittest.TestCase):
                 reference = self.obj.data.copy()
                 original = self.obj.data
                 self.obj.data = reference
-                reference_keys = reference.shape_keys
+                reference_key_uid = reference.shape_keys.session_uid
                 self.obj.shape_key_clear()
                 for vertex, co in zip(reference.vertices, expected, strict=True):
                     vertex.co = co
@@ -334,7 +334,12 @@ class ShapeKeyExportTests(unittest.TestCase):
                 finally:
                     self.obj.data = original
                     self.obj.active_shape_key_index = before["index"]
-                    bpy.data.batch_remove(ids=(reference, reference_keys))
+                    remaining_keys = [
+                        key
+                        for key in bpy.data.shape_keys
+                        if key.session_uid == reference_key_uid
+                    ]
+                    bpy.data.batch_remove(ids=(reference, *remaining_keys))
                 base_path = Path(directory) / f"base_{modifiers}.aqp"
                 export_model.export(Report(), bpy.context, base_path, options=options)
                 self.assertNotEqual(
