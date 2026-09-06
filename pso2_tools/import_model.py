@@ -297,6 +297,7 @@ def _import_models(
             )
 
     _delete_empty_images()
+    model_materials.discard_removed_images()
 
     debug_print("IMPORT MATERIALS:")
     debug_pprint(model_materials.materials)

@@ -228,10 +228,23 @@ def texture_has_parts(name: str, parts: str | Iterable[str]):
     return all(part in split_name for part in parts)
 
 
-def find_textures(*parts: str, images: Iterable[bpy.types.Image] | None = None):
-    images = images or bpy.data.images
+def _named_images(images: Iterable[bpy.types.Image]):
+    """Read names while filtering RNA references invalidated by image cleanup."""
+    for image in images:
+        try:
+            name = image.name
+        except ReferenceError:
+            continue
+        yield image, name
 
-    return [img for img in images if texture_has_parts(img.name, parts)]
+
+def find_textures(*parts: str, images: Iterable[bpy.types.Image] | None = None):
+    if images is None:
+        images = bpy.data.images
+
+    return [
+        img for img, name in _named_images(images) if texture_has_parts(name, parts)
+    ]
 
 
 def find_texture(*parts: str, images: Iterable[bpy.types.Image] | None = None):
@@ -302,6 +315,12 @@ class ModelMaterials:
     # Extra textures loaded from previously-loaded objects
     extra_textures: list[bpy.types.Image] = field(default_factory=list)
 
+    def discard_removed_images(self):
+        """Refresh cached texture lists after Blender removes empty images."""
+        self.textures = find_textures(images=self.textures)
+        self.skin_textures = find_textures(images=self.skin_textures)
+        self.extra_textures = find_textures(images=self.extra_textures)
+
     @property
     def is_ngs(self):
         return any(int(m.shaders[1]) >= 1000 for m in self.materials.values())
@@ -355,14 +374,19 @@ class ModelMaterials:
             self.textures, self.skin_textures, self.extra_textures
         )
         return next(
-            (img for img in candidates if util.remove_blender_suffix(img.name) == name),
+            (
+                img
+                for img, image_name in _named_images(candidates)
+                if util.remove_blender_suffix(image_name) == name
+            ),
             None,
         )
 
     def _get_texture_set(self, name: str):
         def find(*parts: str, images=None):
             """Get the first texture with the given parts"""
-            images = images or self.textures
+            if images is None:
+                images = self.textures
             return find_texture(*parts, images=images)
 
         def find_extra(*parts: str):
