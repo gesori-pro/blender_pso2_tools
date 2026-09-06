@@ -38,8 +38,8 @@ def applied(context: bpy.types.Context, objects: Iterable[bpy.types.Object]):
             # name parser strips before reading the PSO2 mesh flags.
             temporary = original.copy()
             index = obj.active_shape_key_index
-            keys = temporary.shape_keys
-            swapped.append((obj, original, temporary, keys, index))
+            key_uid = temporary.shape_keys.session_uid
+            swapped.append((obj, original, temporary, key_uid, index))
             obj.data = temporary
             if obj.data != temporary:
                 raise RuntimeError(f"Could not prepare shape keys on '{obj.name}'")
@@ -54,11 +54,17 @@ def applied(context: bpy.types.Context, objects: Iterable[bpy.types.Object]):
         context.view_layer.update()
         yield
     finally:
-        for obj, original, temporary, keys, index in reversed(swapped):
+        for obj, original, temporary, key_uid, index in reversed(swapped):
             obj.data = original
             obj.active_shape_key_index = index
-            # Clearing keys unlinks their datablock but leaves it orphaned.
-            bpy.data.batch_remove(ids=(temporary, keys))
+            # shape_key_clear() can already have freed the copied Key.
+            # Passing that invalid RNA reference to batch_remove crashes
+            # Blender 5.2. Resolve only live IDs, retaining cleanup of copies
+            # that older versions leave orphaned. Names/pointers can be reused.
+            remaining_keys = [
+                key for key in bpy.data.shape_keys if key.session_uid == key_uid
+            ]
+            bpy.data.batch_remove(ids=(temporary, *remaining_keys))
         context.view_layer.update()
         if editing is not None:
             context.view_layer.objects.active = editing
