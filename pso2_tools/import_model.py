@@ -300,6 +300,7 @@ def _import_models(
             )
 
     _delete_empty_images()
+    model_materials.discard_removed_images()
 
     debug_print("IMPORT MATERIALS:")
     debug_pprint(model_materials.materials)
@@ -442,8 +443,8 @@ def _import_aqp(
     else:
         skeleton = AquaNode.GenerateBasicAQN()
 
-    if model.objc.type > 0xC32:
-        model.splitVSETPerMesh()
+    # AML handles the format threshold and returns unchanged for classic models.
+    model.splitVSETPerMesh()
 
     model.FixHollowMatNaming()
 
@@ -500,6 +501,18 @@ def _import_aqp(
         material.Material.from_generic_material(mat) for mat in generic_materials
     ]
     _attach_tsta_data(model, mesh_mat_mapping, materials)
+
+    # Save metadata on the imported datablocks before a user can rename or
+    # duplicate them. This also covers direct AQP imports without shader builds.
+    for obj in context.selected_objects:
+        if obj.type != "MESH":
+            continue
+        for slot in obj.material_slots:
+            if (mat := slot.material) is not None:
+                material.remember_material_name(mat)
+                source = material.find_material(mat.name, materials)
+                if source and source.tsta_data:
+                    mat["pso2_tsta"] = json.dumps(source.tsta_data)
 
     return {"FINISHED"}, materials
 
@@ -670,9 +683,10 @@ def _strip_zero_uv_layers(objects) -> int:
     The conversion always writes eight UV channels, filling the ones the
     model does not have with zeros. Imported as-is they ride back out on
     the next export as real uv2-uv4 blocks: a face that shipped with one
-    UV set grows four, and the file half again in size. A channel that is
-    zero at every corner carries nothing, so it is safe to remove; the
-    first channel stays no matter what.
+    UV set grows four, and the file half again in size. Only trailing zero
+    channels can be removed: an empty channel before a used channel must
+    stay, or the FBX exporter renumbers the later channel on the next export.
+    The first channel stays no matter what.
     """
     import array
 
@@ -681,7 +695,7 @@ def _strip_zero_uv_layers(objects) -> int:
         if obj.type != "MESH":
             continue
         mesh_data = obj.data
-        for layer in list(mesh_data.uv_layers)[1:]:
+        for layer in reversed(list(mesh_data.uv_layers)[1:]):
             count = len(layer.data)
             if not count:
                 mesh_data.uv_layers.remove(layer)
@@ -692,6 +706,8 @@ def _strip_zero_uv_layers(objects) -> int:
             if all(abs(value) < 1e-9 for value in buffer):
                 mesh_data.uv_layers.remove(layer)
                 removed += 1
+            else:
+                break
 
     return removed
 def _import_images_from_object(

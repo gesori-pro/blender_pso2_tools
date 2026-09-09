@@ -6,6 +6,7 @@ only. Outputs go in a temporary directory and are compared via Aqua.
 
 import hashlib
 import json
+import math
 import os
 import sys
 import tempfile
@@ -19,7 +20,9 @@ from pso2_tools import import_model, material as material_utils
 
 
 def main():
-    bpy.ops.preferences.addon_enable(module="pso2_tools")
+    bpy.ops.preferences.addon_enable(
+        module=os.environ.get("PSO2_TEST_ADDON_MODULE", "pso2_tools")
+    )
     from AquaModelLibrary.Data.PSO2.Aqua import AquaNode, AquaPackage
 
     source = Path(os.environ["PSO2_TEST_AQP"])
@@ -136,6 +139,21 @@ def main():
             "model_bytes_match_evaluated_reference": True,
             "scene_restored": True,
         }
+        bpy.ops.object.select_all(action="SELECT")
+        bpy.ops.object.delete(use_global=False)
+        result, _ = import_model._import_aqp(
+            Report(), bpy.context, path, path.with_suffix(".aqn")
+        )
+        assert result == {"FINISHED"}
+        reloaded = [obj for obj in bpy.context.selected_objects if obj.type == "MESH"]
+        assert len(reloaded) == report["meshes"]
+        assert all(
+            math.isfinite(c)
+            for obj in reloaded
+            for v in obj.data.vertices
+            for c in v.co
+        )
+        report["blender_reimport_meshes"] = len(reloaded)
     assert input_hashes == [
         hashlib.sha256(p.read_bytes()).hexdigest() for p in (source, skeleton)
     ]

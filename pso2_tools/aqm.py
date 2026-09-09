@@ -7,15 +7,15 @@ AquaMotion.cs) via pythonnet, rather than reimplementing the format here -
 that's the same code the rest of this add-on already loads for models, so
 there's one parser to keep in sync with the game instead of two.
 
-Everything below the .NET boundary (the AqmMotion/AqmNode/AqmKeySet
-dataclasses, shape-adjust detection, PSO2's non-inherited-scale
-conversion) is plain Python: none of it exists in AquaModelLibrary, which
-only reads and writes the byte format.
+Motion variants, key data types and timing multipliers also come from AML.
+The Python dataclasses and Blender-specific shape-adjust detection remain
+adapters; format details are resolved lazily and cached where needed.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from functools import cache
 from math import isfinite
 from pathlib import Path
 
@@ -23,10 +23,51 @@ KEY_TYPE_POSITION = 0x1
 KEY_TYPE_ROTATION = 0x2
 KEY_TYPE_SCALE = 0x3
 
-VARIANT_STD_ANIM = 0x10002
-VARIANT_PLAYER_ANIM = 0x10012
-VARIANT_CAMERA_ANIM = 0x10004
-VARIANT_MATERIAL_ANIM = 0x20
+_VARIANT_FIELDS = {
+    "VARIANT_STD_ANIM": "stdAnim",
+    "VARIANT_PLAYER_ANIM": "stdPlayerAnim",
+    "VARIANT_CAMERA_ANIM": "cameraAnim",
+    "VARIANT_MATERIAL_ANIM": "materialAnim",
+}
+
+
+@cache
+def _motion_constants():
+    from . import dotnet
+
+    dotnet.load()
+    from AquaModelLibrary.Data.PSO2.Aqua.AquaMotionData import MotionConstants
+
+    return MotionConstants
+
+
+def __getattr__(name: str):
+    # Preserve the public constant names without loading CLR during add-on import.
+    if field_name := _VARIANT_FIELDS.get(name):
+        return int(getattr(_motion_constants(), field_name))
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+@cache
+def key_data_type(key_type: int) -> int:
+    return int(_motion_constants().GetKeyDataType(key_type))
+
+
+@cache
+def time_multiplier(data_type: int) -> int:
+    _motion_constants()
+    from AquaModelLibrary.Data.PSO2.Aqua.AquaMotionData import MKEY
+
+    key = MKEY()
+    key.dataType = data_type
+    return int(key.GetTimeMultiplier())
+
+
+def baked_timing_format(end_frame: int) -> tuple[int, int]:
+    # AML exposes the threshold and multiplier; the uint timing bit is wire format.
+    flag = 0x80 if end_frame > _motion_constants().UshortThreshold else 0
+    return time_multiplier(flag), flag
+
 
 # The game's own name for a shape adjust; nothing else uses the suffix.
 SHAPE_ADJUST_SUFFIX = "_sa.aqm"
@@ -57,7 +98,7 @@ class AqmKeySet:
 
     @property
     def time_multiplier(self) -> int:
-        return 0x100 if self.data_type & 0x80 else 0x10
+        return time_multiplier(self.data_type)
 
     @property
     def key_count(self) -> int:
@@ -123,11 +164,11 @@ class AqmMotion:
 
     @property
     def is_camera_motion(self) -> bool:
-        return self.variant == VARIANT_CAMERA_ANIM
+        return self.variant == _motion_constants().cameraAnim
 
     @property
     def is_material_motion(self) -> bool:
-        return self.variant == VARIANT_MATERIAL_ANIM
+        return self.variant == _motion_constants().materialAnim
 
     @property
     def is_shape_adjust(self) -> bool:
@@ -145,7 +186,7 @@ class AqmMotion:
 
         # Player animations are motions by definition. Pose mods live here:
         # one frame, every channel a single key.
-        if self.variant == VARIANT_PLAYER_ANIM:
+        if self.variant == _motion_constants().stdPlayerAnim:
             return False
 
         static = adjusted = 0
@@ -342,7 +383,7 @@ def _to_dotnet(motion: AqmMotion):
     return dotnet_motion
 
 
-# ---- Plain-Python motion logic (none of this exists in AquaMotion) --------
+# ---- Motion editing and Blender adaptation ------------------------------
 
 
 def is_shape_adjust_file(path: Path | str, motion: AqmMotion) -> bool:

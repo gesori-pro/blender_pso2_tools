@@ -105,7 +105,10 @@ def has_fbx_converter() -> bool:
     It is Windows-only: model import goes .aqp -> FBX -> Blender's FBX
     importer there, and through import_model_native everywhere else.
     """
-    return sys.platform == "win32" and (BIN_PATH / "AquaModelLibrary.Native.dll").exists()
+    return (
+        sys.platform == "win32"
+        and (BIN_PATH / "AquaModelLibrary.Native.X64.dll").is_file()
+    )
 
 
 def has_interop() -> bool:

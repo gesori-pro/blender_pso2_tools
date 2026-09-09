@@ -384,15 +384,16 @@ def _build_mesh(
             normals.reshape(vertex_count, 3).tolist()
         )
 
-    for channel, blob in enumerate(mesh_data.Uvs):
-        data = np.frombuffer(bytes(blob), dtype=np.float32)
+    uv_channels = [np.frombuffer(bytes(blob), dtype=np.float32) for blob in mesh_data.Uvs]
+    last_used = max(
+        (i for i, data in enumerate(uv_channels) if np.any(np.abs(data) >= 1e-9)),
+        default=0,
+    )
+    for channel, data in enumerate(uv_channels[: last_used + 1]):
+        # Retain intermediate empty channels so FBX export keeps the later
+        # channel's semantic index, matching the FBX import path.
         if not len(data):
-            continue
-        # The FBX path pads absent channels with zeros and then strips any
-        # all-zero layer but the first; creating them only when the data
-        # says something lands in the same place.
-        if channel > 0 and not np.any(np.abs(data) >= 1e-9):
-            continue
+            data = np.zeros(vertex_count * 2, dtype=np.float32)
 
         layer = mesh.uv_layers.new(name=f"UVChannel_{channel + 1}", do_init=False)
         if layer is None:

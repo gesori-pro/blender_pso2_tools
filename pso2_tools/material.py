@@ -191,6 +191,33 @@ FBX_MATERIAL_RE = re.compile(
 )
 
 
+def remember_material_name(mat: bpy.types.Material) -> None:
+    """Keep AML's import metadata when the user later renames or copies a material."""
+    if FBX_MATERIAL_RE.fullmatch(mat.name):
+        mat["pso2_material_name"] = mat.name
+
+
+def get_export_material_name(mat: bpy.types.Material) -> str:
+    """Give AML an encoded name without changing the Blender datablock's name.
+
+    Explicit metadata in the current name takes precedence over the saved
+    import name. A plain rename uses the saved metadata and a short, unique
+    name so AML's delimiter parser and fixed-size name field stay unambiguous.
+    """
+    if FBX_MATERIAL_RE.fullmatch(mat.name):
+        return mat.name
+    saved = mat.get("pso2_material_name", "")
+    match = FBX_MATERIAL_RE.fullmatch(saved) if isinstance(saved, str) else None
+    if match is None:
+        raise ValueError(
+            f"Material '{mat.name}' has no saved PSO2 shader metadata. "
+            "Re-import its source material, duplicate it and assign the copy, "
+            "or restore its original PSO2 material name before exporting."
+        )
+    start, end = match.span("name")
+    return saved[:start] + f"pso2_mat_{mat.session_uid:x}" + saved[end:]
+
+
 def find_material(key: str, materials: Iterable[Material]):
     m = FBX_MATERIAL_RE.match(key)
     if not m:
@@ -228,10 +255,28 @@ def texture_has_parts(name: str, parts: str | Iterable[str]):
     return all(part in split_name for part in parts)
 
 
-def find_textures(*parts: str, images: Iterable[bpy.types.Image] | None = None):
-    images = images or bpy.data.images
+def _named_images(images: Iterable[bpy.types.Image]):
+    """Yield readable textures, excluding removed RNA and missing image data."""
+    for image in images:
+        try:
+            name = image.name
+            width, height = image.size
+        except ReferenceError:
+            continue
+        # Missing external images can keep their names in a saved blend.
+        # They must not suppress loading the default skin during import.
+        if width == 0 or height == 0:
+            continue
+        yield image, name
 
-    return [img for img in images if texture_has_parts(img.name, parts)]
+
+def find_textures(*parts: str, images: Iterable[bpy.types.Image] | None = None):
+    if images is None:
+        images = bpy.data.images
+
+    return [
+        img for img, name in _named_images(images) if texture_has_parts(name, parts)
+    ]
 
 
 def find_texture(*parts: str, images: Iterable[bpy.types.Image] | None = None):
@@ -302,6 +347,12 @@ class ModelMaterials:
     # Extra textures loaded from previously-loaded objects
     extra_textures: list[bpy.types.Image] = field(default_factory=list)
 
+    def discard_removed_images(self):
+        """Refresh cached texture lists after Blender removes empty images."""
+        self.textures = find_textures(images=self.textures)
+        self.skin_textures = find_textures(images=self.skin_textures)
+        self.extra_textures = find_textures(images=self.extra_textures)
+
     @property
     def is_ngs(self):
         return any(int(m.shaders[1]) >= 1000 for m in self.materials.values())
@@ -355,14 +406,19 @@ class ModelMaterials:
             self.textures, self.skin_textures, self.extra_textures
         )
         return next(
-            (img for img in candidates if util.remove_blender_suffix(img.name) == name),
+            (
+                img
+                for img, image_name in _named_images(candidates)
+                if util.remove_blender_suffix(image_name) == name
+            ),
             None,
         )
 
     def _get_texture_set(self, name: str):
         def find(*parts: str, images=None):
             """Get the first texture with the given parts"""
-            images = images or self.textures
+            if images is None:
+                images = self.textures
             return find_texture(*parts, images=images)
 
         def find_extra(*parts: str):

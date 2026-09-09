@@ -135,8 +135,7 @@ class PSO2_OT_ExportAqm(  # type: ignore https://github.com/nutti/fake-bpy-modul
             if armature is None or armature.type != "ARMATURE":
                 self.report(
                     {"ERROR"},
-                    f"Armature '{self.target_armature}' is no longer in the"
-                    " scene.",
+                    f"Armature '{self.target_armature}' is no longer in the scene.",
                 )
                 return {"CANCELLED"}
         else:
@@ -496,8 +495,7 @@ def build_motion(
         scene.frame_set(current_frame)
 
     # Build the motion.
-    multiplier = 0x100 if end_frame > 4095 else 0x10
-    data_type_flag = 0x80 if end_frame > 4095 else 0
+    multiplier, data_type_flag = aqm.baked_timing_format(end_frame)
     timings = aqm.make_baked_timings(end_frame, multiplier)
 
     motion = aqm.AqmMotion(
@@ -511,15 +509,15 @@ def build_motion(
     for index, (name, keys) in enumerate(zip(node_names, samples, strict=True)):
         node = aqm.AqmNode(node_type=aqm.NODE_TYPE_STANDARD, node_id=index, name=name)
 
-        for key_type, data_type, offset in (
-            (aqm.KEY_TYPE_POSITION, 0x1, 0),
-            (aqm.KEY_TYPE_ROTATION, 0x3, 1),
-            (aqm.KEY_TYPE_SCALE, 0x1, 2),
+        for key_type, offset in (
+            (aqm.KEY_TYPE_POSITION, 0),
+            (aqm.KEY_TYPE_ROTATION, 1),
+            (aqm.KEY_TYPE_SCALE, 2),
         ):
             node.key_sets.append(
                 aqm.AqmKeySet(
                     key_type=key_type,
-                    data_type=data_type | data_type_flag,
+                    data_type=aqm.key_data_type(key_type) | data_type_flag,
                     unk_int0=0,
                     timings=list(timings) if frame_count > 1 else [],
                     vec4_keys=[keys[frame][offset] for frame in range(frame_count)],
@@ -702,7 +700,7 @@ def _make_node_tree_flag(
         node.key_sets.append(
             aqm.AqmKeySet(
                 key_type=key_type,
-                data_type=0x5 | data_type_flag,
+                data_type=aqm.key_data_type(key_type) | data_type_flag,
                 unk_int0=0,
                 timings=list(timings) if frame_count > 1 else [],
                 int_keys=[0x31] * frame_count,
