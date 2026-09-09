@@ -842,6 +842,12 @@ class ObjectDatabase:
         bin_path = preferences.get_preferences(self.context).get_pso2_bin_path()
 
         cmx: CharacterMakingIndex = ReferenceGenerator.ExtractCMX(str(bin_path))
+        if cmx is None:
+            raise FileNotFoundError(
+                f'Could not read pl_system.ice under "{bin_path}". Check that'
+                " the add-on preferences point at pso2_bin/data and that"
+                " data/win32 was copied."
+            )
 
         parts_text, accessory_text, _common_text, _common_text_reboot = (
             ReferenceGenerator.ReadCMXText(
@@ -1153,6 +1159,11 @@ def _get_item_names(
     text, category: CmxCategory, lookup_dict: dict[str, int] | None = None
 ) -> NameDict:
     result = defaultdict[int, list[str]](lambda: ["", ""])
+
+    # A partial game data copy is missing the text archive entirely; the
+    # items are still worth indexing, just namelessly.
+    if text is None:
+        return result
 
     index = text.categoryNames.IndexOf(str(category))
     if index < 0:

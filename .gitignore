@@ -170,6 +170,8 @@ cython_debug/
 # generated files
 /pso2_tools/bin
 /typings
+/dotnet/**/bin/
+/dotnet/**/obj/
 
 # test data
 /test data

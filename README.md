@@ -4,9 +4,11 @@ This integrates the model import/export functions of [Aqua-Library](https://gith
 
 ## Installation
 
-The libraries used for import/export are only compiled for Windows x64. This add-on will not currently work on other OSes.
+Supported platforms: Windows x64 and macOS (Apple Silicon). Install the release zip that matches your OS - the .NET binaries inside are platform-specific.
 
-1. Install the [.NET Runtime 9.0](https://dotnet.microsoft.com/en-us/download/dotnet/9.0) for Windows (on the bottom right of the page).
+On Windows, model import runs through the Autodesk FBX SDK as it always has. On other platforms that bridge cannot exist (it is C++/CLI), so import builds the Blender scene directly from the model data instead; the resulting scene and exported files are the same. Set `PSO2_TOOLS_NATIVE_IMPORT=1` to use the direct importer on Windows too.
+
+1. Install the [.NET Runtime 9.0](https://dotnet.microsoft.com/en-us/download/dotnet/9.0) (or newer) for your OS.
 2. Download `pso2_tools-****.zip` from the [latest release](https://github.com/dummycount/blender_pso2_tools/releases/latest).
 3. In Blender, go to **Edit > Preferences > Add-ons**.
 4. Click the down arrow in the upper-right corner and select **Install from Disk...**.
@@ -123,9 +125,19 @@ To build and develop the extension, first install the following requirements:
 
 - [Blender 5.1](https://www.blender.org/download/releases/) or newer.
 - [uv](https://github.com/astral-sh/uv)
+- [.NET SDK 9.0](https://dotnet.microsoft.com/en-us/download/dotnet/9.0) or newer
+
+On Windows, also:
+
 - [Visual Studio](https://visualstudio.microsoft.com/vs/community/) with the C# and C++ workflows installed.
-- [.NET SDK 9.0](https://dotnet.microsoft.com/en-us/download/dotnet/9.0)
 - [Autodesk FBX SDK](https://www.autodesk.com/content/dam/autodesk/www/adn/fbx/2020-1/fbx20201_fbxsdk_vs2017_win.exe) version 2020.1
+
+On macOS, also the Xcode command line tools (`xcode-select --install`) for the
+compiler that builds the bundled [ooz](https://github.com/powzix/ooz)
+decompressor. Visual Studio and the FBX SDK are not needed there: the C++/CLI
+FBX bridge is Windows-only, and `scripts/build_bin.py` builds the managed
+stack with the dotnet CLI instead (a stub stands in for the bridge, see
+`Directory.Build.targets`).
 
 First, clone the repo with submodules:
 

@@ -5,6 +5,7 @@ Download wheels for the project's dependencies.
 
 import shutil
 import subprocess
+import sys
 from itertools import product
 from pathlib import Path
 
@@ -18,15 +19,23 @@ MANIFEST = ADDON_PATH / "blender_manifest.toml"
 DEPENDENCIES = ["pythonnet==3.0.5", "watchdog==6.0.0"]
 
 PYTHON_VERSIONS = ["3.11", "3.13"]
-PLATFORMS = ["win_amd64"]
+
+# One entry per supported platform. Extra tags on an entry let pip accept
+# the universal builds macOS packages often ship instead of arm64-only ones.
+PLATFORMS = [
+    ["win_amd64"],
+    ["macosx_11_0_arm64", "macosx_10_9_universal2"],
+]
 
 
 def main():
     shutil.rmtree(WHEELS, ignore_errors=True)
 
-    for dep, version, platform in product(DEPENDENCIES, PYTHON_VERSIONS, PLATFORMS):
+    for dep, version, platforms in product(DEPENDENCIES, PYTHON_VERSIONS, PLATFORMS):
         subprocess.call(
             [
+                sys.executable,
+                "-m",
                 "pip",
                 "download",
                 dep,
@@ -34,7 +43,7 @@ def main():
                 WHEELS,
                 "--only-binary=:all:",
                 f"--python-version={version}",
-                f"--platform={platform}",
+                *(f"--platform={platform}" for platform in platforms),
             ]
         )
 
