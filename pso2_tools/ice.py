@@ -1,6 +1,5 @@
 import fnmatch
 import itertools
-import struct
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,17 +14,11 @@ class IceDataFile:
 
     @classmethod
     def from_byte_array(cls, array: Sequence[int]):
+        from AquaModelLibrary.Helpers.Ice import IceMethods
         from Zamboni import IceFile as InternalIceFile
 
         name = InternalIceFile.getFileName(array)
-        data = bytes(array)
-
-        # ZamboniLib hands an entry back with its own header still on the
-        # front and offers nothing to strip it, so the header's size field
-        # is read here.
-        header_size = struct.unpack_from("i", data, offset=0xC)[0]
-
-        return IceDataFile(name=name, data=data[header_size:])
+        return cls(name=name, data=bytes(IceMethods.RemoveIceEnvelope(array)))
 
 
 class IceFile:

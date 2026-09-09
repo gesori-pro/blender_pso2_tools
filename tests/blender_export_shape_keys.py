@@ -274,7 +274,7 @@ class ShapeKeyExportTests(unittest.TestCase):
         modifier = self.obj.modifiers.new("Skeleton", "ARMATURE")
         modifier.object = rig
         self.obj.parent = rig
-        material = bpy.data.materials.new("Test material")
+        material = bpy.data.materials.new("(1100p,1100){opaque}Test material@0@0")
         self.obj.data.materials.append(material)
         expected = self.evaluated()
         before = state(self.obj)
@@ -369,7 +369,7 @@ class ShapeKeyExportTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    bpy.ops.preferences.addon_enable(module="pso2_tools")
+    bpy.ops.preferences.addon_enable(module=os.environ.get("PSO2_TEST_ADDON_MODULE", "pso2_tools"))
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(ShapeKeyExportTests)
     result = unittest.TextTestRunner(verbosity=2).run(suite)
     print(

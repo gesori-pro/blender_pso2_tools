@@ -122,6 +122,9 @@ def pso2_get_bone_name(bone):
     )
 
     class RewriteFbxNameClass(ast.NodeTransformer):
+        def __init__(self, name_function="pso2_get_bone_name"):
+            self.name_function = name_function
+
         def visit_Call(self, node):
             self.generic_visit(node)
 
@@ -149,7 +152,7 @@ def pso2_get_bone_name(bone):
                             ast.Call(
                                 ast.Attribute(
                                     value=ast.Call(
-                                        func=ast.Name("pso2_get_bone_name"),
+                                        func=ast.Name(self.name_function),
                                         args=[ast.Name(id=name)],
                                         keywords=[],
                                     ),
@@ -166,10 +169,23 @@ def pso2_get_bone_name(bone):
                 case _:
                     return node
 
-    def patch_function(mod: ast.Module, name: str):
+    def patch_function(mod: ast.Module, name: str, material=False):
         func = _find_function(mod, name)
-        func.body.insert(0, get_bone_name)
-        func = ast.fix_missing_locations(RewriteFbxNameClass().visit(func))
+        if material:
+            func.body.insert(
+                0,
+                ast.ImportFrom(
+                    module=f"{__package__}.material",
+                    names=[ast.alias(name="get_export_material_name")],
+                    level=0,
+                ),
+            )
+        else:
+            func.body.insert(0, get_bone_name)
+        transformer = RewriteFbxNameClass(
+            "get_export_material_name" if material else "pso2_get_bone_name"
+        )
+        func = ast.fix_missing_locations(transformer.visit(func))
 
         ns = {}
         exec(ast.unparse(func), io_scene_fbx.export_fbx_bin.__dict__, ns)
@@ -181,20 +197,30 @@ def pso2_get_bone_name(bone):
 
     fbx_data_armature_elements = patch_function(mod, "fbx_data_armature_elements")
     fbx_data_object_elements = patch_function(mod, "fbx_data_object_elements")
+    fbx_data_material_elements = patch_function(mod, "fbx_data_material_elements", True)
 
-    return fbx_data_armature_elements, fbx_data_object_elements
+    return (
+        fbx_data_armature_elements,
+        fbx_data_object_elements,
+        fbx_data_material_elements,
+    )
 
 
 @contextmanager
 def _monkey_patch_export_fbx_bin():
     orig_armature_elements = io_scene_fbx.export_fbx_bin.fbx_data_armature_elements
     orig_object_elements = io_scene_fbx.export_fbx_bin.fbx_data_object_elements
-    new_armature_elements, new_object_elements = _get_patched_export_funcs()
+    orig_material_elements = io_scene_fbx.export_fbx_bin.fbx_data_material_elements
+    new_armature_elements, new_object_elements, new_material_elements = (
+        _get_patched_export_funcs()
+    )
 
     try:
         io_scene_fbx.export_fbx_bin.fbx_data_armature_elements = new_armature_elements
         io_scene_fbx.export_fbx_bin.fbx_data_object_elements = new_object_elements
+        io_scene_fbx.export_fbx_bin.fbx_data_material_elements = new_material_elements
         yield
     finally:
         io_scene_fbx.export_fbx_bin.fbx_data_armature_elements = orig_armature_elements
         io_scene_fbx.export_fbx_bin.fbx_data_object_elements = orig_object_elements
+        io_scene_fbx.export_fbx_bin.fbx_data_material_elements = orig_material_elements

@@ -9,7 +9,7 @@ from typing import Any, TypedDict, cast, get_type_hints
 import bpy
 from mathutils import Matrix
 
-from . import dotnet, export_shape_keys, fbx_wrapper
+from . import dotnet, export_shape_keys, fbx_wrapper, material
 from .util import OperatorResult
 
 
@@ -87,6 +87,18 @@ def export(
     dotnet.set_assimp_probing_paths()
 
     options = options or {}
+
+    # Fail before writing either AQP or AQN instead of silently letting AML
+    # invent a shader for a material whose import metadata has been lost.
+    for obj in _get_export_meshes(context, options):
+        for slot in obj.material_slots:
+            if (mat := slot.material) is None:
+                continue
+            try:
+                material.get_export_material_name(mat)
+            except ValueError as error:
+                operator.report({"ERROR"}, str(error))
+                return {"CANCELLED"}
 
     if len(path.stem) > MAX_MODEL_NAME:
         operator.report(
@@ -397,7 +409,11 @@ def _material_texture_data() -> dict[str, list[dict]]:
         raw = mat.get("pso2_tsta")
         if not raw:
             continue
-        match = _MATERIAL_NAME.match(mat.name)
+        try:
+            name = material.get_export_material_name(mat)
+        except ValueError:
+            continue  # An unrelated material outside the export selection.
+        match = _MATERIAL_NAME.match(name)
         if match is None:
             continue
         try:
@@ -636,19 +652,63 @@ def strip_padded_uvs(model) -> int:
     the FBX as real uv2-uv4 blocks full of zeros - a face grows by half
     its file size and carries a vertex layout the game never wrote.
     """
+    from AquaModelLibrary.Data.PSO2.Aqua.AquaObjectData import VTXE
+
     cleared = 0
     for index in range(model.vtxlList.Count):
         vtxl = model.vtxlList[index]
-        for attribute in ("uv2List", "uv3List", "uv4List"):
+        removed = set()
+        for flag, attribute in ((0x11, "uv2List"), (0x12, "uv3List"), (0x13, "uv4List")):
             uv_list = getattr(vtxl, attribute, None)
             if uv_list is None or not uv_list.Count:
+                continue
+            # Packed channels are a separate representation; do not remove
+            # their layout based on the unpacked values alone.
+            packed = getattr(vtxl, attribute + "NGS", None)
+            if packed is not None and packed.Count:
                 continue
             if all(
                 abs(uv_list[k].X) < 1e-9 and abs(uv_list[k].Y) < 1e-9
                 for k in range(uv_list.Count)
             ):
                 uv_list.Clear()
+                removed.add(flag)
                 cleared += 1
+
+        if not removed:
+            continue
+
+        # Assimp has already built the vertex layout. Clearing only VTXL
+        # leaves the writer indexing empty UV arrays. NGS layouts can be
+        # shared by other vertex sets, so edit a private clone.
+        vset = model.vsetList[index]
+        layout_index = vset.vtxeCount if model.IsNGS else index
+        layout = model.vtxeList[layout_index].Clone()
+        for j in range(layout.vertDataTypes.Count - 1, -1, -1):
+            if layout.vertDataTypes[j].dataType in removed:
+                layout.vertDataTypes.RemoveAt(j)
+        offset = 0
+        for j in range(layout.vertDataTypes.Count):
+            element = layout.vertDataTypes[j]
+            element.relativeAddress = offset
+            layout.vertDataTypes[j] = element
+            single = VTXE()
+            single.vertDataTypes.Add(element)
+            offset += single.GetVTXESize()
+        if model.IsNGS:
+            vset.vtxeCount = model.vtxeList.Count
+            model.vtxeList.Add(layout)
+            # Keep the global stride: GetBytes pads each vertex to it.
+        else:
+            model.vtxeList[index] = layout
+            vset.vtxeCount = layout.vertDataTypes.Count
+            vset.vertDataSize = offset
+        model.vsetList[index] = vset
+
+    if cleared and model.IsNGS:
+        objc = model.objc
+        objc.vtxeCount = model.vtxeList.Count
+        model.objc = objc
 
     return cleared
 

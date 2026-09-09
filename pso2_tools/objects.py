@@ -1522,16 +1522,22 @@ def _get_accessory(
 
 
 def _get_face_variation_dict(bin_path: Path) -> dict[str, int]:
+    from AquaModelLibrary.Data.PSO2.Constants import (
+        CharacterMakingIce,
+        CharacterMakingStatic,
+    )
     from System.IO import FileNotFoundException
 
-    face_var_path = bin_path / "data/win32" / md5digest("ui_character_making.ice")
+    face_var_path = (
+        bin_path / "data/win32" / md5digest(CharacterMakingIce.classicCharCreate)
+    )
     result: dict[str, int] = {}
 
     try:
         icefile = ice.IceFile.load(face_var_path)
 
         for f in icefile.get_files():
-            if "face_variation.cmp.lua" in f.name.lower():
+            if CharacterMakingStatic.faceVarName in f.name.lower():
                 result.update(_parse_face_variation_lua(f))
     except FileNotFoundException:  # type: ignore
         pass
@@ -1540,22 +1546,11 @@ def _get_face_variation_dict(bin_path: Path) -> dict[str, int]:
 
 
 def _parse_face_variation_lua(script_file: datafile.DataFile) -> dict[str, int]:
-    result: dict[str, int] = {}
-    language: str | None = None
-    src = script_file.data.rstrip(b"\0").decode()
+    from AquaModelLibrary.Data.Utility import ReferenceGenerator
 
-    for line in src.splitlines():
-        if language:
-            if "crop_name" in line:
-                if name := line.split('"')[1]:
-                    result[language] = int(name[7:])
-
-                language = None
-
-        elif "language" in line:
-            language = line.split('"')[1]
-
-    return result
+    # AML returns file ID -> text key; the database consumes the reverse map.
+    entries = ReferenceGenerator.ReadFaceVariationLua(script_file.data.rstrip(b"\0"))
+    return {str(entry.Value): int(entry.Key) for entry in entries}
 
 
 # bin path -> {face paint id: (u, v from the top, width, height)}. Read once
