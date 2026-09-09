@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- AquaModelLibrary.Native is C++/CLI wrapping the Autodesk FBX SDK, and
+     C++/CLI only exists on Windows. On other platforms the project reference
+     is dropped and a managed stub with the same API compiles in its place, so
+     the rest of AquaModelLibrary.Core builds unchanged. Model import does not
+     go through FBX on those platforms (see pso2_tools/import_model_native.py).
+     MSBuild finds this file by walking up from every project, which is how it
+     reaches into the submodule without touching it. -->
+<Project>
+  <!-- SoulsFormats pins PlatformTarget to x64, and an x64-stamped assembly
+       refuses to load into an Apple Silicon process. AnyCPU everywhere is
+       right for every non-Windows host. -->
+  <PropertyGroup Condition="!$([MSBuild]::IsOSPlatform('Windows'))">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+  </PropertyGroup>
+
+  <ItemGroup Condition="!$([MSBuild]::IsOSPlatform('Windows')) And '$(MSBuildProjectName)' == 'AquaModelLibrary.Core'">
+    <ProjectReference Remove="$(MSBuildProjectDirectory)/../AquaModelLibrary.Native/AquaModelLibrary.Native.vcxproj" />
+    <Compile Include="$(MSBuildThisFileDirectory)dotnet/FbxExporterCoreStub.cs" />
+  </ItemGroup>
+</Project>

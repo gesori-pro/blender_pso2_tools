@@ -16,6 +16,12 @@ def find_blender() -> Path:
         if path.is_file():
             return path
 
+    if sys.platform == "darwin":
+        path = Path("/Applications/Blender.app/Contents/MacOS/Blender")
+        if path.is_file():
+            return path
+        raise RuntimeError("Could not find Blender")
+
     program_files = Path(os.getenv("PROGRAMFILES", "C:/Program Files"))
     roots = [program_files / "Blender Foundation"]
     roots += [
