@@ -10,11 +10,10 @@ material building, character files, motions, shape adjust, and export back
 to .aqp - was written against what io_scene_fbx makes of the converter's
 FBX. So this follows the two of them step for step:
 
-- The armature object is aqn node 0 (the converter marks it eRoot, and
-  io_scene_fbx turns 'Root' models into armatures, not bones), named
-  "name#BS1#BS2" with the flags in hex, carrying the Y-up-to-Z-up global
-  rotation.
-- Bones are the remaining nodes plus the NODO effect nodes, named
+- The armature object carries the Y-up-to-Z-up global rotation and the
+  root's metadata name. AQN node 0 remains a deform bone, matching the
+  root-node correction in fbx_wrapper so its skin weights are preserved.
+- Bones are all NODEs plus the NODO effect nodes, named
   "name#BS1#BS2"; NODE bones also get their index in a pso2_bone_id
   property, matching fbx_wrapper's rename of the "(id)" prefixes.
 - An edit bone's matrix is the bind chain times the X,Y bone correction, so
@@ -94,14 +93,15 @@ def import_model(
     material_map = _create_materials(materials)
     mesh_mapping = np.frombuffer(bytes(materials.MeshMapping), dtype=np.int32)
 
+    imported_meshes = 0
     for mesh_id in range(ModelInterop.GetMeshCount(model)):
-        mesh_data = ModelInterop.GetMesh(model, mesh_id)
         material = (
-            material_map[mesh_mapping[mesh_id]]
-            if mesh_id < len(mesh_mapping)
-            else None
+            material_map[mesh_mapping[mesh_id]] if mesh_id < len(mesh_mapping) else None
         )
-        _build_mesh(context, mesh_data, material, armature_obj, bone_names, options)
+        for group_id in ModelInterop.GetFaceGroupIds(model, mesh_id):
+            mesh_data = ModelInterop.GetMesh(model, mesh_id, group_id)
+            _build_mesh(context, mesh_data, material, armature_obj, bone_names, options)
+            imported_meshes += 1
 
     if context.view_layer:
         context.view_layer.objects.active = armature_obj
@@ -109,7 +109,7 @@ def import_model(
     debug_print(
         f"Native import: {name}:"
         f" {nodes.NodeCount} nodes, {nodes.NodoCount} effect nodes,"
-        f" {ModelInterop.GetMeshCount(model)} meshes"
+        f" {imported_meshes} meshes"
     )
 
     return {"FINISHED"}
@@ -166,18 +166,15 @@ def _build_armature(context: bpy.types.Context, nodes, global_matrix: Matrix):
     def metadata_name(name: str, shorts: np.ndarray, index: int) -> str:
         return f"{name}#{shorts[index * 2]:X}#{shorts[index * 2 + 1]:X}"
 
-    # Node 0 becomes the armature object itself, exactly as io_scene_fbx
-    # treats the converter's eRoot skeleton node. Its bind pose entry in the
-    # FBX ends up identity (the converter writes it twice, identity last),
-    # so the bone chain hangs off identity while the object's own transform
-    # carries node 0's local matrix - both replicated here.
+    # Keep node 0 as a deform bone. The armature only changes coordinate
+    # systems; consuming node 0 here would discard its skinning influences.
     armature_name = (
         metadata_name(node_names[0], node_shorts, 0) if node_count else "Armature"
     )
 
     armature_data = bpy.data.armatures.new(armature_name)
     armature_obj = bpy.data.objects.new(armature_name, armature_data)
-    armature_obj.matrix_basis = global_matrix @ world_bind[0] if node_count else global_matrix
+    armature_obj.matrix_basis = global_matrix
 
     assert context.view_layer is not None
     context.view_layer.active_layer_collection.collection.objects.link(armature_obj)
@@ -189,17 +186,17 @@ def _build_armature(context: bpy.types.Context, nodes, global_matrix: Matrix):
     roots: list[_Bone] = []
     nodos: list[tuple[_Bone, int]] = []
 
-    for i in range(1, node_count):
+    for i in range(node_count):
         bone = _Bone(metadata_name(node_names[i], node_shorts, i), i)
         bones[i] = bone
 
-    for i in range(1, node_count):
+    for i in range(node_count):
         bone = bones[i]
         assert bone is not None
-        parent_id = int(node_parents[i])
-        if parent_id == 0:
+        parent_id = -1 if i == 0 else int(node_parents[i])
+        if i == 0:
             roots.append(bone)
-        elif 0 < parent_id < node_count and bones[parent_id] is not None:
+        elif 0 <= parent_id < node_count and bones[parent_id] is not None:
             bones[parent_id].children.append(bone)  # type: ignore[union-attr]
         else:
             # The converter leaves such nodes unparented and the FBX drops
@@ -208,7 +205,7 @@ def _build_armature(context: bpy.types.Context, nodes, global_matrix: Matrix):
             bones[i] = None
             continue
 
-        parent_world = world_bind[parent_id] if parent_id > 0 else Matrix()
+        parent_world = world_bind[parent_id] if parent_id >= 0 else Matrix()
         bone.local_bind = parent_world.inverted_safe() @ world_bind[i]
         bone.local_trs = bone.local_bind
 
@@ -220,7 +217,7 @@ def _build_armature(context: bpy.types.Context, nodes, global_matrix: Matrix):
 
         bone = _Bone(metadata_name(nodo_names[i], nodo_shorts, i), None)
         local = _matrix_from_numerics(nodo_local[i * 16 : i * 16 + 16])
-        parent_world = world_bind[parent_id] if parent_id > 0 else Matrix()
+        parent_world = world_bind[parent_id]
 
         # Converter quirk, kept on purpose: NODO bind pose entries hold the
         # INVERSE world matrix, so the rest pose lands there and the pose
@@ -229,14 +226,11 @@ def _build_armature(context: bpy.types.Context, nodes, global_matrix: Matrix):
         bone.local_bind = parent_world.inverted_safe() @ world.inverted_safe()
         bone.local_trs = local
 
-        if parent_id == 0:
-            roots.append(bone)
-        else:
-            parent_bone = bones[parent_id]
-            if parent_bone is None:
-                debug_print(f"Skipping effect node {i} under dropped node {parent_id}")
-                continue
-            parent_bone.children.append(bone)
+        parent_bone = bones[parent_id]
+        if parent_bone is None:
+            debug_print(f"Skipping effect node {i} under dropped node {parent_id}")
+            continue
+        parent_bone.children.append(bone)
         nodos.append((bone, parent_id))
 
     # Compute edit matrices: parent chain of normalized local binds, times
@@ -384,7 +378,9 @@ def _build_mesh(
             normals.reshape(vertex_count, 3).tolist()
         )
 
-    uv_channels = [np.frombuffer(bytes(blob), dtype=np.float32) for blob in mesh_data.Uvs]
+    uv_channels = [
+        np.frombuffer(bytes(blob), dtype=np.float32) for blob in mesh_data.Uvs
+    ]
     last_used = max(
         (i for i, data in enumerate(uv_channels) if np.any(np.abs(data) >= 1e-9)),
         default=0,
@@ -457,9 +453,7 @@ def _apply_weights(obj: bpy.types.Object, mesh_data, bone_names: dict[int, str])
     palette = np.frombuffer(bytes(mesh_data.BonePalette), dtype=np.int32)
 
     for palette_index, node_index in enumerate(palette):
-        # Palette entries the converter could not resolve fall back to node
-        # 0, which is the armature, not a bone - io_scene_fbx drops those
-        # clusters and so does this.
+        # The palette contains AQN node IDs, including the deforming root 0.
         bone_name = bone_names.get(int(node_index))
         if bone_name is None:
             continue

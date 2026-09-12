@@ -41,21 +41,29 @@ MESH_ID_NAMES = {
 }
 
 
-MESH_ID_RE = re.compile(r"mesh\[\d+\]_.*#.*#(\d+)$")
-MESH_ID_SUB_RE = re.compile(r"(?<=#)\d+(?=(?:\.\d+)?$)")
+# GetMeshName now appends a face-group ID. Ornament IDs remain the second
+# # field in both old and new names. AML's reverse parser is private, so
+# this Blender UI adapter still needs to identify the editable field.
+MESH_ID_RE = re.compile(r"mesh\[\d+\]_[^#]+#-?\d+#(?P<dummy>-?\d+)(?:#\d+)?(?:_mesh)?$")
 
 
 def get_mesh_id(name: str) -> MeshId | None:
     if m := MESH_ID_RE.search(util.remove_blender_suffix(name)):
-        return MeshId(int(m.group(1)))
+        try:
+            return MeshId(int(m.group("dummy")))
+        except ValueError:
+            return None
 
     return None
 
 
 def set_mesh_id(obj: bpy.types.Object, mesh_id: MeshId):
-    new_obj_name = MESH_ID_SUB_RE.sub(str(mesh_id), obj.name)
-    new_mesh_name = MESH_ID_SUB_RE.sub(f"{mesh_id}_mesh", obj.name)
+    match = MESH_ID_RE.search(util.remove_blender_suffix(obj.name))
+    if match is None:
+        return
+    start, end = match.span("dummy")
+    new_obj_name = obj.name[:start] + str(int(mesh_id)) + obj.name[end:]
 
     obj.name = new_obj_name
     if obj.data:
-        obj.data.name = new_mesh_name
+        obj.data.name = util.remove_blender_suffix(new_obj_name) + "_mesh"

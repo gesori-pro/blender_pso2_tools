@@ -3,6 +3,7 @@ import re
 import typing
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from functools import lru_cache
 
 import bpy
 
@@ -218,17 +219,37 @@ def get_export_material_name(mat: bpy.types.Material) -> str:
     return saved[:start] + f"pso2_mat_{mat.session_uid:x}" + saved[end:]
 
 
-def find_material(key: str, materials: Iterable[Material]):
-    m = FBX_MATERIAL_RE.match(key)
-    if not m:
-        return None
+@lru_cache(maxsize=1024)
+def _material_name_data(key: str):
+    """Decode the FBX metadata with the same parser AML uses on export.
 
-    name = m.group("name")
-    blend_type = m.group("blend_type")
-    special_type = m.group("special_type") or ""
-    two_sided = int(m.group("two_sided") or "0")
-    alpha_cutoff = int(m.group("alpha_cutoff") or "0")
-    shaders = m.group("shaders").split(",")
+    The regex only checks for an encoded name. Cache plain Python values,
+    not CLR objects or Blender datablocks, across meshes sharing a material.
+    """
+    if not FBX_MATERIAL_RE.fullmatch(key):
+        return None
+    from AquaModelLibrary.Data.PSO2.Aqua import AquaObject
+    from System import String
+    from System.Collections.Generic import List
+
+    name, shaders, blend, special, two_sided, cutoff = AquaObject.GetMaterialNameData(
+        key, List[String]()
+    )
+    return (
+        str(name),
+        tuple(str(shader) for shader in shaders),
+        str(blend or ""),
+        str(special or ""),
+        int(two_sided),
+        int(cutoff),
+    )
+
+
+def find_material(key: str, materials: Iterable[Material]):
+    data = _material_name_data(key)
+    if data is None:
+        return None
+    name, shaders, blend_type, special_type, two_sided, alpha_cutoff = data
 
     def is_match(mat: Material):
         return (
@@ -237,7 +258,7 @@ def find_material(key: str, materials: Iterable[Material]):
             and mat.special_type == special_type
             and mat.two_sided == two_sided
             and mat.alpha_cutoff == alpha_cutoff
-            and mat.shaders == shaders
+            and tuple(mat.shaders) == shaders
         )
 
     return next((m for m in materials if is_match(m)), None)

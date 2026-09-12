@@ -799,13 +799,15 @@ class PSO2_OT_ExportShapeAdjust(  # type: ignore https://github.com/nutti/fake-b
             node_count=self.NODE_COUNT,
         )
 
-        def key_set(key_type, data_type, keys):
+        multiplier, _ = aqm.baked_timing_format(1)
+
+        def key_set(key_type, keys):
             return aqm.AqmKeySet(
                 key_type=key_type,
-                data_type=data_type,
+                data_type=aqm.key_data_type(key_type),
                 unk_int0=0,
                 # Real files store plain [0, 0x10] on two-key channels.
-                timings=[0, 0x10] if len(keys) > 1 else [],
+                timings=[0, multiplier] if len(keys) > 1 else [],
                 vec4_keys=keys,
             )
 
@@ -819,9 +821,9 @@ class PSO2_OT_ExportShapeAdjust(  # type: ignore https://github.com/nutti/fake-b
             entry = adjusted.get(index)
             if entry is None:
                 node.key_sets = [
-                    key_set(aqm.KEY_TYPE_POSITION, 0x1, [(0.0, 0.0, 0.0, 0.0)]),
-                    key_set(aqm.KEY_TYPE_ROTATION, 0x3, [(0.0, 0.0, 0.0, 1.0)]),
-                    key_set(aqm.KEY_TYPE_SCALE, 0x1, [(1.0, 1.0, 1.0, 0.0)]),
+                    key_set(aqm.KEY_TYPE_POSITION, [(0.0, 0.0, 0.0, 0.0)]),
+                    key_set(aqm.KEY_TYPE_ROTATION, [(0.0, 0.0, 0.0, 1.0)]),
+                    key_set(aqm.KEY_TYPE_SCALE, [(1.0, 1.0, 1.0, 0.0)]),
                 ]
             else:
                 px, py, pz = entry["pos"]
@@ -830,17 +832,14 @@ class PSO2_OT_ExportShapeAdjust(  # type: ignore https://github.com/nutti/fake-b
                 node.key_sets = [
                     key_set(
                         aqm.KEY_TYPE_POSITION,
-                        0x1,
                         [(0.0, 0.0, 0.0, 0.0), (px, py, pz, 0.0)],
                     ),
                     key_set(
                         aqm.KEY_TYPE_ROTATION,
-                        0x3,
                         [(0.0, 0.0, 0.0, 1.0), (qx, qy, qz, qw)],
                     ),
                     key_set(
                         aqm.KEY_TYPE_SCALE,
-                        0x1,
                         [(1.0, 1.0, 1.0, 0.0), (sx, sy, sz, 0.0)],
                     ),
                 ]

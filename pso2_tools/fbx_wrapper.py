@@ -65,8 +65,23 @@ def _monkey_patch_FbxImportHelperNode():
             if result := split_bone_name(self.fbx_name):
                 self.fbx_name = result[0]
                 self.pso2_bone_id = result[1]
+                # AML's node 0 is a real skinning target even though the FBX
+                # SDK labels it Root. Blender otherwise consumes it as the
+                # armature object and discards the weights linked to it.
+                if self.pso2_bone_id == 0 and self.fbx_type == b"Root":
+                    self.is_bone = True
             else:
                 self.pso2_bone_id = None
+
+        def find_armatures(self):
+            super().find_armatures()
+            for child in self.children:
+                if not child.is_armature or child.fbx_elem is not None:
+                    continue
+                for bone in child.children:
+                    if getattr(bone, "pso2_bone_id", None) == 0:
+                        child.fbx_name = bone.fbx_name
+                        break
 
         def build_skeleton(self, *args, **kwargs):
             bone = super().build_skeleton(*args, **kwargs)

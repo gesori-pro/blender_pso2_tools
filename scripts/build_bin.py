@@ -11,51 +11,33 @@ ZamboniLib expects for NGS ICE decompression.
 """
 
 import argparse
+import hashlib
 import json
 import platform
 import shutil
 import subprocess
 import sys
+import tempfile
 import urllib.request
 import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
 
-FRAMEWORK = "net9.0"
-
-FBX_URL = "https://www.autodesk.com/content/dam/autodesk/www/adn/fbx/2020-1/fbx20201_fbxsdk_vs2017_win.exe"
-NUGET_URL = "https://learn.microsoft.com/en-us/nuget/consume-packages/install-use-packages-nuget-cli"
+FBX_URL = "https://aps.autodesk.com/developer/overview/fbx-sdk"
 VISUAL_STUDIO_URL = "https://visualstudio.microsoft.com/vs/community/"
 
 VSWHERE = Path("C:/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe")
 
-FBX_SRC = Path("C:/Program Files/Autodesk/FBX/FBX SDK/2020.1")
+FBX_INSTALL_ROOT = Path("C:/Program Files/Autodesk/FBX/FBX SDK")
 FBX_DEST = ROOT / "PSO2-Aqua-Library/AquaModelLibrary.Native/Dependencies/FBX"
 BIN_PATH = ROOT / "pso2_tools/bin"
-
-AQUA_SLN = ROOT / "PSO2-Aqua-Library/AquaModelLibrary.sln"
-AQUA_CORE_PATH = ROOT / "PSO2-Aqua-Library/AquaModelLibrary.Core"
 
 INTEROP_PROJECT = ROOT / "dotnet/Pso2Tools.Interop/Pso2Tools.Interop.csproj"
 
 STUB_GENERATOR_SLN = ROOT / "pythonnet-stub-generator/csharp/PythonNetStubGenerator.sln"
 
 PACKAGES_PATH = ROOT / "packages"
-PACKAGES = [
-    ("BouncyCastle.Cryptography", "2.4.0"),
-    ("DrSwizzler", "1.1.1"),
-    ("prs_rs.Net.Sys", "1.0.4"),
-    ("Pfim", "0.11.3"),
-    ("Reloaded.Memory", "9.4.2"),
-    ("SixLabors.ImageSharp", "3.1.6"),
-    ("SharpAssimp", "6.0.12"),
-    ("SharpZipLib", "1.4.2"),
-    ("System.Drawing.Common", "8.0.11"),
-    ("System.Data.DataSetExtensions", "4.6.0-preview3.19128.7"),
-    ("System.Text.RegularExpressions", "4.3.1"),
-    ("ZstdNet", "1.4.5"),
-]
 
 # .NET Framework 4.8 reference assemblies, needed to compile the legacy-format
 # NvTriStripDotNet project where no Visual Studio provides them.
@@ -82,73 +64,111 @@ SSE2NEON_URL = (
 
 
 def check_dependencies():
-    if not shutil.which("nuget"):
-        print(f"Please install nuget: {NUGET_URL}")
-
     if not VSWHERE.exists():
         print(f"Please install Visual Studio: {VISUAL_STUDIO_URL}")
         sys.exit(1)
 
-    if not FBX_SRC.exists():
-        print(f"Please install FBX SDK 2020.1: {FBX_URL}")
-        sys.exit(1)
+
+def find_fbx_sdk(requested: Path | None) -> Path:
+    def usable(path):
+        return (path / "include/fbxsdk.h").is_file() and any(
+            (path / layout / "libfbxsdk-md.lib").is_file()
+            for layout in ("lib/vs2017/x64/release", "lib/x64/release")
+        )
+
+    # Respect already configured junctions, including newer 2020.3 SDKs.
+    if requested is None and usable(FBX_DEST):
+        return FBX_DEST
+    candidates = (
+        [requested]
+        if requested
+        else sorted(
+            FBX_INSTALL_ROOT.glob("2020.*"),
+            key=lambda p: tuple(int(part) for part in p.name.split(".")),
+            reverse=True,
+        )
+    )
+    for path in candidates:
+        if usable(path):
+            return path
+    raise RuntimeError(f"Install an FBX 2020 SDK or pass --fbx-sdk: {FBX_URL}")
 
 
-def make_junction(src: Path, dest: Path):
-    if dest.exists():
+def configure_fbx_sdk(requested: Path | None) -> None:
+    source = find_fbx_sdk(requested)
+    if source == FBX_DEST:
         return
+    for name in ("lib", "include"):
+        dest = FBX_DEST / name
+        src = (source / name).resolve()
+        if dest.exists():
+            if dest.resolve() != src:
+                raise RuntimeError(f"{dest} already points elsewhere; check --fbx-sdk")
+            continue
+        dest.parent.mkdir(parents=True, exist_ok=True)
 
-    subprocess.call(["mklink", "/J", dest, src], shell=True)
+        # PowerShell avoids cmd's parsing of metacharacters in SDK paths.
+        def quote(path):
+            return "'" + str(path).replace("'", "''") + "'"
 
-
-def install_packages():
-    for package, version in PACKAGES:
         subprocess.check_call(
             [
-                "nuget",
-                "install",
-                package,
-                "-Version",
-                version,
-                "-Framework",
-                FRAMEWORK,
-                "-OutputDirectory",
-                PACKAGES_PATH,
+                "powershell",
+                "-NoProfile",
+                "-Command",
+                f"New-Item -ItemType Junction -Path {quote(dest)} -Target {quote(src)} | Out-Null",
             ]
         )
 
 
-def copy_package_dlls():
-    frameworks = [
-        "net9.0",
-        "net8.0",
-        "net7.0",
-        "net6.0",
-        "net5.0",
-        "netstandard2.1",
-        "netstandard2.0",
-        "netstandard1.3",
+def finish_bin(stage: Path, debug: bool, rid: str):
+    """Validate a complete staged publish before replacing the previous bin."""
+    required = [
+        "AquaModelLibrary.Core.dll",
+        "AquaModelLibrary.Data.dll",
+        "Pso2Tools.Interop.dll",
+        "Pso2Tools.Interop.deps.json",
+        "ZamboniLib.dll",
     ]
-
-    for package, version in PACKAGES:
-        src = PACKAGES_PATH / f"{package}.{version}"
-        lib = src / "lib"
-        runtime_x64 = src / "runtimes/win-x64/native"
-
-        if not src.exists():
-            raise Exception(f"Couldn't find {src}")
-
-        try:
-            framework = next(lib / f for f in frameworks if (lib / f).exists())
-
-            for dll in framework.glob("*.dll"):
-                shutil.copyfile(dll, BIN_PATH / dll.name)
-        except StopIteration:
-            pass
-
-        for dll in runtime_x64.glob("*.dll"):
-            print(" ", dll.name)
-            shutil.copyfile(dll, BIN_PATH / "x64" / dll.name)
+    if rid == "win-x64":
+        required += ["AquaModelLibrary.Native.X64.dll", "Ijwhost.dll", "assimp.dll"]
+    else:
+        required += [OOZ_DYLIB]
+    for name in required:
+        if not (stage / name).is_file():
+            raise RuntimeError(f"Incomplete publish: missing {name}")
+    if not debug:
+        for pdb in stage.rglob("*.pdb"):
+            pdb.unlink()
+    revision = subprocess.check_output(
+        ["git", "-C", ROOT / "PSO2-Aqua-Library", "rev-parse", "HEAD"], text=True
+    ).strip()
+    provenance = {
+        "aml_commit": revision,
+        "runtime": rid,
+        "source_compatibility": "dotnet/AmlCompatibility.targets",
+        "dll_sha256": {
+            file.relative_to(stage).as_posix(): hashlib.sha256(
+                file.read_bytes()
+            ).hexdigest()
+            for file in sorted(stage.rglob("*.dll"))
+        },
+    }
+    (stage / "build-info.json").write_text(json.dumps(provenance, indent=2) + "\n")
+    # Both paths belong to our workspace. Never follow an installed add-on's
+    # junction, and retain the entire old bin if publication/rename fails.
+    if BIN_PATH.resolve() != ROOT.resolve() / "pso2_tools/bin":
+        raise RuntimeError(f"Refusing to replace redirected bin: {BIN_PATH}")
+    previous = stage.parent / "previous-bin"
+    had_bin = BIN_PATH.exists()
+    if had_bin:
+        BIN_PATH.rename(previous)
+    try:
+        stage.rename(BIN_PATH)
+    except OSError:
+        if had_bin:
+            previous.rename(BIN_PATH)
+        raise
 
 
 def call_msbuild(args: list[Path | str]):
@@ -163,75 +183,44 @@ def call_msbuild(args: list[Path | str]):
     )
     msbuild = Path(vs[0]["installationPath"]) / "Msbuild/Current/Bin/MSBuild.exe"
 
-    subprocess.check_call([msbuild, *args])
+    subprocess.check_call([msbuild, *args], cwd=ROOT)
 
 
 def build_windows(args):
     check_dependencies()
 
-    target = "Rebuild" if args.clean else "Build"
     config = "Debug" if args.debug else "Release"
-
-    # Set up Aqua Library dependencies
-    # Use junction points instead of symlinks so Git sees them as directories
-    # and they fit PSO2-Aqua-Library's .gitignore patterns.
-    make_junction(FBX_SRC / "lib", FBX_DEST / "lib")
-    make_junction(FBX_SRC / "include", FBX_DEST / "include")
-
-    install_packages()
-
-    # Build Aqua Library
-    call_msbuild(
-        [
-            AQUA_SLN,
-            "-p:RestorePackagesConfig=true",
-            f"-p:Configuration={config}",
-            f"-t:{target}",
-            "-verbosity:minimal",
-            "-restore",
-        ]
-    )
-
-    # Build the interop helpers the native model importer uses. Windows still
-    # imports through FBX, but building it everywhere keeps one bin layout.
-    call_msbuild(
-        [
-            INTEROP_PROJECT,
-            f"-p:Configuration={config}",
-            f"-t:{target}",
-            "-verbosity:minimal",
-            "-restore",
-        ]
-    )
-
-    # Copy to pso2_tools/bin folder
-    out_path = AQUA_CORE_PATH / "bin" / config / FRAMEWORK
-
-    ignore = None if args.debug else shutil.ignore_patterns("*.pdb")
-
-    shutil.rmtree(BIN_PATH, ignore_errors=True)
-    shutil.copytree(out_path, BIN_PATH, dirs_exist_ok=True, ignore=ignore)
-
-    interop_out = INTEROP_PROJECT.parent / "bin" / config / FRAMEWORK
-    for pattern in ("Pso2Tools.Interop.dll", "Pso2Tools.Interop.pdb"):
-        for file in interop_out.glob(pattern):
-            if not args.debug and file.suffix == ".pdb":
-                continue
-            shutil.copyfile(file, BIN_PATH / file.name)
-
-    copy_package_dlls()
-
-    # Build pythonnet-stub-generator
-    call_msbuild(
-        [
-            STUB_GENERATOR_SLN,
-            "-p:RestorePackagesConfig=true",
-            "-p:Configuration=Release",
-            f"-t:{target}",
-            "-verbosity:minimal",
-            "-restore",
-        ]
-    )
+    configure_fbx_sdk(args.fbx_sdk)
+    PACKAGES_PATH.mkdir(exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="aml-build-", dir=PACKAGES_PATH) as temp:
+        stage = Path(temp) / "publish"
+        # Resolve versions, frameworks and native assets from AML's project
+        # graph. Do not override them with a second hand-maintained list.
+        call_msbuild(
+            [
+                INTEROP_PROJECT,
+                "-restore",
+                "-t:Rebuild;Publish" if args.clean else "-t:Publish",
+                f"-p:Configuration={config}",
+                "-p:Platform=x64",
+                "-p:RuntimeIdentifier=win-x64",
+                "-p:SelfContained=false",
+                "-p:RestorePackagesConfig=true",
+                f"-p:PublishDir={stage}/",
+                "-verbosity:minimal",
+            ]
+        )
+        if args.with_stubs:
+            call_msbuild(
+                [
+                    STUB_GENERATOR_SLN,
+                    "-restore",
+                    "-t:Build",
+                    "-p:RestorePackagesConfig=true",
+                    "-p:Configuration=Release",
+                ]
+            )
+        finish_bin(stage, args.debug, "win-x64")
 
 
 def check_dependencies_macos():
@@ -273,9 +262,9 @@ def get_macos_rid() -> str:
     return "osx-arm64" if machine == "arm64" else "osx-x64"
 
 
-def build_ooz(args):
+def build_ooz(args, output: Path):
     """Build ooz as a drop-in for the Oodle DLL ZamboniLib expects."""
-    dylib = BIN_PATH / OOZ_DYLIB
+    dylib = output / OOZ_DYLIB
 
     if not OOZ_SRC.exists():
         PACKAGES_PATH.mkdir(exist_ok=True)
@@ -334,12 +323,9 @@ def build_macos(args):
     config = "Debug" if args.debug else "Release"
     refs = ensure_net48_reference_assemblies()
 
-    shutil.rmtree(BIN_PATH, ignore_errors=True)
-
     # Publishing with a runtime identifier resolves every NuGet package's
     # assemblies and native libraries (libassimp, libprs_rs) for this machine
-    # into one flat folder, so there is no hand-kept package list like the
-    # Windows path needs.
+    # into one flat folder, just as the Windows MSBuild publish does.
     command = [
         "dotnet",
         "publish",
@@ -349,27 +335,32 @@ def build_macos(args):
         "--runtime",
         get_macos_rid(),
         "--no-self-contained",
-        "--output",
-        BIN_PATH,
         "-verbosity:minimal",
         f"-p:FrameworkPathOverride={refs}",
     ]
-    if args.clean:
-        command.append("--no-incremental")
-
-    subprocess.check_call(command)
-
-    if not args.debug:
-        for pdb in BIN_PATH.glob("*.pdb"):
-            pdb.unlink()
-
-    build_ooz(args)
+    PACKAGES_PATH.mkdir(exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="aml-build-", dir=PACKAGES_PATH) as temp:
+        stage = Path(temp) / "publish"
+        if args.clean:
+            subprocess.check_call(
+                ["dotnet", "clean", INTEROP_PROJECT, "--configuration", config],
+                cwd=ROOT,
+            )
+        subprocess.check_call([*command, "--output", stage], cwd=ROOT)
+        build_ooz(args, stage)
+        finish_bin(stage, args.debug, get_macos_rid())
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--clean", action="store_true")
     parser.add_argument("--debug", action="store_true")
+    parser.add_argument("--fbx-sdk", type=Path, help="Windows: FBX 2020 SDK directory")
+    parser.add_argument(
+        "--with-stubs",
+        action="store_true",
+        help="Also build the Windows typing generator",
+    )
 
     args = parser.parse_args()
 

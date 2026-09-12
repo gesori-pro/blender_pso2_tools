@@ -9,7 +9,7 @@ Supported platforms: Windows x64 and macOS (Apple Silicon). Install the release 
 On Windows, model import runs through the Autodesk FBX SDK as it always has. On other platforms that bridge cannot exist (it is C++/CLI), so import builds the Blender scene directly from the model data instead; the resulting scene and exported files are the same. Set `PSO2_TOOLS_NATIVE_IMPORT=1` to use the direct importer on Windows too.
 
 1. Install the [.NET Runtime 9.0](https://dotnet.microsoft.com/en-us/download/dotnet/9.0) (or newer) for your OS.
-2. Download `pso2_tools-****.zip` from the [latest release](https://github.com/dummycount/blender_pso2_tools/releases/latest).
+2. Download `pso2_tools-****.zip` from this fork's [latest release](https://github.com/gesori-pro/blender_pso2_tools/releases/latest).
 3. In Blender, go to **Edit > Preferences > Add-ons**.
 4. Click the down arrow in the upper-right corner and select **Install from Disk...**.
 5. Select the .zip file you downloaded.
@@ -125,12 +125,12 @@ To build and develop the extension, first install the following requirements:
 
 - [Blender 5.1](https://www.blender.org/download/releases/) or newer.
 - [uv](https://github.com/astral-sh/uv)
-- [.NET SDK 9.0](https://dotnet.microsoft.com/en-us/download/dotnet/9.0) or newer
+- [.NET SDK 9.0](https://dotnet.microsoft.com/en-us/download/dotnet/9.0). `global.json` selects an installed 9.0 SDK to match the C++/CLI reference packs.
 
 On Windows, also:
 
 - [Visual Studio](https://visualstudio.microsoft.com/vs/community/) with the C# and C++ workflows installed.
-- [Autodesk FBX SDK](https://www.autodesk.com/content/dam/autodesk/www/adn/fbx/2020-1/fbx20201_fbxsdk_vs2017_win.exe) version 2020.1
+- [Autodesk FBX SDK](https://aps.autodesk.com/developer/overview/fbx-sdk) version 2020.x. Existing SDK junctions are respected; otherwise the build detects an installed 2020.x SDK. Use `--fbx-sdk PATH` for a custom location.
 
 On macOS, also the Xcode command line tools (`xcode-select --install`) for the
 compiler that builds the bundled [ooz](https://github.com/powzix/ooz)
@@ -164,13 +164,17 @@ uv run scripts/wheels.py
 # Build binaries needed by the add-on.
 uv run scripts/build_bin.py
 # Generate Python typings for the above binaries.
+# On Windows, first build the optional generator:
+# uv run scripts/build_bin.py --with-stubs
 # (This will probably fail, but it will generate some useful typings first.)
 uv run scripts/build_typings.py
 ```
 
 [scripts/wheels.py](scripts/wheels.py) defines the Python dependencies used by the add-on. This script needs to be run any time the dependencies are updated, and [pso2_tools/blender_manifest.toml](pso2_tools/blender_manifest.toml) needs to be updated to list all the wheel files.
 
-[scripts/build_bin.py](scripts/build_bin.py) needs to be run any time the PSO2-Aqua-Library submodule is updated. The `PACKAGES` array at the top also needs to be kept in sync with any nuget packages used by Aqua Library.
+[scripts/build_bin.py](scripts/build_bin.py) needs to be run any time the PSO2-Aqua-Library submodule is updated. Run `git submodule update --init --recursive` first. Dependencies are resolved from AML's project references by MSBuild/NuGet publish, including native runtime assets. A failed build keeps the previous `bin` intact. `bin/build-info.json` records the AML commit and DLL hashes.
+
+The AML revision currently matches [Aqua-Toolset](https://github.com/Shadowth117/Aqua-Toolset)'s `7e9f874` pin. `dotnet/AmlCompatibility.targets` applies reviewed SoulsFormats property and face-group fixes to generated build copies; the upstream submodule stays unmodified. These binaries include those compatibility fixes. See [the AML update audit](docs/aml-update-20260912.md) for API choices and validation details.
 
 [scripts/build_typings.py](scripts/build_typings.py) does not need to be run for the add-on to function, but it generates typings that can be helpful when editing in an IDE.
 

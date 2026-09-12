@@ -412,6 +412,69 @@ def import_image(path: Path):
     return image
 
 
+def _add_missing_material(model, name: str) -> bool:
+    """Give a model one MATE entry if it shipped with none.
+
+    Accessories old enough to predate NGS can carry an empty material list
+    while their meshes still point at material 0. Both FixHollowMatNaming and
+    GetUniqueMaterials index that list without checking, so the import throws
+    inside the library before anything reaches Blender. One neutral entry is
+    enough for both to run; the textures come from the TSTA registers, which
+    these models do have.
+    """
+    if model.mateList.Count:
+        return False
+
+    from AquaModelLibrary.Data.PSO2.Aqua import AquaObject
+    from AquaModelLibrary.Data.PSO2.Aqua.AquaObjectData.Intermediary import (
+        GenericMaterial,
+    )
+
+    # Let AML supply MATE defaults. GenerateMaterial also creates shaders,
+    # render state and textures, so run it on a scratch object and copy only
+    # the missing MATE. The source model's existing tables must survive.
+    generic = GenericMaterial()
+    generic.matName = name
+    generic.blendType = "opaque"
+    scratch = AquaObject()
+    scratch.GenerateMaterial(generic)
+    model.mateList.Add(scratch.mateList[0])
+
+    objc = model.objc
+    objc.mateCount = model.mateList.Count
+    model.objc = objc
+    return True
+
+
+def _fill_null_vertex_lists(model) -> int:
+    """Give a model's vertex buffers empty lists where they have none.
+
+    A .aqp old enough to predate NGS can leave a VTXL list field null rather
+    than empty - edgeVerts on the accessories seen so far. The library clones
+    the object before exporting it and its clone walks every list, so one null
+    throws ArgumentNullException and the import dies with nothing to show for
+    it. Filling them in costs nothing and leaves newer models untouched.
+    """
+    from System import Activator
+
+    filled = 0
+    for index in range(model.vtxlList.Count):
+        vtxl = model.vtxlList[index]
+        changed = False
+        for member in vtxl.GetType().GetFields():
+            if member.GetValue(vtxl) is not None:
+                continue
+            field_type = member.FieldType
+            if not field_type.IsGenericType:
+                continue
+            member.SetValue(vtxl, Activator.CreateInstance(field_type))
+            filled += 1
+            changed = True
+        if changed:
+            model.vtxlList[index] = vtxl
+    return filled
+
+
 def _import_aqp(
     operator: bpy.types.Operator,
     context: bpy.types.Context,
@@ -446,7 +509,20 @@ def _import_aqp(
     # AML handles the format threshold and returns unchanged for classic models.
     model.splitVSETPerMesh()
 
+    # FixHollowMatNaming names materials after the textures they use, and reads
+    # the MATE entry each mesh points at to do it. Models old enough to predate
+    # NGS can carry no MATE list at all while their meshes still hold a
+    # mateIndex of 0, and the library indexes that list without checking, so
+    # the call throws and takes the whole import with it. There is nothing to
+    # rename when the list is empty; the FBX exporter invents names from the
+    # texture registers either way.
+    if _add_missing_material(model, Path(aqp_name).stem):
+        debug_print("Synthesized a MATE entry for a model that shipped without one")
+
     model.FixHollowMatNaming()
+
+    if filled := _fill_null_vertex_lists(model):
+        debug_print(f"Filled {filled} null vertex list(s) on an old-format model")
 
     if _use_native_import():
         result, bone_axes = _convert_native(
@@ -642,6 +718,9 @@ def _attach_tsta_data(model, mesh_mat_mapping, materials: list) -> None:
     model travels through on export has nowhere to carry any of that. Keep
     the whole entry with the material so the exporter can write it back.
     """
+    from AquaModelLibrary.Data.PSO2.Aqua import AquaObject
+    from System import ArgumentOutOfRangeException
+
     for mesh_index in range(mesh_mat_mapping.Count):
         mat_index = mesh_mat_mapping[mesh_index]
         if mat_index < 0 or mat_index >= len(materials):
@@ -655,26 +734,29 @@ def _attach_tsta_data(model, mesh_mat_mapping, materials: list) -> None:
         if not 0 <= mesh.tsetIndex < model.tsetList.Count:
             continue
 
-        tset = model.tsetList[mesh.tsetIndex]
-        entries = []
-        for k in range(tset.tstaTexIDs.Count):
-            tsta_index = tset.tstaTexIDs[k]
-            if not 0 <= tsta_index < model.tstaList.Count:
-                continue
-            tsta = model.tstaList[tsta_index]
-            entries.append(
-                {
-                    "name": str(tsta.texName.GetString()),
-                    "tag": int(tsta.tag),
-                    "usage": int(tsta.texUsageOrder),
-                    "uv": int(tsta.modelUVSet),
-                    "i3": int(tsta.unkInt3),
-                    "i4": int(tsta.unkInt4),
-                    "i5": int(tsta.unkInt5),
-                }
-            )
-
-        materials[mat_index].tsta_data = entries
+        try:
+            textures = AquaObject.GetTexListTSTAs(model, mesh.tsetIndex)
+        except ArgumentOutOfRangeException:
+            # AML skips -1 but throws on other invalid IDs. Keep the old
+            # tolerant import behavior for damaged sets without editing the
+            # original table. Valid models always use AML's ordered lookup.
+            textures = [
+                model.tstaList[index]
+                for index in model.tsetList[mesh.tsetIndex].tstaTexIDs
+                if 0 <= index < model.tstaList.Count
+            ]
+        materials[mat_index].tsta_data = [
+            {
+                "name": str(tsta.texName.GetString()),
+                "tag": int(tsta.tag),
+                "usage": int(tsta.texUsageOrder),
+                "uv": int(tsta.modelUVSet),
+                "i3": int(tsta.unkInt3),
+                "i4": int(tsta.unkInt4),
+                "i5": int(tsta.unkInt5),
+            }
+            for tsta in textures
+        ]
 
 
 def _strip_zero_uv_layers(objects) -> int:
@@ -710,6 +792,8 @@ def _strip_zero_uv_layers(objects) -> int:
                 break
 
     return removed
+
+
 def _import_images_from_object(
     obj: objects.CmxObjectBase, data_path: Path, high_quality=False
 ):
@@ -804,6 +888,8 @@ _BONE_AXIS_DEFAULTS: FbxImportOptions = {
     "primary_bone_axis": "X",
     "secondary_bone_axis": "Y",
 }
+
+
 def _get_uv_map_2(obj: objects.CmxBodyObject):
     if obj.is_ngs:
         return None

@@ -44,8 +44,11 @@ def _host_platform_only():
 def build():
     OUTPUT_DIR.mkdir(exist_ok=True)
     with _host_platform_only():
-        blender_call(
+        result = blender_call(
             [
+                "--background",
+                "--factory-startup",
+                "--disable-autoexec",
                 "-c",
                 "extension",
                 "build",
@@ -56,6 +59,8 @@ def build():
                 "--split-platforms",
             ]
         )
+        if result:
+            raise RuntimeError(f"Blender extension build failed (exit {result})")
 
     return get_package_path()
 
