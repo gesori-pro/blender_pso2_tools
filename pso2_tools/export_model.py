@@ -652,13 +652,19 @@ def strip_padded_uvs(model) -> int:
     the FBX as real uv2-uv4 blocks full of zeros - a face grows by half
     its file size and carries a vertex layout the game never wrote.
     """
-    from AquaModelLibrary.Data.PSO2.Aqua.AquaObjectData import VTXE
+    from AquaModelLibrary.Data.PSO2.Aqua.AquaObjectData import VTXE, VertFlags
+
+    uv_channels = (
+        (int(VertFlags.VertUV2), "uv2List"),
+        (int(VertFlags.VertUV3), "uv3List"),
+        (int(VertFlags.VertUV4), "uv4List"),
+    )
 
     cleared = 0
     for index in range(model.vtxlList.Count):
         vtxl = model.vtxlList[index]
         removed = set()
-        for flag, attribute in ((0x11, "uv2List"), (0x12, "uv3List"), (0x13, "uv4List")):
+        for flag, attribute in uv_channels:
             uv_list = getattr(vtxl, attribute, None)
             if uv_list is None or not uv_list.Count:
                 continue

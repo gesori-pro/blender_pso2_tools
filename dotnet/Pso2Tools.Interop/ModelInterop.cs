@@ -130,15 +130,36 @@ public static class ModelInterop
 
     public static int GetMeshCount(AquaObject aqo) => aqo.meshList.Count;
 
-    public static MeshSet GetMesh(AquaObject aqo, int meshId)
+    public static int[] GetFaceGroupIds(AquaObject aqo, int meshId)
+    {
+        var groups = aqo.strips[aqo.meshList[meshId].psetIndex].faceGroups;
+        return groups.Count == 0 ? [0]
+            : Enumerable.Range(0, groups.Count).Where(i => groups[i] > 0).ToArray();
+    }
+
+    public static MeshSet GetMesh(AquaObject aqo, int meshId, int faceGroupId = 0)
     {
         var msh = aqo.meshList[meshId];
         var vtxl = aqo.vtxlList[msh.vsetIndex];
+        var strips = aqo.strips[msh.psetIndex];
+        var group = strips.faceGroups.Count > 0
+            ? strips.GetTrianglesFaceGroup(faceGroupId, true)
+            : new StripData.FaceGroupData { triangles = strips.GetTriangles(true) };
+        if (group.vertexMappingList != null)
+        {
+            // AML owns the face-group remapping and vertex channel layout.
+            // Copy only the group's vertices, without changing the source.
+            var subset = new VTXL();
+            foreach (int index in group.vertexMappingList)
+                VTXL.AppendVertex(vtxl, subset, index);
+            subset.bonePalette.AddRange(vtxl.bonePalette);
+            vtxl = subset;
+        }
         int count = vtxl.vertPositions.Count;
 
         var result = new MeshSet
         {
-            MeshName = aqo.GetMeshName(meshId, true),
+            MeshName = aqo.GetMeshName(meshId, true, faceGroupId),
             VertexCount = count,
             Positions = ToBytes(FlattenVector3(vtxl.vertPositions)),
         };
@@ -148,7 +169,7 @@ public static class ModelInterop
             result.Normals = ToBytes(FlattenVector3(vtxl.vertNormals));
         }
 
-        var triangles = aqo.strips[msh.psetIndex].GetTriangles(true);
+        var triangles = group.triangles;
         var tris = new int[triangles.Count * 3];
         for (int i = 0; i < triangles.Count; i++)
         {

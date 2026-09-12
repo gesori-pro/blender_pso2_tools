@@ -7,15 +7,32 @@
      MSBuild finds this file by walking up from every project, which is how it
      reaches into the submodule without touching it. -->
 <Project>
+  <Import Project="$(MSBuildThisFileDirectory)dotnet/AmlCompatibility.targets" />
+  <!-- FBX SDK 2020.3.10 removed the vs2017 directory level. -->
+  <ItemDefinitionGroup Condition="'$(MSBuildProjectName)' == 'AquaModelLibrary.Native'">
+    <Link>
+      <AdditionalLibraryDirectories>$(MSBuildProjectDirectory)/Dependencies/FBX/lib/x64/$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Link>
+  </ItemDefinitionGroup>
   <!-- SoulsFormats pins PlatformTarget to x64, and an x64-stamped assembly
        refuses to load into an Apple Silicon process. AnyCPU everywhere is
        right for every non-Windows host. -->
-  <PropertyGroup Condition="!$([MSBuild]::IsOSPlatform('Windows'))">
+  <PropertyGroup>
+    <Pso2UseNativeFbx Condition="'$(Pso2UseNativeFbx)' == ''">$([MSBuild]::IsOSPlatform('Windows'))</Pso2UseNativeFbx>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Pso2UseNativeFbx)' != 'true'">
     <PlatformTarget>AnyCPU</PlatformTarget>
   </PropertyGroup>
 
-  <ItemGroup Condition="!$([MSBuild]::IsOSPlatform('Windows')) And '$(MSBuildProjectName)' == 'AquaModelLibrary.Core'">
-    <ProjectReference Remove="$(MSBuildProjectDirectory)/../AquaModelLibrary.Native/AquaModelLibrary.Native.vcxproj" />
+  <ItemGroup Condition="'$(Pso2UseNativeFbx)' != 'true' And '$(MSBuildProjectName)' == 'AquaModelLibrary.Core'">
+    <ProjectReference Remove="@(ProjectReference->WithMetadataValue('Filename', 'AquaModelLibrary.Native'))" />
     <Compile Include="$(MSBuildThisFileDirectory)dotnet/FbxExporterCoreStub.cs" />
   </ItemGroup>
+  <!-- This legacy project only defines AnyCPU configuration groups.
+       A Windows x64 project build otherwise falls back to bin/Debug even
+       under Release, without enabling optimization. -->
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'NvTriStripDotNet'">
+    <OutputPath>bin/$(Configuration)/</OutputPath>
+    <Optimize Condition="'$(Configuration)' == 'Release'">true</Optimize>
+  </PropertyGroup>
 </Project>

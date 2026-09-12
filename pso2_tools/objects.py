@@ -173,18 +173,6 @@ def _color_id(value) -> ColorId:
         return ColorId.UNUSED
 
 
-def _mask_color_mapping(data):
-    """The maskColorMapping struct, if this Aqua library build has one.
-
-    Newer AquaModelLibrary builds group the colour indices into a
-    maskColorMapping struct. The AssimpNet-era build this add-on is pinned
-    to (PSO2-Aqua-Library @ bc9d632) still had them as loose unkInt fields.
-    Reading whichever is present keeps the add-on working against either,
-    rather than tying it to the DLLs that happen to be checked in.
-    """
-    return getattr(data, "maskColorMapping", None)
-
-
 @dataclass
 class CmxColorMapping(ColorMapping):
     def __conform__(self, protocol):
@@ -202,62 +190,34 @@ class CmxColorMapping(ColorMapping):
             alpha=ColorId(int(mapping.alphaIndex)),
         )
 
-    # The three below read either the maskColorMapping struct or the loose
-    # unkInt fields it replaced, so that the add-on runs against both the
-    # pinned AssimpNet-era Aqua library and newer builds (see
-    # _mask_color_mapping).
     @classmethod
     def from_bodypaint_obj(cls, obj: "BBLYObject"):
-        if (mapping := _mask_color_mapping(obj.bbly)) is not None:
-            return cls(
-                red=_color_id(mapping.redIndex),
-                green=_color_id(mapping.greenIndex),
-                blue=ColorId.UNUSED,
-                alpha=ColorId.UNUSED,
-            )
-
-        # TODO: unkInt0/1 are definitely used, but not sure about 2/3
+        mapping = obj.bbly.maskColorMapping
         return cls(
-            red=_color_id(obj.bbly.unkInt0),
-            green=_color_id(obj.bbly.unkInt1),
-            blue=_color_id(obj.bbly.unkInt2),
-            alpha=_color_id(obj.bbly.unkInt3),
+            red=_color_id(mapping.redIndex),
+            green=_color_id(mapping.greenIndex),
+            blue=ColorId.UNUSED,
+            alpha=ColorId.UNUSED,
         )
 
     @classmethod
     def from_ear_obj(cls, obj: "NGS_EarObject"):
-        if (mapping := _mask_color_mapping(obj.ngsEar)) is not None:
-            return cls(
-                red=_color_id(mapping.redIndex),
-                green=_color_id(mapping.greenIndex),
-                blue=_color_id(mapping.blueIndex),
-                alpha=_color_id(mapping.alphaIndex),
-            )
-
+        mapping = obj.ngsEar.maskColorMapping
         return cls(
-            red=_color_id(obj.ngsEar.unkInt1),
-            green=_color_id(obj.ngsEar.unkInt2),
-            blue=_color_id(obj.ngsEar.unkInt3),
-            alpha=_color_id(obj.ngsEar.unkInt4),
+            red=_color_id(mapping.redIndex),
+            green=_color_id(mapping.greenIndex),
+            blue=_color_id(mapping.blueIndex),
+            alpha=_color_id(mapping.alphaIndex),
         )
 
     @classmethod
     def from_hair_obj(cls, obj: "HAIRObject"):
-        if (mapping := _mask_color_mapping(obj.hair)) is not None:
-            return cls(
-                red=_color_id(mapping.redIndex),
-                green=_color_id(mapping.greenIndex),
-                blue=_color_id(mapping.blueIndex),
-                alpha=_color_id(mapping.alphaIndex),
-            )
-
-        red, green = split_int32(obj.hair.unkInt16)
-        blue, alpha = split_int32(obj.hair.unkInt17)
+        mapping = obj.hair.maskColorMapping
         return cls(
-            red=_color_id(red),
-            green=_color_id(green),
-            blue=_color_id(blue),
-            alpha=_color_id(alpha),
+            red=_color_id(mapping.redIndex),
+            green=_color_id(mapping.greenIndex),
+            blue=_color_id(mapping.blueIndex),
+            alpha=_color_id(mapping.alphaIndex),
         )
 
 
@@ -270,12 +230,6 @@ def get_classic_color_map(object_type: ObjectType) -> ColorMapping | None:
             return ColorMapping(blue=ColorId.OUTER1)
 
     return None
-
-
-def split_int32(value: int):
-    lo = value & 0x0000FFFF
-    hi = value >> 16
-    return lo, hi
 
 
 def convert_color_map(data: bytes):

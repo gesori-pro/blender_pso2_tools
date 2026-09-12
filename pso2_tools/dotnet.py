@@ -123,7 +123,11 @@ def set_assimp_probing_paths():
     from SharpAssimp.Unmanaged import AssimpLibrary
 
     if sys.platform == "win32":
-        AssimpLibrary.Instance.Resolver.SetProbingPaths64([_PROBING_PATH_X64])
+        # Older bundles used x64/; MSBuild publish resolves native assets
+        # into bin/ itself. Accept both layouts during the transition.
+        AssimpLibrary.Instance.Resolver.SetProbingPaths64(
+            [_PROBING_PATH_X64, str(BIN_PATH)]
+        )
     else:
         # dotnet publish drops libassimp for this machine into bin/ itself.
         AssimpLibrary.Instance.Resolver.SetProbingPaths64([str(BIN_PATH)])

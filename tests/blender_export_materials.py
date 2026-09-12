@@ -130,6 +130,33 @@ class MaterialExportTests(unittest.TestCase):
             model = read_model(self.export("old_behavior"))
         self.assertIn(("0398p", "0398"), shader_pairs(model))
 
+    def test_duplicated_legacy_mesh_names_export_separately(self):
+        obj = next(obj for obj in bpy.context.scene.objects if obj.type == "MESH")
+        duplicate = obj.copy()
+        duplicate.data = obj.data.copy()
+        bpy.context.collection.objects.link(duplicate)
+        duplicate.select_set(True)
+        before = (obj.name, duplicate.name, obj.data.name, duplicate.data.name)
+        result = read_model(self.export("legacy_duplicate"))
+        self.assertEqual(result.meshList.Count, 3)
+        self.assertEqual((obj.name, duplicate.name, obj.data.name, duplicate.data.name), before)
+
+    def test_sparse_face_groups_roundtrip(self):
+        meshes = [obj for obj in bpy.context.scene.objects if obj.type == "MESH"]
+        for obj, group in zip(meshes, (0, 2), strict=True):
+            obj.name = f"mesh[0]_0_0_0_0#0#3#{group}"
+            obj.data.name = obj.name + "_mesh"
+        meshes[1].data.materials[0] = meshes[0].data.materials[0]
+        first = self.export("face_groups")
+        model = read_model(first)
+        self.assertEqual(model.meshList.Count, 1)
+        self.assertEqual(list(model.strips[0].faceGroups), [3, 0, 3])
+        reloaded = self.reload(first)
+        self.assertEqual({obj.name.rsplit("#", 1)[1] for obj in reloaded}, {"0", "2"})
+        final = read_model(self.export("face_groups_again"))
+        self.assertEqual(final.meshList.Count, 1)
+        self.assertEqual(list(final.strips[0].faceGroups), [3, 0, 3])
+
     def test_import_rename_copy_and_roundtrip(self):
         source = self.export("source")
         baseline = read_model(source)
