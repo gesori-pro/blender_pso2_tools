@@ -130,6 +130,36 @@ class MaterialExportTests(unittest.TestCase):
             model = read_model(self.export("old_behavior"))
         self.assertIn(("0398p", "0398"), shader_pairs(model))
 
+    def test_texture_register_vectors_and_floats_survive_export(self):
+        from AquaModelLibrary.Data.PSO2.Aqua import AquaObject
+
+        for n, mat in enumerate(bpy.data.materials):
+            mat["pso2_tsta"] = json.dumps(
+                [
+                    {
+                        "name": "shared_d.dds",
+                        "tag": 150,
+                        "usage": 0,
+                        "uv": 0,
+                        "i3": 1,
+                        "i4": 3,
+                        "i5": 1,
+                        "vector": [0.125, n + 0.25, 1.0],
+                        "floats": [0.125, 0.25, 0.5, 1.0, 2.0],
+                    }
+                ]
+            )
+        model = read_model(self.export("registers"))
+        vectors = []
+        for mesh in model.meshList:
+            tex = next(iter(AquaObject.GetTexListTSTAs(model, mesh.tsetIndex)))
+            vectors.append((tex.unkVector0.X, tex.unkVector0.Y, tex.unkVector0.Z))
+            self.assertEqual(
+                [getattr(tex, f"unkFloat{i}") for i in range(5)],
+                [0.125, 0.25, 0.5, 1.0, 2.0],
+            )
+        self.assertEqual(sorted(vectors), [(0.125, 0.25, 1.0), (0.125, 1.25, 1.0)])
+
     def test_duplicated_legacy_mesh_names_export_separately(self):
         obj = next(obj for obj in bpy.context.scene.objects if obj.type == "MESH")
         duplicate = obj.copy()
@@ -139,7 +169,9 @@ class MaterialExportTests(unittest.TestCase):
         before = (obj.name, duplicate.name, obj.data.name, duplicate.data.name)
         result = read_model(self.export("legacy_duplicate"))
         self.assertEqual(result.meshList.Count, 3)
-        self.assertEqual((obj.name, duplicate.name, obj.data.name, duplicate.data.name), before)
+        self.assertEqual(
+            (obj.name, duplicate.name, obj.data.name, duplicate.data.name), before
+        )
 
     def test_sparse_face_groups_roundtrip(self):
         meshes = [obj for obj in bpy.context.scene.objects if obj.type == "MESH"]
