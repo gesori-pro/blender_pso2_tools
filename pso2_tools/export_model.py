@@ -87,6 +87,7 @@ def export(
     dotnet.set_assimp_probing_paths()
 
     options = options or {}
+    from . import stage_model
 
     # Fail before writing either AQP or AQN instead of silently letting AML
     # invent a shader for a material whose import metadata has been lost.
@@ -124,6 +125,13 @@ def export(
                 else []
             )
             with export_shape_keys.applied(context, meshes):
+                try:
+                    stage = stage_model.prepare(
+                        context, _get_export_meshes(context, options), options
+                    )
+                except ValueError as error:
+                    operator.report({"ERROR"}, str(error))
+                    return {"CANCELLED"}
                 result = fbx_wrapper.save(
                     operator, context, filepath=str(fbxfile), **fbx_options
                 )
@@ -169,6 +177,14 @@ def export(
             {"INFO"},
             f"Dropped {stripped} zero-filled UV blocks the FBX conversion padded in.",
         )
+
+    try:
+        if stage is not None and aqn.nodeList.Count != 1:
+            raise ValueError("Stage preservation requires a single root skeleton.")
+        model = stage_model.merge(model, stage)
+    except ValueError as error:
+        operator.report({"ERROR"}, str(error))
+        return {"CANCELLED"}
 
     if options.get("override_bounding_radius"):
         set_bounding_radius(model, options.get("bounding_radius", GAME_BOUNDING_RADIUS))
@@ -486,6 +502,8 @@ def restore_material_textures(model) -> tuple[int, set[str]]:
             entry.get("i3", 1),
             entry.get("i4", 1),
             entry.get("i5", 1),
+            tuple(entry.get("vector", ())),
+            tuple(entry.get("floats", ())),
         )
         if key in tsta_cache:
             return tsta_cache[key]
@@ -500,6 +518,12 @@ def restore_material_textures(model) -> tuple[int, set[str]]:
         tsta.unkInt3 = entry.get("i3", 1)
         tsta.unkInt4 = entry.get("i4", 1)
         tsta.unkInt5 = entry.get("i5", 1)
+        if "vector" in entry:
+            from System.Numerics import Vector3
+
+            tsta.unkVector0 = Vector3(*entry["vector"])
+        for i, value in enumerate(entry.get("floats", ())):
+            setattr(tsta, f"unkFloat{i}", value)
         new_tsta.append(tsta)
         tsta_cache[key] = len(new_tsta) - 1
         return tsta_cache[key]
@@ -527,7 +551,7 @@ def restore_material_textures(model) -> tuple[int, set[str]]:
             ids = CsList[Int32]()
             for entry in entries:
                 ids.Add(tsta_index(entry, template_index))
-            tset = old_tset  # value type copy
+            tset = old_tset.Clone()
             tset.tstaTexIDs = ids
             tset.texCount = ids.Count
             new_tset.append(tset)
@@ -566,9 +590,17 @@ def restore_material_textures(model) -> tuple[int, set[str]]:
                         "i3": int(old_tsta.unkInt3),
                         "i4": int(old_tsta.unkInt4),
                         "i5": int(old_tsta.unkInt5),
+                        "vector": [
+                            float(old_tsta.unkVector0.X),
+                            float(old_tsta.unkVector0.Y),
+                            float(old_tsta.unkVector0.Z),
+                        ],
+                        "floats": [
+                            float(getattr(old_tsta, f"unkFloat{i}")) for i in range(5)
+                        ],
                     }
                     ids.Add(tsta_index(entry, old_tsta_index))
-                tset = old_tset
+                tset = old_tset.Clone()
                 tset.tstaTexIDs = ids
                 tset.texCount = ids.Count
                 new_tset.append(tset)

@@ -590,6 +590,9 @@ def _import_aqp(
                 if source and source.tsta_data:
                     mat["pso2_tsta"] = json.dumps(source.tsta_data)
 
+    from . import stage_model
+
+    stage_model.remember(aqp_data, context.selected_objects)
     return {"FINISHED"}, materials
 
 
@@ -754,6 +757,12 @@ def _attach_tsta_data(model, mesh_mat_mapping, materials: list) -> None:
                 "i3": int(tsta.unkInt3),
                 "i4": int(tsta.unkInt4),
                 "i5": int(tsta.unkInt5),
+                "vector": [
+                    float(tsta.unkVector0.X),
+                    float(tsta.unkVector0.Y),
+                    float(tsta.unkVector0.Z),
+                ],
+                "floats": [float(getattr(tsta, f"unkFloat{i}")) for i in range(5)],
             }
             for tsta in textures
         ]
