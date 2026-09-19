@@ -71,7 +71,7 @@ class ShaderNodePso2NgsBase(group.ShaderNodeCustomGroup):
 
         tree.new_output(bpy.types.NodeSocketShader, "BSDF")
 
-        bsdf = tree.add_node(bpy.types.ShaderNodeBsdfPrincipled)
+        bsdf = tree.add_node(bpy.types.ShaderNodeBsdfPrincipled, name="Principled BSDF")
         tree.add_link(bsdf.outputs["BSDF"], group_outputs.inputs["BSDF"])
 
         # ========== Normal Map ==========
