@@ -2,8 +2,9 @@ from typing import cast
 
 import bpy
 
-from .. import classes
+from .. import classes, scene_props
 from . import builder, group
+from .game_lighting import Expr, ShaderNodePso2GameLight, ShaderNodePso2GameShadow, Val
 
 
 @classes.register
@@ -62,6 +63,10 @@ ALBEDO_SCALE = 0.61
 SKIN_SUBSURFACE = 0.153
 COSTUME_SUBSURFACE = 0.25
 
+# What skin's wrapped light is tinted by (u_ObjBlendColor4.rgb ^ 2.2 in the
+# captured frame): a deep red, entering the wrap at the soft amount squared.
+SKIN_SCATTER = (0.31557, 0.00017, 0.0)
+
 # The character creator's skin wetness: -35/127. Below zero dries the skin
 # towards fully rough, above zero makes it glossier and darker.
 SKIN_WET = -35 / 127
@@ -106,7 +111,9 @@ def _vector(
 
 
 class ShaderNodePso2NgsBase(group.ShaderNodeCustomGroup):
-    tree_version = 2
+    # 3: carries the game lighting beside the Principled BSDF
+    # 4: Receive Shadow
+    tree_version = 4
     subsurface_amount = COSTUME_SUBSURFACE
     subsurface_radius = (1.0, 1.0, 1.0)
 
@@ -122,6 +129,7 @@ class ShaderNodePso2NgsBase(group.ShaderNodeCustomGroup):
             bpy.types.NodeSocketFloat, "Subsurface"
         ).default_value = self.subsurface_amount
         self.input(bpy.types.NodeSocketFloat, "Emission Scale").default_value = 1
+        self.input(bpy.types.NodeSocketFloat, "Receive Shadow").default_value = 1
 
     def _new_inputs(self, tree: builder.NodeTreeBuilder) -> None:
         """Add a subclass's own inputs after the shared ones."""
@@ -154,6 +162,8 @@ class ShaderNodePso2NgsBase(group.ShaderNodeCustomGroup):
             bpy.types.NodeSocketFloat, "Subsurface"
         ).default_value = self.subsurface_amount
         tree.new_input(bpy.types.NodeSocketFloat, "Emission Scale").default_value = 1
+        # how much of the sun's shadow game shading lets fall on this
+        tree.new_input(bpy.types.NodeSocketFloat, "Receive Shadow").default_value = 1
         self._new_inputs(tree)
 
         tree.new_output(bpy.types.NodeSocketShader, "BSDF")
@@ -337,6 +347,76 @@ class ShaderNodePso2NgsBase(group.ShaderNodeCustomGroup):
 
         tree.add_link(alpha.outputs["Alpha"], bsdf.inputs["Alpha"])
 
+        # ========== Game lighting (EEVEE) ==========
+
+        # The same G-buffer, lit the way the game lights it rather than by
+        # the Principled BSDF; the scene's Game Shading picks between them.
+        e = Expr(tree, 34, 30)
+        view = e.v(e._node(bpy.types.ShaderNodeNewGeometry).outputs["Incoming"])
+        vertex_normal = e.v(e._node(bpy.types.ShaderNodeNewGeometry).outputs["Normal"])
+        soft = e.f(wrap.outputs["Value"])
+
+        # Soft silhouettes take light from behind: (1 - N.V)^3 on the
+        # softest parts of the normal map's alpha.
+        rim_mask = e.sat(e.madd(e.f(soft_alpha.outputs["Value"]), -2.0, 1.0))
+        facing = e.sub(1.0, e.dot(vertex_normal, view))
+        rim = e.min(e.mul(e.mul(e.mul(facing, facing), e.abs(facing)), rim_mask), 1.0)
+        rim = e.mul(rim, soft)
+
+        # The emission channel carries the glow, or else what the wrap is
+        # tinted by: the albedo on costumes, the skin's scatter colour.
+        glowing = e.sub(1.0, e.f(not_glowing.outputs["Value"]))
+        scatter = self._scatter_colour(e, e.v(albedo.outputs["Vector"]), albedo_factor)
+        scatter = e.mul(scatter, e.gt(soft, 1.0 / 255 - 1e-6))
+        scatter = e.lerp(scatter, e.v(emission.outputs["Vector"]), glowing)
+
+        game_diffuse = e.mul(e.v(albedo.outputs["Vector"]), e.f(unlit.outputs["Value"]))
+        if albedo_factor is not None:
+            game_diffuse = e.mul(game_diffuse, e.f(albedo_factor))
+
+        shadow = e._node(ShaderNodePso2GameShadow)
+        light = e._node(ShaderNodePso2GameLight)
+        for name, value in (
+            ("Albedo", game_diffuse),
+            ("Soft", soft),
+            ("Metal Root", e.f(multi_rgb.outputs["Red"])),
+            ("Roughness", e.f(green)),
+            ("AO", e.f(multi_rgb.outputs["Blue"])),
+            ("Scatter", scatter),
+            ("Rim", rim),
+            ("Normal", e.v(normal_map.outputs[0])),
+        ):
+            tree.add_link(value.socket, light.inputs[name])
+        light.inputs["Skin"].default_value = self.game_skin  # type: ignore
+        received = e.lerp(
+            1.0,
+            e.f(shadow.outputs["Shadow"]),
+            e.f(group_inputs.outputs["Receive Shadow"]),
+        )
+        tree.add_link(received.socket, light.inputs["Shadow"])
+
+        lit = e._node(bpy.types.ShaderNodeEmission, name="Game Light")
+        tree.add_link(light.outputs["Color"], lit.inputs["Color"])
+        clear = e._node(bpy.types.ShaderNodeBsdfTransparent)
+        cutout = e._node(bpy.types.ShaderNodeMixShader, name="Game Alpha")
+        tree.add_link(alpha.outputs["Alpha"], cutout.inputs["Fac"])
+        tree.add_link(clear.outputs["BSDF"], cutout.inputs[1])
+        tree.add_link(lit.outputs["Emission"], cutout.inputs[2])
+
+        choose = e._node(bpy.types.ShaderNodeMixShader, name="Game Shading")
+        tree.add_link(
+            e.attribute(scene_props.GAME_SHADING).socket, choose.inputs["Fac"]
+        )
+        tree.add_link(bsdf.outputs["BSDF"], choose.inputs[1])
+        tree.add_link(cutout.outputs["Shader"], choose.inputs[2])
+        tree.add_link(choose.outputs["Shader"], group_outputs.inputs["BSDF"])
+
+    game_skin = 0.0
+
+    def _scatter_colour(self, e: Expr, albedo: Val, albedo_factor) -> Val:
+        """What the wrapped light is tinted by: a costume's own colour."""
+        return albedo
+
 
 @classes.register
 class ShaderNodePso2Ngs(ShaderNodePso2NgsBase):
@@ -364,6 +444,14 @@ class ShaderNodePso2NgsSkin(ShaderNodePso2NgsBase):
 
         self.input(bpy.types.NodeSocketFloat, "Skin Wet").default_value = SKIN_WET
         self.input(bpy.types.NodeSocketFloat, "Wet Mask").default_value = 0
+
+    game_skin = 1.0
+
+    def _scatter_colour(self, e, albedo, albedo_factor):
+        colour = e.const(SKIN_SCATTER)
+        return (
+            e.mul(colour, e.f(albedo_factor)) if albedo_factor is not None else colour
+        )
 
     def _new_inputs(self, tree):
         tree.new_input(bpy.types.NodeSocketFloat, "Skin Wet").default_value = SKIN_WET

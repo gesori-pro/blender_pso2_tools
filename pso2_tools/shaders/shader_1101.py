@@ -27,6 +27,10 @@ class Shader1101(builder.ShaderBuilder):
 
         if is_face:
             shader_group = tree.add_node(ShaderNodePso2NgsSkin, (18, 6))
+            # In the character creator the face takes no shadow: the game's
+            # shadow mask is lit all over it, while the neck, the ears (parts
+            # of their own) and the hair behind it are shadowed.
+            shader_group.inputs["Receive Shadow"].default_value = 0  # type: ignore
         else:
             shader_group = tree.add_node(ShaderNodePso2Ngs, (18, 6))
 
