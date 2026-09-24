@@ -118,6 +118,14 @@ def _get_builder(data: types.ShaderData) -> type[builder.ShaderBuilder] | None:
             # NGS skin with decal
             return shader_1117.Shader1117
 
+        case 1125:
+            # NGS eyelash shadow: a black band with a soft alpha, cut from
+            # the face's own texture set and laid under the upper lid. The
+            # default builder's colour mix paints skin over the black, which
+            # puts a brown film over the eyes; the face's multiply keeps it
+            # a shadow.
+            return shader_1101.Shader1101
+
         # case 1119:
         #     # NGS unknown (feathers?)
         #     return shader_1119.Shader1119
