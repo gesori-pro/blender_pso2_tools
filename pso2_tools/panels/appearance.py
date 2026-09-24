@@ -39,6 +39,17 @@ class PSO2AppearancePanel(bpy.types.Panel):
             for channel in colors.COLOR_CHANNELS.values():
                 grid.prop(context.scene, channel.custom_property_name)
 
+        header, body = layout.panel(
+            "PSO2_appearance_game_lighting", default_closed=True
+        )
+        header.label(text="Game Lighting", icon="LIGHT_SUN")
+        if body:
+            body.prop(context.scene, scene_props.GAME_SHADING)
+            body.prop(context.scene, scene_props.EXPOSURE)
+            body.prop(context.scene, scene_props.HEADLIGHT)
+            body.prop(context.scene, scene_props.ENVIRONMENT_COLOR)
+            body.operator("pso2.setup_game_lighting", icon="WORLD")
+
         # Everything above is applied at draw time, so a model taken out of
         # Blender loses it. Baking is where that gets frozen into textures.
         header, body = layout.panel("PSO2_appearance_bake", default_closed=True)
