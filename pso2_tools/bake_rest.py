@@ -27,7 +27,7 @@ from collections.abc import Iterable
 import bpy
 from mathutils import Matrix, Quaternion, Vector
 
-from . import classes, import_aqm, import_fnp, shape_sliders
+from . import classes, game_normals, import_aqm, import_fnp, shape_sliders
 from .util import OperatorResult
 
 # Where the body shape currently lives.
@@ -314,6 +314,10 @@ def _freeze_deformation(
         if modifier.type == "ARMATURE" and modifier.object is armature
     )
 
+    # Applying the armature turns custom normals Blender's way, with the
+    # faces; a mesh drawn with the game's normals keeps those instead.
+    turned = game_normals.evaluated_normals(mesh, context.evaluated_depsgraph_get())
+
     context.view_layer.objects.active = mesh
     copied = mesh.modifiers.new(name="pso2_freeze", type="ARMATURE")
     copied.object = armature  # type: ignore
@@ -321,13 +325,18 @@ def _freeze_deformation(
 
     # Apply it where the original sits, so it sees the same input. A single
     # move call, never a loop: if it cannot move, applying it at the end of
-    # the stack is still correct for the usual single-modifier mesh.
+    # the stack is still correct for the usual single-modifier mesh. The
+    # game normals' probes only add vertices after the mesh's own, so in
+    # front of them the input is the same, and Blender applies it as first.
+    index = list(mesh.modifiers).index(source)
+    if index and game_normals.is_probes(mesh.modifiers[index - 1]):
+        index -= 1
     with contextlib.suppress(RuntimeError, ValueError):
-        bpy.ops.object.modifier_move_to_index(
-            modifier=copied.name, index=list(mesh.modifiers).index(source)
-        )
+        bpy.ops.object.modifier_move_to_index(modifier=copied.name, index=index)
 
     bpy.ops.object.modifier_apply(modifier=copied.name)
+    if turned is not None:
+        mesh.data.normals_split_custom_set(turned)  # type: ignore
 
 
 def pose_is_modified(

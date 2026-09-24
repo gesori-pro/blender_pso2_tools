@@ -31,6 +31,7 @@ from . import (
     charfile,
     classes,
     face_shape,
+    game_normals,
     ice,
     import_fnp,
     import_model,
@@ -775,6 +776,14 @@ class PSO2_OT_ImportCharacter(  # type: ignore https://github.com/nutti/fake-bpy
         ],
         default=face_shape.DEFAULT_EXPRESSION,
     )
+    game_normals: bpy.props.BoolProperty(
+        name="Game Normals",
+        description=(
+            "Turn the normals with the bones the way the game does, so the"
+            " face's neck meets the body without a band (Blender 4.5 or later)"
+        ),
+        default=True,
+    )
 
     def draw(self, context):
         assert self.layout is not None
@@ -782,6 +791,9 @@ class PSO2_OT_ImportCharacter(  # type: ignore https://github.com/nutti/fake-bpy
         self.layout.prop(self, "import_proportions")
         self.layout.prop(self, "include_body")
         self.layout.prop(self, "expression")
+        row = self.layout.row()
+        row.enabled = game_normals.supported()
+        row.prop(self, "game_normals")
 
     def execute(self, context) -> OperatorResult:
         path = Path(self.filepath)  # type: ignore
@@ -793,6 +805,7 @@ class PSO2_OT_ImportCharacter(  # type: ignore https://github.com/nutti/fake-bpy
             return {"CANCELLED"}
 
         data_path = get_preferences(context).get_pso2_data_path()
+        existing = {obj.as_pointer() for obj in bpy.data.objects}
 
         # Colours first: a material bakes the scene colour it sees when it is
         # built, so they have to be in place before anything imports.
@@ -930,6 +943,12 @@ class PSO2_OT_ImportCharacter(  # type: ignore https://github.com/nutti/fake-bpy
         if self.import_proportions:
             self._apply_proportions(context, char)
             self._apply_face_shape(context, char, self.expression)
+
+        if self.game_normals:
+            added = game_normals.add_to(
+                obj for obj in bpy.data.objects if obj.as_pointer() not in existing
+            )
+            debug_print(f"Game normals on {added} meshes")
 
         if missing:
             shown = ", ".join(missing[:6])
