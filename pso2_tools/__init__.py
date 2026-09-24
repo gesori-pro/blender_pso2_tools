@@ -86,9 +86,10 @@ def menu_func_import(self: bpy.types.Operator, context: bpy.types.Context):
         # every body type: (male/female) x (human/newman/cast/deuman)
         text="PSO2 Character (.fnp/.mhp/...)",
     )
-    # The full-character import stays off this menu until its face import
-    # holds up. The operator stays registered, so F3 search still finds
-    # "Import Character (.fnp)".
+    self.layout.operator(
+        import_character.PSO2_OT_ImportCharacter.bl_idname,
+        text="PSO2 Character - Full, with face (.fnp)",
+    )
     # Shape adjusts are reached from Scene > PSO2 Appearance > Shape Adjust,
     # where the sliders and the rest-pose bake live. The operator stays
     # registered, so F3 search still finds "Import Shape Adjust".
