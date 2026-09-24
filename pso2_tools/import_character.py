@@ -42,6 +42,7 @@ from . import (
 from .colors import ColorId
 from .debug import debug_print
 from .preferences import get_preferences
+from .shaders import shader_1104, shader_1105
 from .shaders.colorize import ShaderNodePso2SrgbDecode, ShaderNodePso2SrgbEncode
 from .util import OperatorResult
 
@@ -66,7 +67,7 @@ _HEAD_PARTS = (
 # to paint, and a fragment to skip. The eyelash shadow material carries the
 # skin texture, not the eyelash one, so it is left alone.
 _FACE_TEXTURE_PARTS = (
-    ("eyePart", "get_eyes", ("eye_l", "eye_r"), None),
+    ("eyePart", "get_eyes", ("eye_l", "eye_r", "tear_l", "tear_r"), None),
     ("eyebrowPart", "get_eyebrows", ("eyebrow",), None),
     ("eyelashPart", "get_eyelashes", ("eyelash",), "shadow"),
 )
@@ -78,6 +79,8 @@ _TEXTURE_NODES = {
     "m": "Color Mask",
     "s": "Multi Map",
     "n": "Normal Map",
+    # the eye part's matcap, which the tears over the eyes read
+    "v": shader_1105.ENV_MAP,
 }
 
 # Face paints: part-id field -> its opacity slider. The game layers the
@@ -178,11 +181,12 @@ def _load_part_images(
             suffix = entry.name.rsplit("_", 1)[-1].split(".")[0].lower()
             image = bpy.data.images.load(str(out), check_existing=True)
             image.pack()  # the temp file is about to be removed
-            # Only the diffuse is colour. The mask, multi and normal maps
-            # are data, and read through the sRGB curve a mask at half
-            # strength paints the iris at a fifth - which is what left the
-            # eyes near black.
-            image.colorspace_settings.name = "sRGB" if suffix == "d" else "Non-Color"
+            # Only the diffuse and the eye's matcap are colour (the game
+            # reads both as sRGB). The mask, multi and normal maps are data,
+            # and read through the sRGB curve a mask at half strength paints
+            # the iris at a fifth - which is what left the eyes near black.
+            colour = suffix in ("d", "v")
+            image.colorspace_settings.name = "sRGB" if colour else "Non-Color"
             images[suffix] = image
 
     return images
@@ -243,11 +247,13 @@ def _iris_uv_scale(value: int) -> float:
 
 
 def _eye_materials() -> list[bpy.types.Material]:
-    """The face's two eye materials, which the eye part's textures went on."""
+    """The face's two eye materials, which the eye part's textures went on,
+    and the tears over them, whose matcap the game scales with the iris."""
     return [
         m
         for m in bpy.data.materials
-        if m.use_nodes and ("eye_l" in m.name or "eye_r" in m.name)
+        if m.use_nodes
+        and any(side in m.name for side in ("eye_l", "eye_r", "tear_l", "tear_r"))
     ]
 
 
@@ -258,14 +264,14 @@ def _scale_iris(material: bpy.types.Material, scale: float) -> bool:
     if not textures:
         return False
 
-    mapping = tree.nodes.get("Iris Size")
+    mapping = tree.nodes.get(shader_1104.IRIS_SIZE)
     if mapping is None:
         uv_node = tree.nodes.new("ShaderNodeUVMap")
-        uv_node.name = uv_node.label = "Iris Size UV"
+        uv_node.name = uv_node.label = shader_1104.IRIS_SIZE_UV
         uv_node.location = (min(t.location.x for t in textures) - 700, 0)
 
         mapping = tree.nodes.new("ShaderNodeMapping")
-        mapping.name = mapping.label = "Iris Size"
+        mapping.name = mapping.label = shader_1104.IRIS_SIZE
         mapping.location = (uv_node.location.x + 250, 0)
         tree.links.new(uv_node.outputs["UV"], mapping.inputs["Vector"])
 

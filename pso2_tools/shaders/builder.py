@@ -42,6 +42,9 @@ class ShaderBuilder:
     material: bpy.types.Material
     data: types.ShaderData
 
+    # EEVEE's render method when a shader needs one other than the default
+    render_method: str | None = None
+
     def __init__(self, material: bpy.types.Material, data: types.ShaderData):
         self.material = material
         self.data = data

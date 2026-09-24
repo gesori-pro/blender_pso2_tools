@@ -11,7 +11,8 @@ creator lights it, instead of by a Principled BSDF:
   behind; skin (model 4) sees the sun with its vertical component cut to a
   quarter. Specular is GGX with the game's own geometry term. Characters also
   get a colourless fill from the opposite side, and a floor on the sun's
-  colour so they never go dark.
+  colour so they never go dark. A screen-space ambient occlusion darkens the
+  sun, the fill and the ambient. Eyes are model 0 too, fully rough.
 - model 1 (hair): a strand model on the hair's tangent, with a normal built
   from the view, two specular lobes and an ambient from both sides.
 - the character creator also hangs a point light on the camera, which only
@@ -245,6 +246,13 @@ def scene_light(e: Expr):
 # cut off from 95 to 100 metres away, which no shot of a character reaches.)
 HEADLIGHT_ATTENUATION = 0.24
 
+# The game darkens costume and skin by a screen-space ambient occlusion, a
+# wide, soft one, on top of the material's own. EEVEE's is sharper; at
+# 0.4 m and 0.38 of its strength it darkens the creator's face and eyes as
+# much on average (0.93).
+SCREEN_AO_DISTANCE = 0.4
+SCREEN_AO_STRENGTH = 0.38
+
 
 def headlight(e: Expr) -> Val:
     """The strength of the light on the camera where this point is. The
@@ -299,6 +307,9 @@ class ShaderNodePso2GameLight(group.ShaderNodeCustomGroup):
     bl_label = "PSO2 Game Light"
     bl_icon = "NONE"
 
+    # 2: the screen-space ambient occlusion
+    tree_version = 2
+
     def init(self, context):
         super().init(context)
         self.input(bpy.types.NodeSocketFloat, "AO").default_value = 1
@@ -329,6 +340,14 @@ class ShaderNodePso2GameLight(group.ShaderNodeCustomGroup):
         metal_root = e.f(gi.outputs["Metal Root"])
         rough = e.f(gi.outputs["Roughness"])
         occlusion = e.f(gi.outputs["AO"])
+        screen_ao = e._node(bpy.types.ShaderNodeAmbientOcclusion)
+        screen_ao.inputs["Distance"].default_value = SCREEN_AO_DISTANCE  # type: ignore
+        screen = e.madd(
+            e.f(screen_ao.outputs["AO"]), SCREEN_AO_STRENGTH, 1 - SCREEN_AO_STRENGTH
+        )
+        # the sun, the ambient and the fill see both; the headlight only
+        # the material's
+        occluded = e.mul(occlusion, screen)
         scatter = e.v(gi.outputs["Scatter"])
         rim = e.f(gi.outputs["Rim"])
         n = e.normalize(e.v(gi.outputs["Normal"]))
@@ -376,7 +395,7 @@ class ShaderNodePso2GameLight(group.ShaderNodeCustomGroup):
         # sun
         ndl = e.dot(n, light)
         ndl_s = e.sat(ndl)
-        lambert = e.mul(e.mul(occlusion, shadow), ndl_s)
+        lambert = e.mul(e.mul(occluded, shadow), ndl_s)
         wrap = e.mul(e.max(e.div(e.mul(e.add(ndl, 2.0), a), 3.0), 0.0), shadow)
         back = e.mul(e.mul(e.madd(ndl, -0.5, 0.5), rim), shadow)
         direct = e.add(e.mul(tint_a, wrap), e.splat(e.mul(lambert, e.sub(1.0, a))))
@@ -388,7 +407,7 @@ class ShaderNodePso2GameLight(group.ShaderNodeCustomGroup):
         up = e.sat(e.madd(nz, 0.5, 0.5))
         irradiance = e.add(environment(e, n), e.mul(env_color, up))
         indirect = e.lerp(albedo, scatter, e.mul(a, 0.5))
-        indirect = e.mul(e.mul(indirect, irradiance), occlusion)
+        indirect = e.mul(e.mul(indirect, irradiance), occluded)
 
         diffuse = e.add(e.mul(direct, 1.0 / math.pi), indirect)
         spec = e.mul(e.mul(specular(light, ndl_s), color), shadow)
@@ -401,7 +420,7 @@ class ShaderNodePso2GameLight(group.ShaderNodeCustomGroup):
         wrap2 = e.max(e.div(e.mul(e.add(ndl2, 2.0), a), 3.0), 0.0)
         fill_diffuse = e.add(
             e.mul(tint_a, wrap2),
-            e.splat(e.mul(e.mul(ndl2_s, occlusion), e.sub(1.0, a))),
+            e.splat(e.mul(e.mul(ndl2_s, occluded), e.sub(1.0, a))),
         )
         fill_diffuse = e.mul(
             e.mul(fill_diffuse, diffuse_color), e.mul(fill, e.sub(1.0, metal))
