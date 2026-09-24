@@ -1507,15 +1507,34 @@ def _parse_face_variation_lua(script_file: datafile.DataFile) -> dict[str, int]:
     return {str(entry.Value): int(entry.Key) for entry in entries}
 
 
-# bin path -> {face paint id: (u, v from the top, width, height)}. Read once
-# per path: pulling the CMX apart takes a second or two.
-_FACEPAINT_PLACEMENT: dict[str, dict[int, tuple[float, float, float, float]]] = {}
+@dataclass
+class FacePaintCmx:
+    """What the CMX says about face paints beyond their files."""
+
+    # face paint id -> (u, v from the top, width, height) on the face texture
+    placement: dict[int, tuple[float, float, float, float]] = field(
+        default_factory=dict
+    )
+    # face paint id -> the colours its mask's red and green paint with
+    colors: dict[int, tuple[ColorId, ColorId]] = field(default_factory=dict)
+    # hair id -> the face paint the hairstyle lays over the scalp
+    scalp: dict[int, int] = field(default_factory=dict)
 
 
-def get_facepaint_placement(
-    bin_path: Path,
-) -> dict[int, tuple[float, float, float, float]]:
-    """Where each face paint's texture belongs on the face texture.
+# bin path -> what its CMX says. Read once per path: pulling the CMX apart
+# takes a second or two.
+_FACEPAINT_CMX: dict[str, FacePaintCmx] = {}
+
+
+def _color_id(value: int) -> ColorId:
+    try:
+        return ColorId(value)
+    except ValueError:
+        return ColorId.UNUSED
+
+
+def get_facepaint_cmx(bin_path: Path) -> FacePaintCmx:
+    """Where each face paint goes, what colours it, and which hairs use one.
 
     A paint is not a whole face texture, it is a small tile, and the CMX
     says which rectangle of the face it covers - four floats the library
@@ -1524,14 +1543,20 @@ def get_facepaint_placement(
     paints. Without it a tile can only be guessed at the texture's top
     left, which drops a lipstick off the side of the face.
 
+    The two ints before the rectangle are the colour channels the paint's
+    mask tints with, zero for a paint drawn in its own colours. Hairstyles
+    use that: each NGS hair names a face paint (unkInt1) that the game lays
+    over the head in the hair's own colours, so skin never shows through
+    the parting. Its rectangle is the whole face.
+
     Empty if the install's CMX cannot be read; the caller falls back to
-    that guess, which is right for the full-width paints.
+    guessing placement, which is right for the full-width paints.
     """
     key = str(bin_path)
-    if key in _FACEPAINT_PLACEMENT:
-        return _FACEPAINT_PLACEMENT[key]
+    if key in _FACEPAINT_CMX:
+        return _FACEPAINT_CMX[key]
 
-    placement: dict[int, tuple[float, float, float, float]] = {}
+    info = FacePaintCmx()
     try:
         from AquaModelLibrary.Data.Utility import ReferenceGenerator
 
@@ -1543,13 +1568,29 @@ def get_facepaint_placement(
                 for value in (fcp.unkInt2, fcp.unkInt3, fcp.unkInt4, fcp.unkInt5)
             )
             if rect[2] > 0.0 and rect[3] > 0.0:
-                placement[int(item_id)] = rect  # type: ignore[assignment]
+                info.placement[int(item_id)] = rect  # type: ignore[assignment]
+            if fcp.unkInt0 > 0 or fcp.unkInt1 > 0:
+                info.colors[int(item_id)] = (
+                    _color_id(fcp.unkInt0),
+                    _color_id(fcp.unkInt1),
+                )
+        for item_id in cmx.hairDict.Keys:
+            paint = int(cmx.hairDict[item_id].hair.unkInt1)
+            if paint > 0 and cmx.fcpDict.ContainsKey(paint):
+                info.scalp[int(item_id)] = paint
     except Exception as ex:
         # Any reader failure just means falling back to the guess.
-        debug_print("Could not read face paint placement:", ex)
+        debug_print("Could not read face paint data:", ex)
 
-    _FACEPAINT_PLACEMENT[key] = placement
-    return placement
+    _FACEPAINT_CMX[key] = info
+    return info
+
+
+def get_facepaint_placement(
+    bin_path: Path,
+) -> dict[int, tuple[float, float, float, float]]:
+    """Where each face paint's texture belongs on the face texture."""
+    return get_facepaint_cmx(bin_path).placement
 
 
 def _get_ccl(bin_path: Path) -> ccl.Pso2Ccl:
