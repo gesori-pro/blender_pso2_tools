@@ -9,12 +9,21 @@ class ShaderNodeCustomGroup(bpy.types.ShaderNodeCustomGroup):
     # Set to True to not share node tree between instances
     has_attributes: ClassVar[bool] = False
 
+    # Bump when a group's sockets or maths change. The shared tree is found by
+    # name, so without this a file that already holds the older tree would
+    # hand it to every new node - one missing the sockets the builders link.
+    tree_version: ClassVar[int] = 0
+
     @property
     def group_name(self):
-        if self.has_attributes:
-            return "." + self.bl_label + "." + self.name
+        name = self.bl_label
+        if self.tree_version:
+            name = f"{name} v{self.tree_version}"
 
-        return self.bl_label
+        if self.has_attributes:
+            return "." + name + "." + self.name
+
+        return name
 
     def init(self, context):
         if not self.has_attributes and (
