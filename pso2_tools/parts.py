@@ -41,21 +41,30 @@ MESH_ID_NAMES = {
 }
 
 
-MESH_ID_RE = re.compile(r"mesh\[\d+\]_.*#.*#(\d+)$")
-MESH_ID_SUB_RE = re.compile(r"(?<=#)\d+(?=(?:\.\d+)?$)")
+# The Aqua library names each mesh "mesh[i]_mate_rend_shad_tset" followed by
+# "#baseMeshNodeId#baseMeshDummyId", and since it learned face groups, by
+# "#faceGroupId" too. The mesh id is the dummy id, the second number, not
+# the last one: reading the last would take every mesh's face group (0).
+MESH_ID_RE = re.compile(r"^(mesh\[\d+\]_[^#]*#-?\d+#)(-?\d+)((?:#-?\d+)?)$")
 
 
 def get_mesh_id(name: str) -> MeshId | None:
-    if m := MESH_ID_RE.search(util.remove_blender_suffix(name)):
-        return MeshId(int(m.group(1)))
+    if m := MESH_ID_RE.match(util.remove_blender_suffix(name)):
+        try:
+            return MeshId(int(m.group(2)))
+        except ValueError:
+            return None
 
     return None
 
 
 def set_mesh_id(obj: bpy.types.Object, mesh_id: MeshId):
-    new_obj_name = MESH_ID_SUB_RE.sub(str(mesh_id), obj.name)
-    new_mesh_name = MESH_ID_SUB_RE.sub(f"{mesh_id}_mesh", obj.name)
+    name = util.remove_blender_suffix(obj.name)
+    m = MESH_ID_RE.match(name)
+    if not m:
+        return
 
-    obj.name = new_obj_name
+    suffix = obj.name[len(name) :]
+    obj.name = f"{m.group(1)}{int(mesh_id)}{m.group(3)}{suffix}"
     if obj.data:
-        obj.data.name = new_mesh_name
+        obj.data.name = f"{m.group(1)}{int(mesh_id)}{m.group(3)}_mesh{suffix}"
