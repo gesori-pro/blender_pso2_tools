@@ -177,6 +177,11 @@ def _load_part_images(
             suffix = entry.name.rsplit("_", 1)[-1].split(".")[0].lower()
             image = bpy.data.images.load(str(out), check_existing=True)
             image.pack()  # the temp file is about to be removed
+            # Only the diffuse is colour. The mask, multi and normal maps
+            # are data, and read through the sRGB curve a mask at half
+            # strength paints the iris at a fifth - which is what left the
+            # eyes near black.
+            image.colorspace_settings.name = "sRGB" if suffix == "d" else "Non-Color"
             images[suffix] = image
 
     return images
@@ -288,6 +293,25 @@ def _weight_deficit(obj: bpy.types.Object) -> list[float]:
     return [max(0.0, 1.0 - sum(g.weight for g in v.groups)) for v in obj.data.vertices]
 
 
+def _root_share(obj: bpy.types.Object, root_name: str | None) -> list[float]:
+    """Each vertex's weight that belongs to the part's root node.
+
+    The FBX import dropped it, leaving a deficit; the native import keeps it
+    on a bone of its own named after the part. Both mean the same thing.
+    """
+    root = obj.vertex_groups.get(root_name) if root_name else None
+    shares = []
+    for vertex in obj.data.vertices:
+        total = 0.0
+        on_root = 0.0
+        for g in vertex.groups:
+            total += g.weight
+            if root is not None and g.group == root.index:
+                on_root += g.weight
+        shares.append(max(0.0, 1.0 - total) + on_root)
+    return shares
+
+
 # A mesh either rides the root node for a real share of its skin or not at
 # all. Below this, the gap is the rounding a handful of vertices pick up
 # from influences the import dropped for other reasons, and moving it onto
@@ -370,15 +394,38 @@ def _restore_root_node_weights(context) -> int:
         if armature == body:
             continue
 
+        # The native import keeps the root node as a parentless bone named
+        # after the part, and the weights arrive on it intact - but nothing
+        # poses that bone, so they ride it as rigidly as they rode the
+        # armature when the FBX import dropped them. Either way they belong
+        # to the body bone the root rests on. Only the bone named after the
+        # part is that node: under the FBX import the top bone is the part's
+        # own head, whose weights must stay where they are.
+        root = next(
+            (
+                b
+                for b in armature.data.bones
+                if b.parent is None
+                and b.name.split("#")[0] == armature.name.split("#")[0]
+            ),
+            None,
+        )
+        root_name = root.name if root is not None else None
+        anchor = (
+            armature.matrix_world @ root.head_local
+            if root is not None
+            else armature.matrix_world.translation
+        )
+
         needy = []
         for mesh in meshes:
-            deficit = _weight_deficit(mesh)
-            if deficit and sum(deficit) / len(deficit) >= _ROOT_WEIGHT_FLOOR:
-                needy.append((mesh, deficit))
+            share = _root_share(mesh, root_name)
+            if share and sum(share) / len(share) >= _ROOT_WEIGHT_FLOOR:
+                needy.append((mesh, share))
         if not needy:
             continue
 
-        bone = _bone_at(body, armature.matrix_world.translation, _ROOT_BONE_TOLERANCE)
+        bone = _bone_at(body, anchor, _ROOT_BONE_TOLERANCE)
         if bone is None:
             debug_print(
                 f"No body bone under {armature.name}; left its root weights off"
@@ -390,11 +437,14 @@ def _restore_root_node_weights(context) -> int:
             armature.matrix_world.inverted() @ body.matrix_world @ bone.matrix_local
         )
         _add_proxy_bone(armature, name, matrix, bone.length)
-        for mesh, deficit in needy:
+        for mesh, share in needy:
             group = mesh.vertex_groups.get(name) or mesh.vertex_groups.new(name=name)
-            for index, weight in enumerate(deficit):
+            root_group = mesh.vertex_groups.get(root_name) if root_name else None
+            for index, weight in enumerate(share):
                 if weight > 1e-4:
                     group.add([index], weight, "REPLACE")
+                    if root_group is not None:
+                        root_group.remove([index])
                     restored += 1
 
     return restored
@@ -912,7 +962,33 @@ class PSO2_OT_ImportCharacter(  # type: ignore https://github.com/nutti/fake-bpy
                 moved += 1
 
         debug_print(f"Attached {moved} head parts to {head.name}")
+        self._follow_body_proxies(context, body, parts)
         self._follow_face_bones(context, parts)
+
+    def _follow_body_proxies(self, context, body, parts_armatures) -> None:
+        """Put each part's stand-in body bones exactly where the body's are.
+
+        The proxy bones _restore_root_node_weights adds carry the body bone's
+        name, so the proportion pass scales them like the body's - but they
+        hang in the part's armature, which is placed by the head. The neck
+        sliders also move the neck against the head (a shorter neck puts it
+        higher), so a proxy left at its rest offset sits below the real neck
+        and the skirt riding it hangs low and long. The game skins those
+        vertices to the body's own bone; copying its posed matrix does the
+        same here.
+        """
+        for obj in parts_armatures:
+            for pose_bone in obj.pose.bones:
+                if pose_bone.parent is not None:
+                    continue
+                source = body.pose.bones.get(pose_bone.name)
+                if source is None:
+                    continue
+                # Refresh before each write, as with _follow_face_bones.
+                context.view_layer.update()
+                pose_bone.matrix = (
+                    obj.matrix_world.inverted() @ body.matrix_world @ source.matrix
+                )
 
     def _follow_face_bones(self, context, parts_armatures) -> None:
         """Copy the face's posed bone matrices onto the parts' shared bones.
