@@ -1526,13 +1526,6 @@ class FacePaintCmx:
 _FACEPAINT_CMX: dict[str, FacePaintCmx] = {}
 
 
-def _color_id(value: int) -> ColorId:
-    try:
-        return ColorId(value)
-    except ValueError:
-        return ColorId.UNUSED
-
-
 def get_facepaint_cmx(bin_path: Path) -> FacePaintCmx:
     """Where each face paint goes, what colours it, and which hairs use one.
 
