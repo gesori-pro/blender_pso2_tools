@@ -24,6 +24,7 @@ import bpy
 
 from . import classes
 from .debug import debug_print
+from .shaders import ngs
 from .util import OperatorResult
 
 # Shader-group inputs that have no bake pass of their own.
@@ -288,7 +289,14 @@ class PSO2_OT_BakeTextures(bpy.types.Operator):  # type: ignore https://github.c
         bake.use_pass_direct = False
         bake.use_pass_indirect = False
         bake.use_pass_color = True
-        bpy.ops.object.bake(type="DIFFUSE")
+        # The shader groups darken the diffuse the way the game does before
+        # lighting. The game will do that again to whatever is baked here,
+        # so the bake has to read the colour from before it.
+        ngs.set_game_albedo(False)
+        try:
+            bpy.ops.object.bake(type="DIFFUSE")
+        finally:
+            ngs.set_game_albedo(True)
 
         if self.bake_alpha:
             masks = self._bake_alpha(context, materials)
