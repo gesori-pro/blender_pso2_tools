@@ -29,6 +29,8 @@ def build_material(
         bld.build(context)
 
     _update_material_settings(material, data)
+    if cls and cls.render_method:
+        material.surface_render_method = cls.render_method
 
 
 def _update_material_settings(material: bpy.types.Material, data: types.ShaderData):
