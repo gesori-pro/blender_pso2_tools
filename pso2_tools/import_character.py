@@ -39,8 +39,10 @@ from . import (
     proportions,
     scene_props,
 )
+from .colors import ColorId
 from .debug import debug_print
 from .preferences import get_preferences
+from .shaders.colorize import ShaderNodePso2SrgbDecode, ShaderNodePso2SrgbEncode
 from .util import OperatorResult
 
 # Character-file field suffix -> object-database getter, in load order. The
@@ -85,14 +87,15 @@ _FACE_PAINT_PARTS = (
     ("makeup2Part", "facePaint2Opacity"),
 )
 
-# What the opacity slider draws at its middle, as a fraction of full
-# strength. Sweeping the slider in a running game and measuring the paint
-# in the frames it produced gives a line from nothing at -127 up to this
-# at 0, then a shallower line on to full at 127 - the same "neutral in the
-# middle" shape the body sliders use. Reading the value as a plain 0..1
-# alpha instead draws an eyeshadow at a twelfth of the strength the game
-# shows for the same character.
-_PAINT_NEUTRAL = 0.73
+# The opacity slider scales the paint's own alpha by (v + 127) / 127:
+# nothing at -127, the paint as drawn at 0. Fitted against the face texture
+# the game composited for a character with both paints at -106 (capture
+# frame 16602): the eyeshadow fits best at 0.17 and the lipstick at 0.165,
+# where the line gives 0.1654. An earlier curve through 0.73 at 0 was
+# measured on frames while the colours here were still blended in linear
+# space, which made every paint look weaker than its alpha. Above 0 the
+# line goes on to 2 and the alpha saturates; that half is not measured.
+_PAINT_FULL_AT = 127.0
 
 # Where a face paint lands on the face texture. Its width matches the face
 # texture's, so it covers the whole width, and it is an eighth as tall,
@@ -134,10 +137,8 @@ def _face_paint_alpha(char: charfile.CharacterFile, suffix: str) -> float:
             if not isinstance(value, int):
                 continue
             value = max(-127, min(127, value))
-            if value <= 0:
-                return _PAINT_NEUTRAL * (value + 127) / 127.0
-            return _PAINT_NEUTRAL + (1.0 - _PAINT_NEUTRAL) * value / 127.0
-    return _PAINT_NEUTRAL
+            return (value + 127) / _PAINT_FULL_AT
+    return 1.0
 
 
 def _find_part_id(char: charfile.CharacterFile, suffix: str) -> int:
@@ -529,8 +530,15 @@ def _clear_face_paint(material: bpy.types.Material) -> None:
     if skin_group.inputs["Diffuse"].links:
         source = skin_group.inputs["Diffuse"].links[0].from_socket
         while source is not None and source.node.name.startswith("Face Paint"):
-            upstream = source.node.inputs["A"]
-            source = upstream.links[0].from_socket if upstream.links else None
+            upstream = next(
+                (
+                    s
+                    for s in source.node.inputs
+                    if s.name in ("A", "Color") and s.is_linked
+                ),
+                None,
+            )
+            source = upstream.links[0].from_socket if upstream else None
 
     # Takes the paint's UV and placement nodes with it - they share the
     # "Face Paint N" prefix.
@@ -575,13 +583,20 @@ def _layer_face_paint(
     opacity: float,
     index: int,
     placement: tuple[float, float, float, float] | None = None,
+    mask: bpy.types.Image | None = None,
+    colors: tuple[ColorId, ColorId] | None = None,
 ) -> bool:
     """Blend one face paint over the skin, before the shader group.
 
-    The game composites face paints onto the face texture at the file's
-    opacity slider. The same blend goes between the skin colorize and the
-    shader group here, factored by the paint's own alpha times that
-    opacity, so paints stack in slot order like they do in game.
+    The game composites face paints onto the face texture, in slot order, at
+    the file's opacity slider. The same blend goes between the skin colorize
+    and the shader group here, factored by the paint's own alpha times that
+    opacity. Like the rest of the compositing it runs in sRGB space.
+
+    A paint whose CMX entry names colours is tinted by its mask first: red
+    and green each blend towards one character colour, over the paint's own
+    colour. The hair's scalp paint is black with a mask of about two thirds,
+    so it lays the hair colour at two thirds strength over the head.
 
     A paint is not a whole face texture: it is a strip that covers a band
     of the face's UV space, an eighth of the texture's height over the
@@ -596,13 +611,26 @@ def _layer_face_paint(
 
     current = skin_group.inputs["Diffuse"].links[0].from_socket
     base_x, base_y = skin_group.location
+    x = base_x - 900
+    y = base_y + 300 + index * 350
+    prefix = f"Face Paint {index}"
 
-    tex = tree.nodes.new("ShaderNodeTexImage")
-    tex.name = tex.label = f"Face Paint {index}"
+    def new(node_type: str, name: str, dx: float, dy: float = 0.0):
+        node = tree.nodes.new(node_type)
+        node.name = node.label = name
+        node.location = (x + dx, y + dy)
+        return node
+
+    tex = new("ShaderNodeTexImage", prefix, 0)
     tex.image = image
-    tex.location = (base_x - 900, base_y + 300 + index * 350)
     # Outside its band the paint must not draw at all, so no repeats.
     tex.extension = "CLIP"
+
+    mask_tex = None
+    if mask is not None and colors:
+        mask_tex = new("ShaderNodeTexImage", f"{prefix} Mask", 0, -280)
+        mask_tex.image = mask
+        mask_tex.extension = "CLIP"
 
     face_texture = tree.nodes.get("Diffuse")
     face_image = face_texture.image if face_texture else None
@@ -610,13 +638,8 @@ def _layer_face_paint(
     if rect is not None:
         origin_u, origin_v, scale_u, scale_v = rect
 
-        uv_node = tree.nodes.new("ShaderNodeUVMap")
-        uv_node.name = uv_node.label = f"Face Paint {index} UV"
-        uv_node.location = (tex.location.x - 700, tex.location.y)
-
-        mapping = tree.nodes.new("ShaderNodeMapping")
-        mapping.name = mapping.label = f"Face Paint {index} Placement"
-        mapping.location = (tex.location.x - 450, tex.location.y)
+        uv_node = new("ShaderNodeUVMap", f"{prefix} UV", -700)
+        mapping = new("ShaderNodeMapping", f"{prefix} Placement", -450)
         mapping.inputs["Scale"].default_value = (scale_u, scale_v, 1.0)
         mapping.inputs["Location"].default_value = (
             -origin_u * scale_u,
@@ -626,27 +649,71 @@ def _layer_face_paint(
 
         tree.links.new(uv_node.outputs["UV"], mapping.inputs["Vector"])
         tree.links.new(mapping.outputs["Vector"], tex.inputs["Vector"])
+        if mask_tex is not None:
+            tree.links.new(mapping.outputs["Vector"], mask_tex.inputs["Vector"])
 
-    fac = tree.nodes.new("ShaderNodeMath")
-    fac.name = f"Face Paint {index} Opacity"
-    fac.label = fac.name
+    base = new(ShaderNodePso2SrgbEncode.__name__, f"{prefix} Base sRGB", 560, 200)
+    tree.links.new(current, base.inputs["Color"])
+
+    paint = new(ShaderNodePso2SrgbEncode.__name__, f"{prefix} sRGB", 320)
+    tree.links.new(tex.outputs["Color"], paint.inputs["Color"])
+    painted = paint.outputs["Color"]
+
+    channels = tree.nodes.get("Colors")
+    if mask_tex is not None and colors and channels is not None:
+        split = new("ShaderNodeSeparateColor", f"{prefix} Mask RGB", 320, -280)
+        split.mode = "RGB"
+        tree.links.new(mask_tex.outputs["Color"], split.inputs["Color"])
+        for step, (channel, color_id) in enumerate(
+            zip(("Red", "Green"), colors, strict=True)
+        ):
+            if color_id == ColorId.UNUSED:
+                continue
+            encode = new(
+                ShaderNodePso2SrgbEncode.__name__,
+                f"{prefix} {channel} sRGB",
+                320 + 160 * step,
+                -520,
+            )
+            tree.links.new(channels.outputs[color_id.value - 1], encode.inputs["Color"])
+            squeeze = new(
+                "ShaderNodeVectorMath",
+                f"{prefix} {channel} Range",
+                480 + 160 * step,
+                -520,
+            )
+            squeeze.operation = "MULTIPLY_ADD"
+            squeeze.inputs[1].default_value = (0.99, 0.99, 0.99)
+            squeeze.inputs[2].default_value = (0.005, 0.005, 0.005)
+            tree.links.new(encode.outputs["Color"], squeeze.inputs[0])
+
+            tint = new("ShaderNodeMix", f"{prefix} {channel}", 480 + 160 * step, -260)
+            tint.data_type = "RGBA"
+            tint.blend_type = "MIX"
+            tint.clamp_factor = True
+            tree.links.new(painted, tint.inputs["A"])
+            tree.links.new(squeeze.outputs["Vector"], tint.inputs["B"])
+            tree.links.new(split.outputs[channel], tint.inputs["Factor"])
+            painted = tint.outputs["Result"]
+
+    fac = new("ShaderNodeMath", f"{prefix} Opacity", 320, -120)
     fac.operation = "MULTIPLY"
+    fac.use_clamp = True
     fac.inputs[1].default_value = opacity
-    fac.location = (tex.location.x + 320, tex.location.y - 120)
 
-    mix = tree.nodes.new("ShaderNodeMix")
-    mix.name = f"Face Paint {index} Mix"
-    mix.label = mix.name
+    mix = new("ShaderNodeMix", f"{prefix} Mix", 800)
     mix.data_type = "RGBA"
     mix.blend_type = "MIX"
     mix.clamp_factor = True
-    mix.location = (tex.location.x + 560, tex.location.y)
+
+    linear = new(ShaderNodePso2SrgbDecode.__name__, f"{prefix} Linear", 1040)
 
     tree.links.new(tex.outputs["Alpha"], fac.inputs[0])
     tree.links.new(fac.outputs["Value"], mix.inputs["Factor"])
-    tree.links.new(current, mix.inputs["A"])
-    tree.links.new(tex.outputs["Color"], mix.inputs["B"])
-    tree.links.new(mix.outputs["Result"], skin_group.inputs["Diffuse"])
+    tree.links.new(base.outputs["Color"], mix.inputs["A"])
+    tree.links.new(painted, mix.inputs["B"])
+    tree.links.new(mix.outputs["Result"], linear.inputs["Color"])
+    tree.links.new(linear.outputs["Color"], skin_group.inputs["Diffuse"])
     return True
 
 
@@ -794,7 +861,33 @@ class PSO2_OT_ImportCharacter(  # type: ignore https://github.com/nutti/fake-bpy
             for material in face_materials:
                 _clear_face_paint(material)
 
-            paint_placement = objects.get_facepaint_placement(data_path.parent)
+            paint_cmx = objects.get_facepaint_cmx(data_path.parent)
+            paint_placement = paint_cmx.placement
+
+            # The hairstyle's own paint goes on first: the game lays it over
+            # the scalp in the hair's colours before any makeup.
+            hair_id = _find_part_id(char, "hairPart")
+            scalp_id = paint_cmx.scalp.get(hair_id)
+            if scalp_id is not None:
+                obj = next(iter(db.get_facepaint(scalp_id)), None)
+                images = _load_part_images(obj, data_path) if obj else {}
+                painted = "d" in images and [
+                    m
+                    for m in face_materials
+                    if _layer_face_paint(
+                        m,
+                        images["d"],
+                        1.0,
+                        0,
+                        paint_placement.get(scalp_id),
+                        images.get("m"),
+                        paint_cmx.colors.get(scalp_id),
+                    )
+                ]
+                if painted:
+                    loaded.append(obj.name)
+                else:
+                    missing.append(f"scalp paint {scalp_id} for hair {hair_id}")
 
             for layer, (part_field, opacity_field) in enumerate(
                 _FACE_PAINT_PARTS, start=1
@@ -806,13 +899,22 @@ class PSO2_OT_ImportCharacter(  # type: ignore https://github.com/nutti/fake-bpy
                 if obj is None:
                     missing.append(f"{part_field}={part_id}")
                     continue
-                diffuse = _load_part_images(obj, data_path).get("d")
+                images = _load_part_images(obj, data_path)
+                diffuse = images.get("d")
                 opacity = _face_paint_alpha(char, opacity_field)
                 placement = paint_placement.get(part_id)
                 painted = diffuse is not None and [
                     m
                     for m in face_materials
-                    if _layer_face_paint(m, diffuse, opacity, layer, placement)
+                    if _layer_face_paint(
+                        m,
+                        diffuse,
+                        opacity,
+                        layer,
+                        placement,
+                        images.get("m"),
+                        paint_cmx.colors.get(part_id),
+                    )
                 ]
                 if painted:
                     loaded.append(obj.name)
