@@ -39,6 +39,7 @@ from . import (
 # menu entry, so nothing else in this module refers to them.
 from . import bake_rest as bake_rest
 from . import bake_textures as bake_textures
+from . import game_scene as game_scene
 from . import import_character as import_character
 from . import import_shape_adjust as import_shape_adjust
 from . import reloader as reloader

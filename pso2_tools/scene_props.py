@@ -8,6 +8,30 @@ from .preferences import get_preferences
 HIDE_INNERWEAR = "pso2_hide_innerwear"
 MUSCULARITY = "pso2_muscularity"
 
+# Scene: the game's lighting (shaders/game_lighting.py). The materials read
+# these through View Layer attributes; the sun's two come from drivers on
+# the "PSO2 Sun" object that the Game Lighting setup makes.
+GAME_SHADING = "pso2_game_shading"
+LIGHT_DIRECTION = "pso2_light_direction"
+LIGHT_STRENGTH = "pso2_light_strength"
+EXPOSURE = "pso2_exposure"
+ENVIRONMENT_COLOR = "pso2_environment_color"
+HEADLIGHT = "pso2_headlight"
+
+# World: the camera's zoom, for the hair's strand noise. It sits on the world
+# because its driver reads the scene's resolution, which a driver on the
+# scene itself cannot; View Layer attributes look there after the scene.
+CAMERA_ZOOM = "pso2_camera_zoom"
+
+# The character creator's sun (towards the light, Blender axes) and scene,
+# from the constants of a captured frame.
+CREATOR_LIGHT_DIRECTION = (0.29143327, -0.95006776, 0.11152586)
+CREATOR_LIGHT_STRENGTH = 12.56
+CREATOR_EXPOSURE = 0.84
+CREATOR_ENVIRONMENT_COLOR = (0.0375, 0.075, 0.125)
+CREATOR_CAMERA_ZOOM = 11.605
+CREATOR_HEADLIGHT = 1.665
+
 # Object
 ALPHA_THRESHOLD = "pso2_alpha_threshold"
 MESH_ID = "pso2_mesh_id"
@@ -27,6 +51,7 @@ def add_custom_properties():
     _add_material_properties()
     _add_object_properties()
     _add_scene_properties()
+    _add_world_properties()
 
 
 def _add_scene_properties():
@@ -50,6 +75,81 @@ def _add_scene_properties():
         ),
     )
 
+    setattr(
+        bpy.types.Scene,
+        GAME_SHADING,
+        bpy.props.FloatProperty(
+            name="Game Shading",
+            description=(
+                "Light PSO2 materials the way the game does (EEVEE only)."
+                " 0 keeps the Principled shading Cycles can render"
+            ),
+            min=0,
+            max=1,
+            default=0,
+            subtype="FACTOR",
+        ),
+    )
+    setattr(
+        bpy.types.Scene,
+        LIGHT_DIRECTION,
+        bpy.props.FloatVectorProperty(
+            name="Sun Direction",
+            description="Towards the sun; driven by the PSO2 Sun object",
+            size=3,
+            subtype="DIRECTION",
+            default=CREATOR_LIGHT_DIRECTION,
+        ),
+    )
+    setattr(
+        bpy.types.Scene,
+        LIGHT_STRENGTH,
+        bpy.props.FloatProperty(
+            name="Sun Strength",
+            description="The sun's strength; driven by the PSO2 Sun object",
+            min=0,
+            default=CREATOR_LIGHT_STRENGTH,
+        ),
+    )
+    setattr(
+        bpy.types.Scene,
+        EXPOSURE,
+        bpy.props.FloatProperty(
+            name="Exposure",
+            description=(
+                "The game's tone-mapping exposure. Characters never see the sun"
+                " dimmer than 1 / (0.7 x this), and get a fill light of 0.3 of that"
+            ),
+            min=0.01,
+            default=CREATOR_EXPOSURE,
+        ),
+    )
+    setattr(
+        bpy.types.Scene,
+        ENVIRONMENT_COLOR,
+        bpy.props.FloatVectorProperty(
+            name="Sky Tint",
+            description="Added to the ambient from above",
+            size=3,
+            subtype="COLOR",
+            min=0,
+            default=CREATOR_ENVIRONMENT_COLOR,
+        ),
+    )
+    setattr(
+        bpy.types.Scene,
+        HEADLIGHT,
+        bpy.props.FloatProperty(
+            name="Headlight",
+            description=(
+                "The character creator's light on the camera, which lights"
+                " characters only. 0 turns it off"
+            ),
+            min=0,
+            default=CREATOR_HEADLIGHT,
+        ),
+    )
+
     for channel in COLOR_CHANNELS.values():
         name = channel.custom_property_name
         setattr(
@@ -64,6 +164,23 @@ def _add_scene_properties():
                 size=4,
             ),
         )
+
+
+def _add_world_properties():
+    setattr(
+        bpy.types.World,
+        CAMERA_ZOOM,
+        bpy.props.FloatProperty(
+            name="Camera Zoom",
+            description=(
+                "One over the tangent of half the camera's vertical field of"
+                " view; hair picks its strand noise by how big it is on screen."
+                " Driven by the scene camera"
+            ),
+            min=0.01,
+            default=CREATOR_CAMERA_ZOOM,
+        ),
+    )
 
 
 def _add_material_properties():
