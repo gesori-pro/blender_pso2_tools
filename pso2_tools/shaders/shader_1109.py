@@ -72,3 +72,4 @@ class Shader1109(builder.ShaderBuilder):
         normal.image = self.textures.default.normal
 
         tree.add_link(normal.outputs["Color"], shader_group.inputs["Normal"])
+        tree.add_link(normal.outputs["Alpha"], shader_group.inputs["Normal A"])

@@ -190,6 +190,10 @@ class Shader1102(builder.ShaderBuilder):
         tree.add_link(normal_1.outputs["Alpha"], normal_mix.inputs["Alpha 2"])
 
         tree.add_link(normal_mix.outputs["Color"], skin_group.inputs["Normal"])
+        tree.add_link(normal_mix.outputs["Alpha"], skin_group.inputs["Normal A"])
+
+        # The body, unlike the face, only wets where it is soft.
+        skin_group.inputs["Wet Mask"].default_value = 1  # type: ignore
 
         # ========== Innerwear ==========
 
@@ -248,6 +252,7 @@ class Shader1102(builder.ShaderBuilder):
         in_normal.image = self.textures.inner.normal
 
         tree.add_link(in_normal.outputs["Color"], in_group.inputs["Normal"])
+        tree.add_link(in_normal.outputs["Alpha"], in_group.inputs["Normal A"])
 
         # TODO: add a bodypaint layer?
 
