@@ -254,9 +254,23 @@ class ShaderNodePso2NgsBase(group.ShaderNodeCustomGroup):
         tree.add_link(glow_base.outputs["Vector"], glow.inputs[0])
         tree.add_link(gain.outputs["Value"], glow.inputs["Scale"])
 
-        enhanced = _vector(tree, "POWER", (-8, 28), "Glow Enhanced")
-        enhanced.inputs[1].default_value = (EMISSION_POWER,) * 3  # type: ignore
-        tree.add_link(glow.outputs["Vector"], enhanced.inputs[0])
+        # Per channel: the vector node's Power only arrived after Blender 4.4.
+        split = tree.add_node(bpy.types.ShaderNodeSeparateXYZ, (-10, 28))
+        enhanced = tree.add_node(
+            bpy.types.ShaderNodeCombineXYZ, (-6, 28), name="Glow Enhanced"
+        )
+        tree.add_link(glow.outputs["Vector"], split.inputs[0])
+        for offset, axis in enumerate("XYZ"):
+            power = _math(
+                tree,
+                "POWER",
+                (-8, 30 - offset),
+                f"Glow Enhanced {axis}",
+                None,
+                EMISSION_POWER,
+            )
+            tree.add_link(split.outputs[axis], power.inputs[0])
+            tree.add_link(power.outputs["Value"], enhanced.inputs[axis])
 
         exposure = _math(tree, "DIVIDE", (-8, 22), "Glow Exposure", None, EXPOSURE)
         tree.add_link(group_inputs.outputs["Emission Scale"], exposure.inputs[0])
