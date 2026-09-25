@@ -100,7 +100,8 @@ class ShaderNodePso2NgsHair(group.ShaderNodeCustomGroup):
 
     # 2: the game's hair G-buffer and lighting beside the Principled BSDF
     # 3: the game's strand noise: checkered, filtered, mip from the camera
-    tree_version = 3
+    # 4: the Principled BSDF's highlight as wide as the game's
+    tree_version = 4
 
     def init(self, context):
         super().init(context)
@@ -301,7 +302,16 @@ class ShaderNodePso2NgsHair(group.ShaderNodeCustomGroup):
             e.f(game_albedo.outputs[0]),
         )
         tree.add_link(base.socket, bsdf.inputs["Base Color"])
-        tree.add_link(green.socket, bsdf.inputs["Roughness"])
+        # The game's highlight is two lobes round the strand, of exponents
+        # n = 2/r^2 - 2 and n/24, at the same height. The sharp one carries
+        # next to no light; the wide one is as wide as a GGX alpha of
+        # r sqrt(24 / (1 + 23 r^2)), and Blender's roughness is the square
+        # root of alpha. Fed r itself (a median 0.06 on hair), the BSDF
+        # was near a mirror and the hair looked wet. What the game reflects
+        # of the surroundings is a flat 2% (0.02 x AO), half the BSDF's 4%.
+        wide = e.mul(green, e.sqrt(e.div(24.0, e.madd(e.mul(green, green), 23.0, 1.0))))
+        tree.add_link(e.sqrt(e.min(wide, 1.0)).socket, bsdf.inputs["Roughness"])
+        bsdf.inputs["Specular IOR Level"].default_value = 0.25  # type: ignore
         tree.add_link(mapped_normal.socket, bsdf.inputs["Normal"])
         tree.add_link(alpha.socket, bsdf.inputs["Alpha"])
         tree.add_link(glow.socket, bsdf.inputs["Emission Color"])
