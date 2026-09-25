@@ -18,6 +18,12 @@ TEAR_ROUGHNESS = 0.05
 TEAR_MATCAP_OFFSET = 0.5276
 TEAR_MATCAP_GAIN = 2.0
 TEAR_SPECULAR_LIMIT = 5.0
+# The game adds only the lights' glints, nothing of the surroundings. The
+# Principled BSDF cannot tell the two apart, so its reflection is turned
+# down to 1/25 of the usual: a light's glint, far brighter than anything
+# around it, still shows, and the eye no longer mirrors the environment
+# (which in Material Preview hid the iris behind the studio's image).
+TEAR_REFLECTION_LEVEL = 0.02
 
 # The matcap's image node: the eye part's _v texture, which the character
 # importer paints on when it loads the eye.
@@ -76,6 +82,9 @@ class ShaderNodePso2NgsTear(group.ShaderNodeCustomGroup):
     bl_label = "PSO2 Eye Tear"
     bl_icon = "NONE"
 
+    # 2: the Principled BSDF's reflection down to the lights' glints
+    tree_version = 2
+
     def init(self, context):
         super().init(context)
         matcap = self.input(bpy.types.NodeSocketColor, "Matcap Color")
@@ -133,10 +142,11 @@ class ShaderNodePso2NgsTear(group.ShaderNodeCustomGroup):
         added = e._node(bpy.types.ShaderNodeEmission, name="Game Light")
         tree.add_link(e.add(glint, rim).socket, added.inputs["Color"])
 
-        # ---- Cycles: the same smooth reflection and the matcap, added
+        # ---- Cycles: the lights' glints and the matcap, added
         gloss = e._node(bpy.types.ShaderNodeBsdfPrincipled, name="Principled BSDF")
         gloss.inputs["Base Color"].default_value = (0, 0, 0, 1)  # type: ignore
         gloss.inputs["Roughness"].default_value = TEAR_ROUGHNESS  # type: ignore
+        gloss.inputs["Specular IOR Level"].default_value = TEAR_REFLECTION_LEVEL  # type: ignore
         tree.add_link(rim.socket, gloss.inputs["Emission Color"])
         gloss.inputs["Emission Strength"].default_value = 1  # type: ignore
 
