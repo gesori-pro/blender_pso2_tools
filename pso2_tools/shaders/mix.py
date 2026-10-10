@@ -11,8 +11,8 @@ class ShaderNodePso2Mix(group.ShaderNodeCustomGroup):
     def _build(self, node_tree):
         tree = builder.NodeTreeBuilder(node_tree)
 
-        group_inputs = tree.add_node(bpy.types.NodeGroupInput)
-        group_outputs = tree.add_node(bpy.types.NodeGroupOutput)
+        group_inputs = tree.add_node(bpy.types.NodeGroupInput, name="Group Input")
+        group_outputs = tree.add_node(bpy.types.NodeGroupOutput, name="Group Output")
 
         self._add_inputs(tree)
         tree.new_input(bpy.types.NodeSocketColor, "Color 1")

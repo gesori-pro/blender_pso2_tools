@@ -22,9 +22,6 @@ is faceShapeVerts, and its two nose groups are swapped - so the mapping
 below is the corrected one.
 """
 
-import tempfile
-from pathlib import Path
-
 from mathutils import Matrix, Quaternion, Vector
 
 from . import aqm, ice, import_aqm, import_model, objects
@@ -85,9 +82,34 @@ _FACE_SLIDERS: tuple[tuple[str, int | None, int], ...] = (
     ("<expr>.tongueHorizontal", 162, 164),
 )
 
+# Live sy_script.ice: chara_edit_expression_custom_config.lua names Borg00..11;
+# graphic/character_param.lua gives their min/max frames. They occupy ODD
+# frames between the old, even-numbered controls, not new frames after 164.
+# Verified offline against face motions 100070, 200090, 200120 and 200130.
+# Borg12 (pupil shape, 165/167) and Borg13 (lip-sync strength, 169/171) have
+# no corresponding transform keys in these motions and are not exposed here.
+BORG_SLIDERS: tuple[tuple[str, int, int], ...] = (
+    ("<expr>.mouthOpenClose", 117, 119),
+    ("<expr>.mouthCornerPosition", 121, 123),
+    ("<expr>.mouthCornerShape", 125, 127),
+    ("<expr>.upperLipShape", 129, 131),
+    ("<expr>.lowerLipShape", 133, 135),
+    ("<expr>.upperLowerLipRatio", 137, 139),
+    ("<expr>.teethOpenClose", 141, 143),
+    ("<expr>.teethVerticalPosition", 145, 147),
+    ("<expr>.lowerJawOpenClose", 149, 151),
+    ("<expr>.eyelashAngle", 153, 155),
+    ("<expr>.eyelashLength", 157, 159),
+    ("<expr>.eyeShadows", 161, 163),
+)
+_FACE_SLIDERS += BORG_SLIDERS
+
 # The expression the face rests in. The file carries ten presets; this is
 # the one the character creator shows when nothing else is playing.
 DEFAULT_EXPRESSION = "faceNatural"
+
+# Slider edits reuse the parsed motion, but an ICE replacement invalidates it.
+_MOTION_CACHE: dict[tuple[str, int, int], aqm.AqmMotion] = {}
 
 # The presets a character file carries, in the order it stores them. V10 named
 # the last three "unused"; V16 turned them into the three custom slots, and the
@@ -152,21 +174,30 @@ def _load_motion(context, face_id: int) -> aqm.AqmMotion | None:
         debug_print(f"No face-shape motion for face {face_id}")
         return None
 
+    stat = path.stat()
+    cache_key = (str(path.resolve()), stat.st_mtime_ns, stat.st_size)
+    if cache_key in _MOTION_CACHE:
+        return _MOTION_CACHE[cache_key]
+
     entry = next(
         (
             f
             for f in ice.IceFile.load(path).get_files()
-            if f.name.lower().endswith(".aqm")
+            if f.name.lower() == f"pl_rfm_{face_id}_00.aqm"
         ),
         None,
     )
     if entry is None:
         return None
 
-    with tempfile.TemporaryDirectory(prefix="pso2_face_") as tmp:
-        motion_path = Path(tmp) / entry.name
-        motion_path.write_bytes(entry.data)
-        return aqm.read_aqm(str(motion_path))
+    motion = aqm.parse_aqm(entry.data)
+    for key in list(_MOTION_CACHE):
+        if key[0] == cache_key[0]:
+            del _MOTION_CACHE[key]
+    _MOTION_CACHE[cache_key] = motion
+    if len(_MOTION_CACHE) > 8:
+        del _MOTION_CACHE[next(iter(_MOTION_CACHE))]
+    return motion
 
 
 def _key_at(node, key_type, frame: int):
@@ -177,6 +208,60 @@ def _key_at(node, key_type, frame: int):
     if frame not in frames:
         return None
     return list(key_set.vec4_keys[frames.index(frame)])
+
+
+def _changed_keys(position, rotation, scale, neutral) -> bool:
+    """Ignore terminal/held neutral keys, including equivalent q and -q.
+
+    The final slider frame can key the entire skeleton. Treating unchanged
+    keys as deformation would overwrite the head's existing body proportions.
+    """
+    base_position, base_rotation, base_scale = neutral
+    if position is not None and any(
+        abs(a - b) > 1e-9 for a, b in zip(position[:3], base_position[:3], strict=True)
+    ):
+        return True
+    if scale is not None and any(
+        abs(a - b) > 1e-9 for a, b in zip(scale[:3], base_scale[:3], strict=True)
+    ):
+        return True
+    if rotation is not None:
+        difference = min(
+            max(abs(a - b) for a, b in zip(rotation, base_rotation, strict=True)),
+            max(abs(a + b) for a, b in zip(rotation, base_rotation, strict=True)),
+        )
+        return difference > 1e-9
+    return False
+
+
+def has_slider_motion(motion, field: str) -> bool:
+    """Whether this face has an actual deformation for a mapped control.
+
+    A newer character file can still select an older face motion. A stored
+    zero or a terminal neutral key is not evidence that its control works.
+    """
+    frames = [
+        frame
+        for name, minimum, maximum in _FACE_SLIDERS
+        if name == field
+        for frame in (minimum, maximum)
+        if frame is not None
+    ]
+    for node in motion.nodes:
+        neutral = (
+            _key_at(node, aqm.KEY_TYPE_POSITION, 0) or [0, 0, 0, 0],
+            _key_at(node, aqm.KEY_TYPE_ROTATION, 0) or [0, 0, 0, 1],
+            _key_at(node, aqm.KEY_TYPE_SCALE, 0) or [1, 1, 1, 0],
+        )
+        for frame in frames:
+            if _changed_keys(
+                _key_at(node, aqm.KEY_TYPE_POSITION, frame),
+                _key_at(node, aqm.KEY_TYPE_ROTATION, frame),
+                _key_at(node, aqm.KEY_TYPE_SCALE, frame),
+                neutral,
+            ):
+                return True
+    return False
 
 
 # Frame 1 is not a slider extreme: it is a correction the game lays over
@@ -195,7 +280,7 @@ def _seed_base_correction(motion, neutral, result: dict[str, dict]) -> None:
         position = _key_at(node, aqm.KEY_TYPE_POSITION, _BASE_CORRECTION_FRAME)
         rotation = _key_at(node, aqm.KEY_TYPE_ROTATION, _BASE_CORRECTION_FRAME)
         scale = _key_at(node, aqm.KEY_TYPE_SCALE, _BASE_CORRECTION_FRAME)
-        if position is None and rotation is None and scale is None:
+        if not _changed_keys(position, rotation, scale, neutral[node.name]):
             continue
 
         entry = {
@@ -255,7 +340,7 @@ def _blend(char, motion, expression: str) -> dict[str, dict]:
             position = _key_at(node, aqm.KEY_TYPE_POSITION, frame)
             rotation = _key_at(node, aqm.KEY_TYPE_ROTATION, frame)
             scale = _key_at(node, aqm.KEY_TYPE_SCALE, frame)
-            if position is None and rotation is None and scale is None:
+            if not _changed_keys(position, rotation, scale, neutral[node.name]):
                 continue
 
             base_position, base_rotation, base_scale = neutral[node.name]

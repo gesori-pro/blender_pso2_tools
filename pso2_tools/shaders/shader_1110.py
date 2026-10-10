@@ -12,7 +12,10 @@ class Shader1110(shader_1100.Shader1100):
         tree = builder.NodeTreeBuilder(self.tree)
         diffuse = tree.tree.nodes["PSO2 Colorize Mix"]
         shader = tree.tree.nodes["PSO2 NGS"]
-        output = tree.tree.nodes["Material Output"]
+        # Built-in display names change with Blender's interface language.
+        output = next(
+            node for node in tree.tree.nodes if node.type == "OUTPUT_MATERIAL"
+        )
 
         shader.location.x += 50 * 6
         output.location.x += 60 * 6

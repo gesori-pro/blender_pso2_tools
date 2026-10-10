@@ -25,6 +25,7 @@ from . import (
     dotnet,
     export_aqm,
     export_aqp,
+    face_controls,
     import_aqm,
     import_aqp,
     import_fnp,
@@ -44,6 +45,7 @@ from . import import_character as import_character
 from . import import_shape_adjust as import_shape_adjust
 from . import reloader as reloader
 from .panels import appearance as appearance
+from .panels import face as face
 from .panels import mesh as mesh
 from .panels import ornaments as ornaments
 from .panels import shape_adjust as shape_adjust
@@ -59,6 +61,7 @@ def register():
     bpy.types.VIEW3D_MT_edit_armature_names.append(operators.rename_bones.menu_func)
 
     scene_props.add_custom_properties()
+    face_controls.add_properties()
     shape_sliders.add_scene_property()
 
 
@@ -67,6 +70,7 @@ def unregister():
     bpy.types.TOPBAR_MT_file_import.remove(menu_func_import)
     bpy.types.TOPBAR_MT_file_export.remove(menu_func_export)
     bpy.types.VIEW3D_MT_edit_armature_names.remove(operators.rename_bones.menu_func)
+    face_controls.remove_properties()
     classes.bpy_unregister()
 
 

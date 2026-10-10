@@ -4,7 +4,8 @@ A character file names dozens of parts by id - costume, hair, eyes, ears and
 so on - but nothing loads them together. This walks the file's part ids, pulls
 each one out of the game data through the object database, and drops the whole
 character into the scene in one step. Accessories are left out by default: a
-character often stacks a dozen and they rarely help a base import.
+character often stacks a dozen and they rarely help a base import. Asked
+for, they are hung on the posed character the way accessories.py describes.
 
 Parts come in two shapes. Most (hair, costume, ears, teeth) carry their own
 model, so they import like any object. Eyes, eyebrows and eyelashes are
@@ -27,6 +28,7 @@ import bpy
 from bpy_extras.io_utils import ImportHelper
 
 from . import (
+    accessories,
     char_colors,
     charfile,
     classes,
@@ -158,6 +160,36 @@ def _find_part_id(char: charfile.CharacterFile, suffix: str) -> int:
             if isinstance(value, int):
                 return value
     return 0
+
+
+def _model_part_selections(char: charfile.CharacterFile, include_body: bool):
+    """Selected model slots, excluding an empty layering-wear outfit slot."""
+    model_parts = _HEAD_PARTS + (_BODY_PARTS if include_body else ())
+    basewear_id = _find_part_id(char, "basewearPart")
+    for suffix, getter in model_parts:
+        part_id = _find_part_id(char, suffix)
+        if part_id <= 0:
+            continue
+        # Layering wear stores the outerwear selection in costumePart.
+        # 20000/30000 denote no outerwear for T1/T2; they are not missing
+        # costumes. Limit this to outfit slots with a selected basewear,
+        # since 30000 is a valid ID for other parts (for example faces).
+        if (
+            suffix in {"costumePart", "outerwearPart"}
+            and basewear_id > 0
+            and part_id in {20000, 30000}
+        ):
+            continue
+        yield suffix, getter, part_id
+
+
+def _lookup_model_part(db: objects.ObjectDatabase, getter: str, part_id: int):
+    obj = next(iter(getattr(db, getter)(part_id)), None)
+    # The saved outfit slot can name a real outerwear rather than a
+    # classic costume. Keep exact costume matches first.
+    if obj is None and getter == "get_costumes":
+        obj = next(iter(db.get_outerwear(part_id)), None)
+    return obj
 
 
 def _load_part_images(
@@ -764,6 +796,14 @@ class PSO2_OT_ImportCharacter(  # type: ignore https://github.com/nutti/fake-bpy
         description="Load basewear, costume, innerwear and outerwear",
         default=True,
     )
+    include_accessories: bpy.props.BoolProperty(
+        name="Accessories",
+        description=(
+            "Load the file's accessories onto their attach points, moved,"
+            " turned and scaled by their sliders"
+        ),
+        default=False,
+    )
     expression: bpy.props.EnumProperty(
         name="Expression",
         description=(
@@ -790,6 +830,7 @@ class PSO2_OT_ImportCharacter(  # type: ignore https://github.com/nutti/fake-bpy
         self.layout.prop(self, "import_colors")
         self.layout.prop(self, "import_proportions")
         self.layout.prop(self, "include_body")
+        self.layout.prop(self, "include_accessories")
         self.layout.prop(self, "expression")
         row = self.layout.row()
         row.enabled = game_normals.supported()
@@ -813,7 +854,6 @@ class PSO2_OT_ImportCharacter(  # type: ignore https://github.com/nutti/fake-bpy
             char_colors.apply_to_scene(context, char)
             self._apply_muscularity(context, char)
 
-        model_parts = _HEAD_PARTS + (_BODY_PARTS if self.include_body else ())
         loaded: list[str] = []
         missing: list[str] = []
 
@@ -832,11 +872,10 @@ class PSO2_OT_ImportCharacter(  # type: ignore https://github.com/nutti/fake-bpy
                 else:
                     missing.append(f"skinTextureSet={skin_id}")
 
-            for suffix, getter in model_parts:
-                part_id = _find_part_id(char, suffix)
-                if part_id <= 0:
-                    continue
-                obj = next(iter(getattr(db, getter)(part_id)), None)
+            for suffix, getter, part_id in _model_part_selections(
+                char, self.include_body
+            ):
+                obj = _lookup_model_part(db, getter, part_id)
                 if obj is None:
                     missing.append(f"{suffix}={part_id}")
                     continue
@@ -852,6 +891,19 @@ class PSO2_OT_ImportCharacter(  # type: ignore https://github.com/nutti/fake-bpy
             debug_print(
                 f"Rewired {_restore_root_node_weights(context)} root-node weights"
             )
+
+            # Accessories come in now, at the pose they were authored in,
+            # and are hung on the character once its shape is final.
+            character_armatures = [
+                obj
+                for obj in bpy.data.objects
+                if obj.type == "ARMATURE" and obj.as_pointer() not in existing
+            ]
+            placed: list[accessories.Placed] = []
+            if self.include_accessories:
+                placed = self._import_accessories(
+                    context, db, char, data_path, loaded, missing
+                )
 
             for suffix, getter, fragments, skip in _FACE_TEXTURE_PARTS:
                 part_id = _find_part_id(char, suffix)
@@ -944,6 +996,11 @@ class PSO2_OT_ImportCharacter(  # type: ignore https://github.com/nutti/fake-bpy
             self._apply_proportions(context, char)
             self._apply_face_shape(context, char, self.expression)
 
+        if placed:
+            self._place_accessories(
+                context, placed, character_armatures, data_path, missing
+            )
+
         if self.game_normals:
             added = game_normals.add_to(
                 obj for obj in bpy.data.objects if obj.as_pointer() not in existing
@@ -986,6 +1043,83 @@ class PSO2_OT_ImportCharacter(  # type: ignore https://github.com/nutti/fake-bpy
         )
         if summary["posed"]:
             self._attach_head_parts(context)
+
+    def _import_accessories(
+        self,
+        context,
+        db: objects.ObjectDatabase,
+        char: charfile.CharacterFile,
+        data_path: Path,
+        loaded: list[str],
+        missing: list[str],
+    ) -> list[accessories.Placed]:
+        """Bring in each accessory slot's model, coloured as the slot chose."""
+        placed: list[accessories.Placed] = []
+        for slot in accessories.read_slots(char):
+            label = f"acc{slot.number}Part={slot.item_id}"
+            item = next(iter(db.get_accessories(slot.item_id)), None)
+            if item is None:
+                missing.append(label)
+                continue
+
+            before = {obj.as_pointer() for obj in bpy.data.objects}
+            import_model.import_object(
+                self, context, accessories.with_tint(item, slot), high_quality=True
+            )
+            armature = next(
+                (
+                    obj
+                    for obj in bpy.data.objects
+                    if obj.type == "ARMATURE" and obj.as_pointer() not in before
+                ),
+                None,
+            )
+            if armature is None:
+                # Auras, particles and the like are effects with no model.
+                missing.append(f"{label} (no model)")
+                continue
+
+            placed.append(
+                accessories.Placed(
+                    slot=slot,
+                    item=item,
+                    armature=armature,
+                    motion=accessories.adjust_motion(item, data_path),
+                )
+            )
+            loaded.append(item.name)
+        return placed
+
+    def _place_accessories(
+        self,
+        context,
+        placed: list[accessories.Placed],
+        character_armatures: list[bpy.types.Object],
+        data_path: Path,
+        missing: list[str],
+    ) -> None:
+        """Hang the imported accessories on the posed character.
+
+        This runs last so the bones they ride on already carry the body
+        proportions and the face shape.
+        """
+        cmx = objects.get_accessory_cmx(data_path.parent)
+        character = accessories.character_bones(character_armatures)
+        for accessory in placed:
+            entry = cmx.get(accessory.item.id)
+            problems = accessories.place(
+                context, accessory, entry.pairs if entry else (), character
+            )
+            slot = accessory.slot
+            debug_print(
+                f"Accessory {slot.number} ({slot.item_id}) attach {slot.attach}"
+                f" pos {slot.position} rot {slot.rotation} scale {slot.scale}"
+                + (f": {', '.join(problems)}" if problems else "")
+            )
+            missing.extend(
+                f"acc{slot.number}Part={slot.item_id} ({problem})"
+                for problem in problems
+            )
 
     def _apply_muscularity(self, context, char: charfile.CharacterFile) -> None:
         """Set the scene's muscle blend to the character's muscle mass.

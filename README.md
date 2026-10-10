@@ -4,17 +4,19 @@ This integrates the model import/export functions of [Aqua-Library](https://gith
 
 ## Installation
 
-The libraries used for import/export are only compiled for Windows x64. This add-on will not currently work on other OSes.
+The `build-20261010` release (extension version **2.10.0**) is a Windows x64 build from the separate `release/build-20261010` branch. It does not replace the macOS implementation on `main`; macOS users should continue using the existing macOS release.
 
 1. Install the [.NET Runtime 9.0](https://dotnet.microsoft.com/en-us/download/dotnet/9.0) for Windows (on the bottom right of the page).
-2. Download `pso2_tools-****.zip` from the [latest release](https://github.com/dummycount/blender_pso2_tools/releases/latest).
+2. Download `pso2_tools-20261010-windows_x64.zip` from the [Windows release](https://github.com/gesori-pro/blender_pso2_tools/releases/tag/build-20261010), not the automatically generated source-code ZIP.
 3. In Blender, go to **Edit > Preferences > Add-ons**.
 4. Click the down arrow in the upper-right corner and select **Install from Disk...**.
 5. Select the .zip file you downloaded.
 6. Make sure **PSO2 Tools** is checked in the add-ons list.
 7. Expand **PSO2 Tools** and make sure **Path to pso2_bin/data** is correct. If not, set it to point to your game's install directory.
 
-Tested on Blender 4.4 and 5.1. Importing and exporting models, motions and character files behaves the same on both, down to identical output files. Versions before 4.4 are untested.
+Blender 4.4 or newer is required. This release's packaged face controls and character-part lookup were tested in a clean Blender 5.1.2 profile. Earlier import/export checks covered Blender 4.4 and 5.1, but the new face editor has not been re-tested on 4.4.
+
+When upgrading, close Blender before replacing the extension, then restart and re-import your model. Loaded .NET libraries cannot be reliably replaced in an already running Blender process.
 
 ## Usage
 
@@ -34,9 +36,21 @@ If an NGS model uses skin textures, they will automatically be imported. You can
 
 The proportions the game applies to an outfit depend on the outfit itself, so the result matches what you see in game rather than a generic body.
 
+Color-variant outfit IDs are resolved to their CMX base models when there is no exact model entry. Empty outfit slots are skipped, and linked outerwear is looked up in the outerwear catalog. **Include Accessories** is experimental and off by default; attachment placement has not been verified in game.
+
 **Files > Import > PSO2 AQM (.aqm)** loads a motion onto the imported armature as an action.
 
 Shape adjusts - the extra per-outfit tweak the game applies on top of the body proportions - are loaded from **Scene > PSO2 Appearance > Shape Adjust**, alongside the sliders that edit them, rather than from the import menu.
+
+### Facial customization (static Blender poses)
+
+Select an imported NGS **face armature**, or a mesh bound to it, and open **Scene > PSO2 Face Customization > Load Face Customization**. Load the matching character file, then select an expression preset and edit the face-motion blend weights. The 51 controls include separate left/right mouth corners, mouth shapes A/I/U/E/O, eyes, brows, nose, and tongue, plus lip opening, mouth-corner position/shape, upper/lower lip shape and ratio, teeth/jaw, eyelash angle/length, and eye shadow. Fields absent from an older file, or without deformation data in the selected face type's motion, are disabled.
+
+The editor reads that face type's own `pl_fm_<id>.ice` from the configured game data. Each edit is rebuilt from a saved baseline; **Neutral Sliders** clears the current preset's weights, and **Restore Previous Face** restores the pose from before loading. Only the selected rig is edited. Original vertex weights, mesh geometry, rest poses and actions are preserved.
+
+This is a static pose editor, not a facial-animation or character-file exporter. An active action/NLA is rejected. Separate teeth/hair rigs are not rebound; teeth controls only affect matching bones on the selected face rig. Pupil shape and animated lip-sync strength are not implemented. Offline Blender deformation checks do not establish full live-game visual equivalence.
+
+Reported inward pupil alignment is still under investigation; this release does not include an eye-alignment fix.
 
 ### Export
 
@@ -120,7 +134,7 @@ To build and develop the extension, first install the following requirements:
 First, clone the repo with submodules:
 
 ```pwsh
-git clone --recurse https://github.com/dummycount/blender_pso2_tools.git
+git clone --recurse --branch release/build-20261010 https://github.com/gesori-pro/blender_pso2_tools.git
 cd blender_pso2_tools
 ```
 

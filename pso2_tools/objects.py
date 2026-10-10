@@ -824,7 +824,24 @@ class ObjectDatabase:
         else:
             q = self.con.execute(f"SELECT * FROM {object_type}")
 
-        return [cls.from_db_row(object_type, row) for row in q]
+        rows = q.fetchall()
+        if (
+            not rows
+            and item_id is not None
+            and file_hash is None
+            and object_type in _COLOR_SET_TYPES
+        ):
+            # Colour variants live in colors_<slot>, not the model table.
+            # Character files keep the selected variant ID, while its ICE
+            # and model metadata belong to the linked base ID.
+            rows = self.con.execute(
+                f"SELECT model.* FROM {object_type} AS model "
+                f"JOIN {_color_set_table(object_type)} AS variant "
+                "ON model.id=variant.base_id WHERE variant.id=?",
+                (item_id,),
+            ).fetchall()
+
+        return [cls.from_db_row(object_type, row) for row in rows]
 
     def get_color_sets(self, object_type: ObjectType, item_id: int) -> CmxColorSets:
         if object_type == ObjectType.CAST_BODY:
@@ -1624,6 +1641,59 @@ def get_facepaint_placement(
 ) -> dict[int, tuple[float, float, float, float]]:
     """Where each face paint's texture belongs on the face texture."""
     return get_facepaint_cmx(bin_path).placement
+
+
+@dataclass
+class AccessoryCmx:
+    """Where the CMX hangs an accessory on the character."""
+
+    # (character bone, accessory node) pairs, the first always the
+    # accessory's root on its default attach bone
+    pairs: tuple[tuple[str, str], ...] = ()
+
+
+# bin path -> accessory id -> its attach pairs, read once per path
+_ACCESSORY_CMX: dict[str, dict[int, AccessoryCmx]] = {}
+
+
+def get_accessory_cmx(bin_path: Path) -> dict[int, AccessoryCmx]:
+    """Which character bone each of an accessory's nodes rides on.
+
+    An ACCE record names up to five bone pairs: nodeAttach1-5 are the
+    character's bones and nodeAttach6-10 the accessory's own nodes, paired
+    by position. The first pair is the accessory's root (always "root" in
+    the record) on its default bone - a ring's on r_finger_21, a hat's on
+    headtop_efhd. The others hang individual nodes elsewhere, which is how
+    a pair of earrings reaches both ears or a pair of boots both legs
+    (l_calf <-> ac_l_calf, l_foot_effl <-> ac_l_foot_effl, ...). All 8,753
+    records follow this layout.
+
+    Empty if the install's CMX cannot be read; accessories then stay where
+    their model was authored.
+    """
+    key = str(bin_path)
+    if key in _ACCESSORY_CMX:
+        return _ACCESSORY_CMX[key]
+
+    result: dict[int, AccessoryCmx] = {}
+    try:
+        from AquaModelLibrary.Data.Utility import ReferenceGenerator
+
+        cmx = ReferenceGenerator.ExtractCMX(str(bin_path))
+        for item_id in cmx.accessoryDict.Keys:
+            acce = cmx.accessoryDict[item_id]
+            pairs = []
+            for k in range(1, 6):
+                bone = str(getattr(acce, f"nodeAttach{k}") or "")
+                node = str(getattr(acce, f"nodeAttach{k + 5}") or "")
+                if bone and node:
+                    pairs.append((bone, node))
+            result[int(item_id)] = AccessoryCmx(pairs=tuple(pairs))
+    except Exception as ex:
+        debug_print("Could not read accessory data:", ex)
+
+    _ACCESSORY_CMX[key] = result
+    return result
 
 
 def _get_ccl(bin_path: Path) -> ccl.Pso2Ccl:
