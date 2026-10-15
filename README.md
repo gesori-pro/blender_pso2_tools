@@ -4,10 +4,10 @@ This integrates the model import/export functions of [Aqua-Library](https://gith
 
 ## Installation
 
-The `build-20261010` release (extension version **2.10.0**) is a Windows x64 build from the separate `release/build-20261010` branch. It does not replace the macOS implementation on `main`; macOS users should continue using the existing macOS release.
+The `build-20261010` release (extension version **2.10.0**) has separate Windows x64 and Apple Silicon macOS ZIPs. Windows comes from `release/build-20261010`; the Mac companion is built from the `build-20261010-macos` source tag, with the same face customization and character-part fixes plus the macOS build and direct-import adapters.
 
-1. Install the [.NET Runtime 9.0](https://dotnet.microsoft.com/en-us/download/dotnet/9.0) for Windows (on the bottom right of the page).
-2. Download `pso2_tools-20261010-windows_x64.zip` from the [Windows release](https://github.com/gesori-pro/blender_pso2_tools/releases/tag/build-20261010), not the automatically generated source-code ZIP.
+1. Install the [.NET Runtime 9.0](https://dotnet.microsoft.com/en-us/download/dotnet/9.0) or later for your OS and architecture.
+2. Download `pso2_tools-20261010-windows_x64.zip` or `pso2_tools-20261010-macos_arm64.zip` from the [release](https://github.com/gesori-pro/blender_pso2_tools/releases/tag/build-20261010), not the automatically generated source-code ZIP.
 3. In Blender, go to **Edit > Preferences > Add-ons**.
 4. Click the down arrow in the upper-right corner and select **Install from Disk...**.
 5. Select the .zip file you downloaded.
@@ -15,6 +15,8 @@ The `build-20261010` release (extension version **2.10.0**) is a Windows x64 bui
 7. Expand **PSO2 Tools** and make sure **Path to pso2_bin/data** is correct. If not, set it to point to your game's install directory.
 
 Blender 4.4 or newer is required. This release's packaged face controls and character-part lookup were tested in a clean Blender 5.1.2 profile. Earlier import/export checks covered Blender 4.4 and 5.1, but the new face editor has not been re-tested on 4.4.
+
+The Mac companion was installed and tested in a separate Blender 5.2.0 profile with .NET 10 on Apple Silicon. It reads AQP models directly through AML and Python, since the C++/CLI FBX bridge is Windows-only; AQP export still uses Blender FBX, Assimp and AML. See [the Mac validation record](docs/macos-release-20261010.md) for the tested scope.
 
 When upgrading, close Blender before replacing the extension, then restart and re-import your model. Loaded .NET libraries cannot be reliably replaced in an already running Blender process.
 
@@ -127,14 +129,19 @@ To build and develop the extension, first install the following requirements:
 
 - [Blender 5.1](https://www.blender.org/download/releases/) or newer.
 - [uv](https://github.com/astral-sh/uv)
-- [Visual Studio](https://visualstudio.microsoft.com/vs/community/) with the C# and C++ workflows installed.
 - [.NET SDK 9.0](https://dotnet.microsoft.com/en-us/download/dotnet/9.0)
+
+On Windows, also install:
+
+- [Visual Studio](https://visualstudio.microsoft.com/vs/community/) with the C# and C++ workflows installed.
 - [Autodesk FBX SDK](https://www.autodesk.com/content/dam/autodesk/www/adn/fbx/2020-1/fbx20201_fbxsdk_vs2017_win.exe) version 2020.1
+
+On macOS, use native arm64 Python and install the Xcode command line tools (`xcode-select --install`). Visual Studio and the FBX SDK are not required. `global.json` selects an installed .NET 9 SDK; the runtime used by Blender may be newer.
 
 First, clone the repo with submodules:
 
 ```pwsh
-git clone --recurse --branch release/build-20261010 https://github.com/gesori-pro/blender_pso2_tools.git
+git clone --recurse --branch build-20261010-macos https://github.com/gesori-pro/blender_pso2_tools.git
 cd blender_pso2_tools
 ```
 
@@ -162,7 +169,7 @@ uv run scripts/build_typings.py
 
 [scripts/wheels.py](scripts/wheels.py) defines the Python dependencies used by the add-on. This script needs to be run any time the dependencies are updated, and [pso2_tools/blender_manifest.toml](pso2_tools/blender_manifest.toml) needs to be updated to list all the wheel files.
 
-[scripts/build_bin.py](scripts/build_bin.py) needs to be run any time the PSO2-Aqua-Library submodule is updated. The `PACKAGES` array at the top also needs to be kept in sync with any nuget packages used by Aqua Library.
+[scripts/build_bin.py](scripts/build_bin.py) needs to be run any time the PSO2-Aqua-Library submodule is updated. It publishes the pinned dependency graph for the host platform; on macOS it also compiles the ooz decompressor. [scripts/build_package.py](scripts/build_package.py) creates a platform-specific ZIP with only that platform's wheel declarations.
 
 [scripts/build_typings.py](scripts/build_typings.py) does not need to be run for the add-on to function, but it generates typings that can be helpful when editing in an IDE.
 

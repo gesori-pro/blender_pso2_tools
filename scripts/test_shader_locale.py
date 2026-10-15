@@ -23,7 +23,9 @@ if dependencies := os.environ.get("PSO2_TEST_DEPENDENCIES"):
 from pso2_tools import material  # noqa: E402
 from pso2_tools.shaders import build_material, types  # noqa: E402
 
-bpy.ops.preferences.addon_enable(module="pso2_tools")
+bpy.ops.preferences.addon_enable(
+    module=os.getenv("PSO2_TEST_ADDON_MODULE", "pso2_tools")
+)
 language = bpy.context.preferences.view.language
 try:
     for locale in ("zh_HANS", "ja_JP"):
@@ -40,6 +42,8 @@ try:
             bpy.data.materials.remove(mat)
 finally:
     bpy.context.preferences.view.language = language
-    bpy.ops.preferences.addon_disable(module="pso2_tools")
+    bpy.ops.preferences.addon_disable(
+        module=os.getenv("PSO2_TEST_ADDON_MODULE", "pso2_tools")
+    )
 
 print("LOCALIZED_SHADER_TESTS_PASSED")

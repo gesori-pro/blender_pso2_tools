@@ -23,7 +23,9 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, os.getenv("PSO2_TEST_ADDON_ROOT", str(REPO)))
 if deps := os.getenv("PSO2_TEST_DEPENDENCIES"):
     sys.path.append(deps)
-bpy.ops.preferences.addon_enable(module="pso2_tools")
+bpy.ops.preferences.addon_enable(
+    module=os.getenv("PSO2_TEST_ADDON_MODULE", "pso2_tools")
+)
 
 from pso2_tools import charfile, import_character, import_model, objects  # noqa: E402
 from pso2_tools.preferences import get_preferences  # noqa: E402
