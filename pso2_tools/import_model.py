@@ -1,3 +1,5 @@
+
+from .translations import report as _report
 import json
 from collections.abc import Iterable
 from contextlib import closing
@@ -54,6 +56,7 @@ class FbxImportOptions(TypedDict, total=False):
 class ImportOptions(FbxImportOptions, total=False):
     include_tangent_binormal: bool
     apply_shape_adjust: bool
+    preserve_ngs_weights: bool
     colors: dict[str, colors.Color]
 
 
@@ -447,6 +450,14 @@ def _import_aqp(
 
     model.FixHollowMatNaming()
 
+    from . import live_skinning
+    raw_skin = None
+    if options.get("preserve_ngs_weights", True):
+        try:
+            raw_skin = live_skinning.capture_source(model, skeleton)
+        except (ValueError, IndexError) as error:
+            operator.report({"WARNING"}, _report('NGS raw skin inputs unavailable: {value0}').format(value0=error))
+
     # TODO: support importing motion files
     aqms = List[AquaMotion]()
     aqm_names = List[str]()
@@ -521,6 +532,15 @@ def _import_aqp(
                 " from this armature will carry the wrong bone lengths."
                 " Re-import with that option off before posing.",
             )
+
+        if raw_skin and raw_skin["meshes"]:
+            imported = list(context.selected_objects)
+            rig = next((obj for obj in imported if obj.type == "ARMATURE"), None)
+            if rig is not None:
+                try:
+                    live_skinning.attach_source(rig, imported, raw_skin)
+                except (ValueError, KeyError, IndexError) as error:
+                    operator.report({"WARNING"}, _report('NGS raw skinning was not enabled: {value0}').format(value0=error))
 
         if get_preferences(context).hide_armature:
             for obj in context.selected_objects:

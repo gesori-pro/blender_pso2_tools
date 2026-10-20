@@ -34,6 +34,7 @@ from . import (
     operators,
     scene_props,
     shape_sliders,
+    translations,
 )
 
 # Imported for the side effect of registering their operators: they have no
@@ -41,6 +42,9 @@ from . import (
 from . import bake_rest as bake_rest
 from . import bake_textures as bake_textures
 from . import game_scene as game_scene
+from . import game_skinning as game_skinning
+from . import native_skinning as native_skinning
+from . import live_skinning as live_skinning
 from . import import_character as import_character
 from . import import_shape_adjust as import_shape_adjust
 from . import reloader as reloader
@@ -55,6 +59,8 @@ from .paths import ADDON_PATH
 def register():
     dotnet.load()
 
+    translations.register()
+
     classes.bpy_register()
     bpy.types.TOPBAR_MT_file_import.prepend(menu_func_import)
     bpy.types.TOPBAR_MT_file_export.prepend(menu_func_export)
@@ -63,15 +69,18 @@ def register():
     scene_props.add_custom_properties()
     face_controls.add_properties()
     shape_sliders.add_scene_property()
+    live_skinning.register_handlers()
 
 
 def unregister():
+    live_skinning.unregister_handlers()
     # TODO: unload pythonnet when the extension is disabled.
     bpy.types.TOPBAR_MT_file_import.remove(menu_func_import)
     bpy.types.TOPBAR_MT_file_export.remove(menu_func_export)
     bpy.types.VIEW3D_MT_edit_armature_names.remove(operators.rename_bones.menu_func)
     face_controls.remove_properties()
     classes.bpy_unregister()
+    translations.unregister()
 
 
 def menu_func_import(self: bpy.types.Operator, context: bpy.types.Context):

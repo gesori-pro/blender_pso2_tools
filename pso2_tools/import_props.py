@@ -83,6 +83,13 @@ class CommonImportProps:
         default=True,
     )
 
+    preserve_ngs_weights: bpy.props.BoolProperty(
+        name="Preserve NGS Weights",
+        description=("Keep source 16-bit influences and use the captured affine skinning rule. "
+                     "Bone transforms still use Blender until native inputs are bound"),
+        default=True, translation_context="PSO2Tools",
+    )
+
     def get_options(self, ignore: Iterable[str] | None = None) -> ImportOptions:
         operator = cast("bpy.types.Operator", self)
         ignore = ignore or ()
@@ -172,6 +179,7 @@ def import_panel_armature(layout: bpy.types.UILayout, operator: bpy.types.Operat
     header.label(text="Armature")
     if body:
         body.prop(operator, "apply_shape_adjust")
+        body.prop(operator, "preserve_ngs_weights")
         body.prop(operator, "ignore_leaf_bones")
         body.prop(operator, "force_connect_children")
         body.prop(operator, "automatic_bone_orientation")
