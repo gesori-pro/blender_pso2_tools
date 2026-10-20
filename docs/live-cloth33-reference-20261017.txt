@@ -1,0 +1,83 @@
+PSO2 라이브 33 초기화/본 연결 분석과 Blender 반영 (2026-10-17, 4차)
+
+결과
+고정 최종 포즈를 복사하지 않는 초기 기준 자세 경로와, 명시적인 본 버퍼를 사용하는
+충돌체 연결 경로를 추가했다. 라이브 FK의 0x02000000 연결 본 갱신도 반영했다.
+일반 import만으로 움직일 때 라이브 1:1을 재현하는 완성판은 아니다.
+관측된 함수의 수치 일치, 합성 Blender 동작 시험, 실제 라이브 동작 일치는 별개다.
+
+기존 코드 덤프로 확인한 호출 순서
+manager 28C1710:
+  초기 기준 갱신 필요 -> 28BED60 -> 모델 기준 본 생성54A450
+  현재 모델 갱신54C690 -> 실제 FK561E70
+  기준 재설정 플래그100 -> 2909A80 위치 수집 -> 2908F20 -> 28F3750 길이 생성
+  매 프레임2908A60 -> 고정 입자 이동, 타깃 갱신, 축 크기별 충돌 반경 조정
+  28BDC40 -> 본/부모/형제 source bank의 행렬을 충돌체 슬롯에 연결
+  28C2880 -> 환경/속도 조립 -> 2909EE0 -> controller29084C0 -> 29082C0
+  solver29048F0 -> writeback290A750 -> 필요시 FK 재계산 -> 후처리28BE250
+
+초기 기준 배열과 현재 애니메이션 배열을 같은 것으로 취급하지 않는다.
+54A450은 모델 resource, 부모 연결 정보와 local TRS 입력으로 임시 배열을 생성한다.
+부모의 기준 배열을 링크된 슬롯에 미리 복사한 뒤 두 pass를 실행하는 경로가 있다.
+54C690은 현재 local TRS의 병합, override mask, callback 등 조건을 처리한다.
+현재 구현은 상위 resource/체형/모션 입력 전체를 자동 생성하지는 않는다.
+
+이번 소스 변경
+- native_cloth_reference.py:
+  명시적인 reference/current world로 초기 상태를 만든다. rest length는 native
+  RSQRT 추정 연산을 쓰고 controller span은 SQRT 연산을 사용한다.
+  FileClothDriver33.from_reference에 연결했다. 외부 최종 포즈 덤프는 필요 없다.
+- native_cloth_bindings.py:
+  manager+88의 24바이트 레코드에서 shape/node/bank/slot을 보존한다.
+  선택한 실제 bank의 행렬 -> scale blend -> current/inverse 순서로 준비한다.
+  source bank가 없으면 가까운 본으로 대체하지 않는다. 입력은 변경하지 않는다.
+  manager에 저장되는 inverse의 affine W=1도 보존했다.
+- native_skeleton_math.py + native_pose_profile.py:
+  live_runtime=True / world_pose_backend='live' 선택을 추가했다.
+  runtime NODE의 02000000 경로가 *_alt의 완료 행렬을 연결 본 슬롯에 복사한다.
+  실제 자료에서는 l/r thigh, calf, knee, foot 관련 10개 노드에서 관측했다.
+  뒤따르는 본은 이미 갱신된 슬롯을 읽는다. 마지막에 포즈를 덮는 방식이 아니다.
+  기존 demo backend 선택과 사용자 프로필은 유지한다.
+
+독립 수치 검증
+원본 .text/.rdata의 SHA-256을 확인한 뒤 게임과 분리한 Linux x64 프로세스에서
+함수를 직접 실행했다. 이번 세 함수 경로에는 대체 API thunk를 넣지 않았다.
+게임 프로세스에 연결하거나 원본 DLL 파일을 로드/수정하지 않았다.
+- reference 길이/위치: 2,048건, 비트 단위 일치.
+- 본 bank 선택/scale blend/current/inverse/거리 scratch: 2,048건 일치.
+- 라이브561E70: 실제 모델의 첫199개 NODE를 사용한 256건 일치.
+  bind-only/animated, root 입력, 이동, 비균일 scale, raw quaternion 변화 포함.
+  추가 슬롯 생성, 모든 callback/mask 모드, FNP 생성 자체의 일치 검증은 아니다.
+- 계약/회귀 테스트53개 통과.
+- Blender5.1.2 별도 배경 프로세스 합성3본/메시 60프레임 통과.
+  기준 자세 초기화, 본 bank 연결, 넥타이 방식scale blend, live backend,
+  가변 dt/controller/environment, 3종 충돌체, 본 재구성과 Geometry Nodes를 연결.
+  평가 메시와 입자 위치 최대 성분 오차2.9802322387695312e-08 모델 단위.
+  같은 프레임 재평가, 되감기 거절, 드라이버 없는 재열기 오류도 확인했다.
+  실제 의상 전체/라이브 시계열/GPU 정점 일치 시험은 아니다.
+
+앞선 3차에서 이미 반영한 초기화
+FLTD 파일33설정, controller, 환경 wave, 충돌체 transform 준비, 매 프레임 pin/radius
+준비와 모델 import 시 FLTD 보존 기능은 함께 유지한다. 파일 헤더 버전10과 solver33은
+별개다. 파일의 pointer record32/20바이트를 runtime36/24로 혼동하지 않는다.
+설치 소스에 이를 포함하며 검증 자료는 initialization-evidence에 함께 보존한다.
+3차의 초기화 단독 oracle에서는 사용할 수 없는 CRT memcpy를 그 시험 프로세스
+내의 support thunk로만 대체했다. 그 시험을 원본 전체 무변경 실행이라고 주장하지 않는다.
+
+남은 1:1 조건과 수집 이유
+기존 자료는 정지 상태이고 manager+88 벡터 내용과 환경 객체가 없다.
+네 CPU 배열 중 어느 것이 같은 호출의 pre-physics 입력인지도 확정되지 않았다.
+본 이름의 가까움만으로 bank/갱신 시점을 정할 수 없다. 넥타이의 약0.1 scale blend를
+반영해도 저장된 후보와 작은 basis 잔차가 남는다. 플랫폼 차이라고 단정하지 않는다.
+Mac에서만 읽기 전용 수집한다. 구체적인 요청은 MAC_CAPTURE_REQUEST_KO.txt에 있다.
+먼저 누락된 연결 레코드, 환경 객체, 모델 local TRS/resource 연결을 확보한다.
+그 결과로 대상 인스턴스와 bank를 확정한 뒤 동작 입력/출력 수집 범위를 정한다.
+폴링 자료는 비원자적이다. 정확한 호출 경계를 못 읽으면 그 한계를 남기며
+라이브 코드를 후킹/수정하지 않는다. 같은 정지 덤프 반복으로 대체하지 않는다.
+
+설치/보존
+추가/수정한5개 모듈을 기존 설치 파일 백업 후 갱신하고 바이트를 비교했다.
+실행 중인 사용자 Blender는 reload/재시작하지 않았다. 사용자 blend를 열거나 저장하지
+않았고, 라이브 EXE/DLL/메모리/보호 설정, AQP/AQN/FLTD/FNP/ICE도 변경하지 않았다.
+자동 물리는 아직 활성화하지 않는다. 새 모듈은 새 Blender 프로세스에서 읽힌다.
+README_KO.md, validation-summary.json, installation.json과 각 oracle JSON을 참조한다.

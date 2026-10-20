@@ -90,6 +90,12 @@ class CommonImportProps:
         default=True, translation_context="PSO2Tools",
     )
 
+    automatic_cloth_physics: bpy.props.BoolProperty(
+        name="FLTD Cloth Physics",
+        description="Automatically simulate supported FLTD using scene time and gravity; live dynamic parity is not verified",
+        default=True, translation_context="PSO2Tools",
+    )
+
     def get_options(self, ignore: Iterable[str] | None = None) -> ImportOptions:
         operator = cast("bpy.types.Operator", self)
         ignore = ignore or ()
@@ -132,6 +138,7 @@ class CommonImportProps:
 
             col.label(text="Armature", icon="ARMATURE_DATA")
             col.prop(self, "apply_shape_adjust")
+            col.prop(self, "automatic_cloth_physics")
             col.prop(self, "ignore_leaf_bones")
             col.prop(self, "force_connect_children")
             col.prop(self, "automatic_bone_orientation")
@@ -180,6 +187,7 @@ def import_panel_armature(layout: bpy.types.UILayout, operator: bpy.types.Operat
     if body:
         body.prop(operator, "apply_shape_adjust")
         body.prop(operator, "preserve_ngs_weights")
+        body.prop(operator, "automatic_cloth_physics")
         body.prop(operator, "ignore_leaf_bones")
         body.prop(operator, "force_connect_children")
         body.prop(operator, "automatic_bone_orientation")

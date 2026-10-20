@@ -1,0 +1,95 @@
+Historical first-phase report. Superseded status: live-cloth33-measured-inputs-20261017.txt
+The new report covers the observed angular and 0/5/7 collider paths.
+
+Live version 33 cloth port: development status, 2026-10-17
+
+This is NOT a finished live garment solver. Normal character import does not
+enable it. Full native_physics_implemented remains false. Existing source
+meshes, AQP/AQN/FLTD, user blend files and client executables are unchanged.
+
+Recovered code, translated to float32 Python (no copied client machine code
+is loaded into Blender):
+  native_physics_math.py: integrator 2907570
+  native_cloth_stages.py: external force 28F3200, spring force 28B5A00,
+    version-33 velocity drag 28F2CA0, pin/axis attachment 28F3640,
+    target pull 28F3DC0, distance sections 29034A0/28FE440,
+    circular cone leaf 28F5A50 (NOT its elliptical/mutable-state wrapper).
+  native_cloth_writeback.py: reconstruction leaf 290AD30, record-order
+    writeback 290A750. Preserve unmapped nodes and observed hemroot identity.
+    Assembly confirms child translation W is forced to 1 at 290B59D;
+    decompiler pseudocode omits this instruction's effect.
+  native_cloth_solver33.py: stateful audited dispatcher subset with explicit
+    rejection of angular/collider configurations and unknown mode bits.
+  native_cloth_driver.py: explicit development driver with history. Duplicate
+    frame evaluation restarts from the state BEFORE that frame; it does not
+    integrate again. Rewind, skipped frames and FPS changes require explicit
+    reset/replay. Initial state is explicit, not a copied final bone pose.
+  native_float_estimates.py + dotnet/Pso2Tools.PhysicsMath: hardware SSE
+    RCP/RSQRT provider. Exact division is not silently substituted.
+
+Connection to Blender:
+  native_pose_profile.evaluate_profile(..., cloth_step=...) calls the driver
+    after recovered native FK, before model/axis transforms and inverse bind.
+  live_skinning.set_cloth_driver(rig, driver) is a development API only.
+    Normal import has no cloth driver and no extra animation mode.
+    Temporal drivers are not serialized. A reopened file requiring a driver
+    reports that it must be reattached. Existing cached vertex attributes can
+    remain visible but are explicitly stale; no current-frame solve is claimed.
+    The viewport continues through the existing raw NGS weight deformer.
+
+Validation (different scopes; do not combine them into a game-parity claim):
+  - 38 captured skirt/tie reconstruction calls: Python vs independently
+    executed original x64 leaf, all matrix components bitwise equal.
+  - 1,024 synthetic reconstruction cases, all seven boolean branches,
+    degenerate/projection/antiparallel cases: bitwise equal.
+  - 1,280 force/attachment/target/distance stage cases: bitwise equal.
+  - 512 spring-force / drag stage cases: bitwise equal.
+  - 1,024 circular-cone leaf cases: bitwise equal.
+  - 24 moving-input sequences, 120 steps each (2,880 total), constant and
+    variable timesteps, with/without spring/drag, no angular/colliders:
+    positions, history, force scratch and sleep masks bitwise equal to the
+    original full dispatcher executed OFF-GAME in an isolated Linux process.
+  - 6,158 hardware-estimate results in Windows Blender match the isolated
+    native oracle bitwise.
+  - Blender 5.1 background synthetic fixture, 60 moving frames: real mesh
+    deformation reaches the evaluated Geometry Nodes mesh; max per-component
+    error 2.9802322387695312e-08 model units vs simulated particles.
+    Original mesh data/material retained; duplicate frame, rewind and missing
+    driver behavior verified. This is not the actual Schoolu Prima garment.
+  - 27 standalone contract/regression tests pass (cloth9, integration7,
+    native skinning deltas6, skinning weights5).
+
+Remaining work required for the user's dynamic 1:1 target:
+  - Angular wrapper 28F70F0 (elliptical limits and mutable basis/state), actual
+    target-angle/angular pass scheduling, collision dispatch 28F1F00 and the
+    concrete shape kernels selected by this live garment, including packed
+    reflection/normal modes and attachments/environment transforms.
+  - Decode/init actual solver parameters from source FLTD/AQN and body/motion
+    inputs. A collected current state is evidence, not universal initialization.
+  - Match live controller/timestep/relative environment inputs and verify
+    complete moving sequences against live final/render outputs.
+  - Body/FNP and FK paths still have their previously documented proof limits;
+    adding a cloth driver does not establish those independent stages as 1:1.
+
+Verified missing data in live-bone-state-20261017-02:
+  Solver core = outer + 0x40, not outer + 0x10 (wrapper + 0x30 in 29082C0).
+  Skirt: 48 particles, distance106, angular24, target-angle12, colliders5.
+  Tie: 3 particles, distance2, angular1, target-angle1, collider1.
+  Outer headers contain descriptor addresses/counts, but those arrays' contents
+  are not in that delivery. Do not fill them with guessed springs/capsules.
+  Full Mac CPU snapshot comparison still has the prior ~0.001498 basis
+  residual when executing the original leaf; translation agreement does not
+  remove it. Python now matches that original leaf, not an invented correction.
+
+Source DLL SHA256:
+1131296fa373f2eadd47715759b1653cb5c60427e9da6090b9e39c016674fe16
+Captured .text SHA256:
+7a979c0ff137d10a131be7c441a1a7b1e7251569d6c28d72be6cb79010bd6319
+
+Evidence and next collection request:
+C:\Users\focus\Documents\PSO2 Text Analysis\20261017-live33-dynamic-implementation-001
+  NEXT_MAC_COLLECTION_KO.txt, live-core-inventory.json, rea-solver/,
+  *-native-comparison.json, dynamic-dispatch-forces-comparison.json,
+  blender-dynamic-result.json, installation.json, installed-before/.
+Scoped installation was backed up. The user's running Blender was not
+reloaded/restarted and their current blend was not saved or overwritten.

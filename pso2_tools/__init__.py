@@ -45,6 +45,7 @@ from . import game_scene as game_scene
 from . import game_skinning as game_skinning
 from . import native_skinning as native_skinning
 from . import live_skinning as live_skinning
+from . import cloth_auto as cloth_auto
 from . import import_character as import_character
 from . import import_shape_adjust as import_shape_adjust
 from . import reloader as reloader

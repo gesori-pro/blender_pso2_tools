@@ -57,6 +57,7 @@ class ImportOptions(FbxImportOptions, total=False):
     include_tangent_binormal: bool
     apply_shape_adjust: bool
     preserve_ngs_weights: bool
+    automatic_cloth_physics: bool
     colors: dict[str, colors.Color]
 
 
@@ -170,6 +171,7 @@ class ModelFiles:
     model_files: list[datafile.DataFile] = field(default_factory=list)
     node_files: list[datafile.DataFile] = field(default_factory=list)
     shape_files: list[datafile.DataFile] = field(default_factory=list)
+    physics_files: list[datafile.DataFile] = field(default_factory=list)
 
 
 def collect_model_files(sources: Iterable[datafile.DataFileSource]):
@@ -184,6 +186,7 @@ def collect_model_files(sources: Iterable[datafile.DataFileSource]):
         # different body than the one on screen - measured at 3.7 cm across
         # the hips on one outfit, enough to sink a hand into the thigh.
         result.shape_files.extend(source.glob("*_sa.aqm"))
+        result.physics_files.extend(source.glob("*.fltd"))
 
     return result
 
@@ -218,6 +221,7 @@ def _import_models(
             (f for f in files.node_files if f.name.removesuffix(".aqn") == name), None
         )
 
+        previous_rigs = {obj.as_pointer() for obj in context.scene.objects if obj.type == "ARMATURE"}
         result, new_materials = _import_aqp(
             operator,
             context,
@@ -228,8 +232,10 @@ def _import_models(
         if "FINISHED" not in result:
             return result
 
-        for obj in context.selected_objects or []:
-            if obj.type == "ARMATURE":
+        # Hidden armatures are no longer selected. Source identity must not
+        # depend on the preference that hides the rig after FBX import.
+        for obj in context.scene.objects:
+            if obj.type == "ARMATURE" and obj.as_pointer() not in previous_rigs:
                 armatures[name] = obj
                 break
 
@@ -237,6 +243,25 @@ def _import_models(
 
     if options is None or options.get("apply_shape_adjust", True):
         _apply_shape_adjust(operator, context, files.shape_files, armatures)
+
+    # Keep source FLTD on its own rig, then enable the supported scene-driven
+    # preview when requested. Live environment/frame parity remains unverified.
+    from . import cloth_assets
+    for physics in files.physics_files:
+        rig = armatures.get(physics.name.removesuffix(".fltd"))
+        if rig is not None:
+            payload = cloth_assets.attach_file(rig, physics.data, physics.name)
+            debug_print(f"Stored {physics.name}: initialization_decoded={payload['initialization_decoded']}")
+            if options is None or options.get("automatic_cloth_physics", True):
+                from . import cloth_auto
+                shape = next((f for f in files.shape_files
+                    if f.name == physics.name.removesuffix(".fltd") + "_sa.aqm"), None)
+                try:
+                    cloth_auto.enable(rig, context.scene, shape_data=(shape.data if shape
+                        and (options is None or options.get("apply_shape_adjust", True)) else None))
+                except (ValueError, KeyError, TypeError, IndexError, OSError, aqm.AqmError) as error:
+                    rig[cloth_auto.STATUS] = "Unavailable: " + str(error)
+                    operator.report({"WARNING"}, _report('FLTD physics was not enabled: {value0}').format(value0=error))
 
     new_mat_keys = set(bpy.data.materials.keys()).difference(original_mat_keys)
 
@@ -457,6 +482,13 @@ def _import_aqp(
             raw_skin = live_skinning.capture_source(model, skeleton)
         except (ValueError, IndexError) as error:
             operator.report({"WARNING"}, _report('NGS raw skin inputs unavailable: {value0}').format(value0=error))
+
+    if raw_skin and options.get("automatic_cloth_physics", True):
+        from . import cloth_auto
+        try:
+            raw_skin["native_template"] = cloth_auto.skeleton_template(skeleton, raw_skin)
+        except (ValueError, AttributeError, ImportError) as error:
+            raw_skin["native_template_error"] = str(error)
 
     # TODO: support importing motion files
     aqms = List[AquaMotion]()
