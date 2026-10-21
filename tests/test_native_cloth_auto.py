@@ -209,6 +209,41 @@ class PreviewLifecycleTests(unittest.TestCase):
         np.testing.assert_array_equal(out,other.evaluate(world(),['a','drs-b'],2,60))
         self.assertEqual(sim.last_reset_reason,'actor scale changed')
 
+    def _moving(self, frame, bump=0.0):
+        w=world().copy();w[0,3,0]=np.float32(.03*np.sin(frame*.4)+bump);w[1,3,0]+=w[0,3,0]
+        return w
+
+    def test_history_replays_bitwise_and_resolves_changed_inputs(self):
+        sim=build();first=[sim.evaluate(self._moving(f),['a','drs-b'],f,60) for f in range(1,21)]
+        self.assertEqual(len(sim.history),20)
+        state=sim.drivers[0].state
+        # A timeline loop replays the stored frames exactly, without solving.
+        again=[sim.evaluate(self._moving(f),['a','drs-b'],f,60) for f in range(1,21)]
+        for a,b in zip(first,again):np.testing.assert_array_equal(a,b)
+        # Continuing past the stored range steps on from the restored state.
+        nxt=sim.evaluate(self._moving(21),['a','drs-b'],21,60)
+        ref=build();[ref.evaluate(self._moving(f),['a','drs-b'],f,60) for f in range(1,21)]
+        np.testing.assert_array_equal(nxt,ref.evaluate(self._moving(21),['a','drs-b'],21,60))
+        # An edited frame re-solves from there and drops the later frames.
+        sim.evaluate(self._moving(1),['a','drs-b'],1,60)
+        edited=[sim.evaluate(self._moving(f,.01 if f>=10 else 0),['a','drs-b'],f,60) for f in range(2,16)]
+        ref=build();ref.evaluate(self._moving(1),['a','drs-b'],1,60)
+        expected=[ref.evaluate(self._moving(f,.01 if f>=10 else 0),['a','drs-b'],f,60) for f in range(2,16)]
+        for a,b in zip(edited,expected):np.testing.assert_array_equal(a,b)
+        self.assertEqual(max(sim.history),15)
+        self.assertFalse(any(np.array_equal(edited[-1],x) for x in first))
+
+    def test_rotating_scaled_actor_keeps_simulating(self):
+        sim=build()
+        def turned(angle):
+            c,s=np.cos(angle),np.sin(angle)
+            m=np.eye(4,dtype='f4');m[:3,:3]=np.float32(1.05536)*np.array([[c,-s,0],[s,c,0],[0,0,1]],'f4')
+            return m
+        sim.context(turned(0),[0,-9.81,0,0]);sim.evaluate(world(),['a','drs-b'],1,60)
+        for frame in range(2,40):
+            sim.context(turned(frame*.037),[0,-9.81,0,0]);sim.evaluate(world(),['a','drs-b'],frame,60)
+            self.assertFalse(sim.settled_at_frame,frame)
+
     def test_nonfinite_input_fails_without_advancing_state(self):
         sim=build();sim.evaluate(world(),['a','drs-b'],1,60)
         before=sim.drivers[0].state.positions.copy();bad=world();bad[1,0,0]=np.nan

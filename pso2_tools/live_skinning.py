@@ -105,16 +105,27 @@ def capture_source(model, skeleton):
             'inverse_bind': inverse, 'meshes': meshes}
 
 
+# Texts already read during the running viewport update. Nothing writes them
+# inside one pass, and as_string() on the multi-megabyte inputs was read about
+# fourteen times a frame.
+_PASS = None
+
+
 def _read_text(name):
+    if _PASS is not None and name in _PASS:
+        return _PASS[name]
     text = bpy.data.texts.get(name)
     if text is None:
         raise ValueError(f"Missing embedded skin inputs: {name}")
     value = text.as_string()
     cached = _CACHE.get(name)
     if cached and cached[0] == value:
-        return cached[1]
-    result = json.loads(value)
-    _CACHE[name] = (value, result)
+        result = cached[1]
+    else:
+        result = json.loads(value)
+        _CACHE[name] = (value, result)
+    if _PASS is not None:
+        _PASS[name] = result
     return result
 
 
@@ -289,6 +300,10 @@ def bind_native_profile(rig, data, *, frame=1):
     if not set(inputs['node_names']).issubset(data['node_names']):
         raise ValueError('Native profile does not supply this imported AQN node set')
     value = copy.deepcopy(data)
+    # Profiles built from the import template leave model space at the
+    # identity; place it by where the import put this rig (head parts).
+    if np.allclose(value.get('model_transform', np.eye(4)), np.eye(4)) and inputs.get('rig_bind_world'):
+        value['model_transform'] = skinning_math.native_model_transform(inputs['rig_bind_world']).tolist()
     value['meshes'] = []  # evaluate matrices once; meshes keep their original material/UV data
     value['bind_tail_fallback'] = True  # unanimated costume nodes, not a physics solver
     native_pose_profile.evaluate_profile(value)
@@ -337,8 +352,11 @@ def update_rig(rig, scene, depsgraph, *, force=False):
             world = evaluated.matrix_world @ evaluated.pose.bones[bone].matrix @ correction.inverted()
             matrices[name] = _matrix(world) @ _matrix(inputs['inverse_bind'][name])
     else:
-        data = copy.deepcopy(_read_text(rig[PROFILE]))
+        # evaluate_profile only reads its inputs: copy just what changes here
+        # (a deep copy of the whole profile cost ~15 ms a frame).
+        data = dict(_read_text(rig[PROFILE]))
         if data.get('first_motion'):
+            data['first_motion'] = dict(data['first_motion'])
             data['first_motion']['frame'] += ((scene.frame_current_final - rig['pso2_skin_frame_origin'])
                                               * rig.get('pso2_skin_time_scale', 1.0))
         # Runtime NODE arrays may be reordered relative to file node IDs.
@@ -381,10 +399,11 @@ def update_rig(rig, scene, depsgraph, *, force=False):
 
 @persistent
 def update_scene(scene, depsgraph=None):
-    global _BUSY
+    global _BUSY, _PASS
     if _BUSY:
         return
     _BUSY = True
+    _PASS = {}
     try:
         depsgraph = depsgraph or bpy.context.evaluated_depsgraph_get()
         for rig in scene.objects:
@@ -400,6 +419,7 @@ def update_scene(scene, depsgraph=None):
                 # Never silently switch to normalized Blender weights on failure.
     finally:
         _BUSY = False
+        _PASS = None
 
 
 @persistent

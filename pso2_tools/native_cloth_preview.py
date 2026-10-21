@@ -6,6 +6,7 @@ Rewinds/jumps/FPS changes reinitialize and settle at the requested pose; they
 do not fabricate animation samples for frames Blender has not evaluated.
 """
 import copy
+import hashlib
 import math
 
 import numpy as np
@@ -40,6 +41,9 @@ class FileClothPreview33:
         self.settle_steps, self.seeds = settle_steps, seeds
         self.drivers = None
         self.revision = 1
+        # Frame -> (input digest, output, saved solver state): one contiguous
+        # chain of already simulated frames, replayed instead of re-solved.
+        self.history = {}
         self.last_reset_reason = 'initialization'
         self.context(np.eye(4, dtype='f4'), np.array([0, -9.81, 0, 0], 'f4'))
 
@@ -157,7 +161,68 @@ class FileClothPreview33:
             raise ValueError('Cloth generated non-finite output')
         return out
 
+    _DRIVER_FIELDS = ('state', 'frame', '_before', '_before_frame', '_fps', 'revision')
+    _OWN_FIELDS = ('frame', 'fps', 'last_world', 'last_gravity', 'last_output', 'last_context_metric',
+                   'last_context_handedness', 'settled_at_frame', 'step_dt', 'last_reset_reason')
+    HISTORY_LIMIT = 4000
+
+    def _input_digest(self, simulation, fps):
+        """Everything a step reads from the scene for this frame."""
+        h = hashlib.blake2b(digest_size=16)
+        for value in (simulation, self.gravity, self.model_to_simulation, np.float64(fps)):
+            h.update(np.ascontiguousarray(value).tobytes())
+        for bank in sorted(self.related_worlds):
+            h.update(int(bank).to_bytes(2, 'little'))
+            h.update(np.ascontiguousarray(self.related_worlds[bank]).tobytes())
+        return h.digest()
+
+    def _save(self):
+        return (copy.deepcopy([{k: getattr(d, k) for k in self._DRIVER_FIELDS} for d in self.drivers]),
+                copy.deepcopy({k: getattr(self, k) for k in self._OWN_FIELDS}))
+
+    def _restore(self, saved):
+        drivers, own = copy.deepcopy(saved)
+        for driver, fields in zip(self.drivers, drivers):
+            for key, value in fields.items():
+                setattr(driver, key, value)
+        for key, value in own.items():
+            setattr(self, key, value)
+
     def evaluate(self, world_rows, names, frame, fps):
+        """Frames already simulated in this chain with identical scene inputs
+        replay their stored result and solver state, so a timeline loop or a
+        scrub inside the simulated range continues exactly as the first pass.
+        A frame whose inputs differ re-solves and drops the stored frames
+        from there on; a jump outside the chain restarts as before."""
+        world = np.asarray(world_rows, dtype='f4')
+        frame_f, fps_f = float(frame), float(fps)
+        if (self.drivers is not None and tuple(names) == self.node_names and world.shape == self.reference.shape
+                and np.isfinite(world).all() and math.isfinite(frame_f) and math.isfinite(fps_f) and fps_f > 0):
+            simulation = np.matmul(self.model_to_simulation, world.transpose(0, 2, 1)).transpose(0, 2, 1)
+            digest = self._input_digest(simulation, fps_f)
+            hit = self.history.get(frame_f)
+            if hit is not None and hit[0] == digest:
+                if self.frame != frame_f or not np.array_equal(self.last_output, hit[1]):
+                    self._restore(hit[2])
+                return np.matmul(self.simulation_to_model, hit[1].transpose(0, 2, 1)).transpose(0, 2, 1).copy()
+        previous = self.frame if self.drivers is not None else None
+        drivers_before = self.drivers
+        result = self._evaluate_live(world_rows, names, frame, fps)
+        frame_f = float(self.frame)
+        reset = self.drivers is not drivers_before or self.settled_at_frame
+        if reset:
+            self.history = {}
+        elif previous == frame_f:
+            pass                        # same frame re-read; history keyed by inputs
+        else:
+            for key in [k for k in self.history if k >= frame_f]:
+                del self.history[key]
+        chained = reset or (previous == frame_f - 1 and previous in self.history)
+        if chained and len(self.history) < self.HISTORY_LIMIT:
+            self.history[frame_f] = (self._input_digest(self.last_world, self.fps), self.last_output.copy(), self._save())
+        return result
+
+    def _evaluate_live(self, world_rows, names, frame, fps):
         world = np.asarray(world_rows, dtype='f4')
         if tuple(names) != self.node_names or world.shape != self.reference.shape or not np.isfinite(world).all():
             raise ValueError('Cloth input no longer matches its source skeleton')
@@ -170,7 +235,10 @@ class FileClothPreview33:
         if not reset:
             if fps != self.fps:
                 reset, reason = True, 'FPS changed'
-            elif (not np.allclose(self.context_metric,self.last_context_metric,rtol=1e-5,atol=1e-7)
+            # The metric comes from float32 world rows: a rotating, scaled
+            # actor (a head bone at 1.055) wobbles it by ~2e-7 every frame,
+            # which must not count as a scale change and restart the cloth.
+            elif (not np.allclose(self.context_metric,self.last_context_metric,rtol=1e-4,atol=1e-6)
                     or self.context_handedness != self.last_context_handedness):
                 reset, reason = True, 'actor scale changed'
             elif frame < self.frame or frame > self.frame + 1:

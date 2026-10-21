@@ -15,6 +15,17 @@ spec.loader.exec_module(skin)
 
 
 class SkinningMathTests(unittest.TestCase):
+    def test_native_model_transform_places_head_parts(self):
+        body = skin.NATIVE_TO_BLENDER
+        np.testing.assert_allclose(skin.native_model_transform(body), np.eye(4), atol=1e-12)
+        # A hair rig imported on the head: object rotated and lifted to 1.498.
+        hair = np.array([[0, 1, 0, 0], [-0.137, 0, 0.9906, -0.0015],
+                         [0.9906, 0, 0.137, 1.4984], [0, 0, 0, 1]])
+        model = skin.native_model_transform(hair)
+        head3 = np.array([0, 1.5429, 0.0076, 1])  # native AQN position
+        expected = body @ head3                   # where the body puts that point
+        np.testing.assert_allclose(hair @ model @ head3, expected, atol=1e-9)
+
     def test_implicit_fourth_weight_and_no_renormalization(self):
         w = skin.gpu_weights([[32767, 16383, 0, 65535], [65535, 65535, 0, 0]])
         self.assertAlmostEqual(float(w[0, 3]), 1 - 49150 / 65535, places=6)

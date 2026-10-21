@@ -13,6 +13,28 @@ CAPTURE_FORMAT = "pso2_skinning_capture"
 CAPTURE_VERSION = 1
 
 
+# Native model space (Y up) -> Blender (Z up), the placement the FBX import
+# gives a model whose skeleton starts at the origin (a body).
+NATIVE_TO_BLENDER = np.array(
+    [[1, 0, 0, 0], [0, 0, -1, 0], [0, 1, 0, 0], [0, 0, 0, 1]], dtype=np.float64
+)
+
+
+def native_model_transform(rig_bind_world):
+    """Native model space -> the rig object's local space, from the rig's
+    world matrix at import.
+
+    A head part (hair, ears) has its skeleton root on the head, and the FBX
+    import puts the armature object there too, while the AQN keeps the nodes
+    at full-character height. Taking the object as model space then lifts
+    the part off the body by the head's height (1.5 m for hair). The body's
+    own object sits at NATIVE_TO_BLENDER, so it gets the identity.
+    """
+    world = np.asarray(rig_bind_world, dtype=np.float64)
+    if world.shape != (4, 4) or not np.isfinite(world).all() or not np.allclose(world[3], [0, 0, 0, 1]):
+        raise ValueError("Rig bind world must be a finite affine matrix")
+    return np.linalg.inv(world) @ NATIVE_TO_BLENDER
+
 def _finite_array(value, shape, label):
     array = np.asarray(value, dtype=np.float32)
     if array.shape != shape or not np.isfinite(array).all():
@@ -49,14 +71,33 @@ def gpu_weights(weights_u16):
     return result
 
 
+# Validated per-mesh inputs, keyed by the identity of the (JSON-cached) lists.
+# Converting tens of thousands of nested lists every frame was a third of the
+# viewport cost; the source lists are never mutated, so identity is enough.
+_PREPARED = {}
+
+
+def _prepared_inputs(positions, weights_u16, indices, palette_count):
+    key = (id(positions), id(weights_u16), id(indices), palette_count)
+    hit = _PREPARED.get(key)
+    if hit is not None and hit[0] is positions and hit[1] is weights_u16 and hit[2] is indices:
+        return hit[3]
+    n = len(positions)
+    arrays = (_finite_array(positions, (n, 3), "positions"), gpu_weights(weights_u16))
+    if len(arrays[1]) != n or not palette_count:
+        raise ValueError("Weights/palette do not match positions")
+    arrays += (_integers(indices, (n, 4), palette_count, "palette indices"),)
+    if isinstance(positions, list):
+        if len(_PREPARED) > 64:
+            _PREPARED.clear()
+        _PREPARED[key] = (positions, weights_u16, indices, arrays)
+    return arrays
+
+
 def skin_positions(positions, weights_u16, indices, palette, bone_matrices):
     """Reproduce the captured affine position blend, before projection."""
     n = len(positions)
-    positions = _finite_array(positions, (n, 3), "positions")
-    weights = gpu_weights(weights_u16)
-    if len(weights) != n or not palette:
-        raise ValueError("Weights/palette do not match positions")
-    indices = _integers(indices, (n, 4), len(palette), "palette indices")
+    positions, weights, indices = _prepared_inputs(positions, weights_u16, indices, len(palette))
     matrices = []
     for name in palette:
         if name not in bone_matrices:
