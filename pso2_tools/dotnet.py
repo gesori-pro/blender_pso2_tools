@@ -16,6 +16,7 @@ _DLL_NAMES = [
 _PROBING_PATH_X64 = str(BIN_PATH / "x64")
 
 _DOTNET_ROOT = Path("C:/Program Files/dotnet")
+_RUNTIME_CONFIG = Path(__file__).with_name("dotnet.runtimeconfig.json")
 
 _loaded = False
 _probing_paths_set = False
@@ -27,11 +28,16 @@ def load():
         return
 
     try:
+        # Without a config, clr_loader asks the `dotnet` on PATH for the
+        # newest runtime and demands exactly that one: a .NET 11 preview, or
+        # one installed outside this root, then fails with 0x80008096
+        # (FrameworkMissingFailure). The libraries target net9.0, so ask for
+        # 9.0 and let the host roll forward to a newer major only without it.
         if _DOTNET_ROOT.exists():
-            rt = clr_loader.get_coreclr(dotnet_root=_DOTNET_ROOT)
+            rt = clr_loader.get_coreclr(runtime_config=_RUNTIME_CONFIG, dotnet_root=_DOTNET_ROOT)
             pythonnet.load(rt)
         else:
-            pythonnet.load("coreclr")
+            pythonnet.load("coreclr", runtime_config=_RUNTIME_CONFIG)
     except RuntimeError:
         # The runtime is already loaded, e.g. when the extension is
         # re-enabled after an update. It cannot be unloaded, but referencing
